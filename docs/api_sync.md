@@ -1,0 +1,261 @@
+# API reference (sync)
+
+> **Generated file — do not edit by hand.** Regenerate with `python wf_examples/internal/gen_api_reference.py`.
+
+Every method below is on `WorkflowClient` (the synchronous convenience client). The async surface is identical and preferred — see [api_async.md](api_async.md).
+
+Construct the client from `INTERACTLY_*` environment variables:
+
+```python
+from interactly import WorkflowClient
+
+with WorkflowClient() as client:
+    workflow = client.workflows.get("wf-123")
+```
+
+See the [capability guides](README.md#capability-guides) for runnable examples.
+
+## Workflows
+
+`client.workflows`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `clone` | `(workflow_id: 'str', *, name: 'Optional[str]' = None, description: 'Optional[str]' = None, clone_all_versions: 'bool' = True, version_numbers: 'Optional[List[int]]' = None, fallback_active_version: 'Optional[int]' = None) -> 'Workflow'` | Duplicate a workflow (deep copy of nodes, edges, and versions). |
+| `create` | `(*, name: 'str', description: 'Optional[str]' = None, config: 'Optional[WorkflowConfigOrDict]' = None) -> 'Workflow'` | Create a new workflow. |
+| `create_from_config` | `(config: "'WorkflowConfigFullyHydrated'", *, name: 'Optional[str]' = None, description: 'Optional[str]' = None) -> 'Workflow'` | Upload a fully-hydrated typed workflow (config + nodes + edges) in one POST. |
+| `delete` | `(workflow_id: 'str') -> 'None'` | Permanently delete a workflow and all its versions. |
+| `dynamic_variables` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Return the dynamic variable definitions for a workflow. |
+| `export` | `(workflow_id: 'str', *, version_numbers: 'List[int]', active_version_number: 'int') -> 'Dict[str, Any]'` | Export a workflow as a portable bundle dict. |
+| `favorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Mark a workflow as a favorite for the requesting user (idempotent). |
+| `get` | `(workflow_id: 'str') -> 'Workflow'` | Retrieve a single workflow by ID. |
+| `get_fully_hydrated` | `(workflow_id: 'str') -> "'WorkflowConfigFullyHydrated'"` | Fetch a workflow as a typed ``WorkflowConfigFullyHydrated`` instance. |
+| `global_node_config_schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for GlobalNodeConfig (used for Super Node routing). |
+| `handle` | `(workflow_id: 'str', *, dynamic_variables: 'Optional[Dict[str, Any]]' = None) -> "'WorkflowHandle'"` | Construct a :class:`WorkflowHandle` pre-loaded with the hydrated config. |
+| `import_bundle` | `(bundle: 'Dict[str, Any]', *, versions_to_import: 'Optional[List[int]]' = None, active_version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None) -> 'Workflow'` | Import a previously exported workflow bundle. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'SyncPage[Workflow]'` | List workflows for the authenticated team (paginated). |
+| `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for valid workflow configuration. |
+| `unfavorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Remove a workflow from the requesting user's favorites. |
+| `update` | `(workflow_id: 'str', *, name: 'NotGivenOr[str]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'Workflow'` | Partially update a workflow.  Only supplied fields are sent. |
+| `update_concurrency` | `(workflow_id: 'str', *, max_concurrent_runs: 'int') -> 'Dict[str, Any]'` | Set the maximum number of simultaneous runs for a workflow. |
+
+### `client.workflows.versions`
+
+| Method | Signature | Description |
+|---|---|---|
+| `activate` | `(workflow_id: 'str', version_number: 'int') -> 'Workflow'` | Mark a specific version as the active version. |
+| `create` | `(workflow_id: 'str', *, version_name: 'Optional[str]' = None, mark_as_active: 'bool' = False, source_version_number: 'Optional[int]' = None) -> 'WorkflowVersion'` | Create a new version of the workflow. |
+| `delete` | `(workflow_id: 'str', version_number: 'int') -> 'None'` | Permanently delete a workflow version. |
+| `diff` | `(workflow_id: 'str', version1: 'int', version2: 'int') -> 'VersionDiff'` | Compare two workflow versions and return a structured diff. |
+| `list` | `(workflow_id: 'str') -> 'List[WorkflowVersion]'` | Return all versions for the given workflow. |
+| `list_active` | `(*, page: 'int' = 1, size: 'int' = 20, favorites: 'Optional[bool]' = None, created_by_me: 'Optional[bool]' = None, category: 'Optional[str]' = None, categories: 'Optional[List[str]]' = None, logical_id: 'Optional[str]' = None) -> 'SyncPage[WorkflowVersion]'` | List every workflow's active version across the team (paginated). |
+| `update` | `(workflow_id: 'str', version_number: 'int', *, version_name: 'str') -> 'WorkflowVersion'` | Rename a workflow version. |
+| `update_config` | `(workflow_id: 'str', version_number: 'int', *, config: 'WorkflowConfigOrDict') -> 'WorkflowVersion'` | Replace the graph config (nodes + edges) for a version. |
+
+## Nodes
+
+`client.nodes`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, node_config: 'NodeConfigOrDict') -> 'Node'` | Create a new standalone node. |
+| `delete` | `(node_id: 'str') -> 'None'` | Delete a node. |
+| `get` | `(node_id: 'str') -> 'Node'` | Retrieve a single node by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, node_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Node]'` | List nodes. |
+| `schema` | `(node_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific node type. |
+| `types` | `() -> 'List[Dict[str, Any]]'` | Retrieve all available node types with their categories. |
+| `update` | `(node_id: 'str', *, node_config: 'NotGivenOr[Optional[NodeConfigOrDict]]' = NOT_GIVEN) -> 'Node'` | Update a node's config. |
+
+## Edges
+
+`client.edges`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, edge_config: 'EdgeConfigOrDict') -> 'Edge'` | Create a new standalone edge. |
+| `delete` | `(edge_id: 'str') -> 'None'` | Delete an edge. |
+| `get` | `(edge_id: 'str') -> 'Edge'` | Retrieve a single edge by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, edge_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Edge]'` | List edges. |
+| `schema` | `(edge_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific edge type. |
+| `types` | `() -> 'List[str]'` | Retrieve all available edge type identifiers. |
+| `update` | `(edge_id: 'str', *, edge_config: 'NotGivenOr[Optional[EdgeConfigOrDict]]' = NOT_GIVEN) -> 'Edge'` | Update an edge's config. |
+
+## Tools
+
+`client.tools`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `configurable_inbuilt` | `() -> 'List[Dict[str, Any]]'` | List configurable inbuilt tools from the catalogue. |
+| `configurable_inbuilt_schema` | `(key: 'str') -> 'Dict[str, Any]'` | Retrieve the descriptor + config schema for a single configurable inbuilt tool. |
+| `create` | `(*, tool_config: 'ToolConfigOrDict') -> 'Tool'` | Create a new custom tool. |
+| `delete` | `(tool_id: 'str') -> 'None'` | Delete a tool. |
+| `execute` | `(tool_id: 'str', *, args: 'Optional[Dict[str, Any]]' = None) -> 'ToolExecuteResult'` | Execute a saved tool with the given argument values and return its output. |
+| `execute_inline` | `(*, tool_config: 'ToolConfigOrDict', args: 'Optional[Dict[str, Any]]' = None) -> 'ToolExecuteResult'` | Execute an inline (unsaved) tool config with the given argument values. |
+| `get` | `(tool_id: 'str') -> 'Tool'` | Retrieve a single tool by ID. |
+| `inbuilt` | `() -> 'List[Dict[str, Any]]'` | Retrieve all inbuilt tools from the registry. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, tool_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Tool]'` | List tools. |
+| `schema` | `(tool_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific tool type. |
+| `types` | `() -> 'List[str]'` | Retrieve all available tool type identifiers. |
+| `update` | `(tool_id: 'str', *, tool_config: 'NotGivenOr[Optional[ToolConfigOrDict]]' = NOT_GIVEN) -> 'Tool'` | Update a tool's config. |
+
+## Runs
+
+`client.runs`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `add_comment` | `(run_id: 'str', *, content: 'str') -> 'RunComment'` | Add a comment to a run. |
+| `add_event_comment` | `(run_id: 'str', event_logical_id: 'str', *, content: 'str') -> 'RunComment'` | Add a comment to a specific event within a run. |
+| `checkpoint` | `(workflow_id: 'str', run_id: 'str', *, resume_turn_index: 'int', start_node_logical_id: 'Optional[str]' = None) -> 'Run'` | Trigger a new run branching from a checkpoint of an existing run. |
+| `delete` | `(run_id: 'str') -> 'None'` | Delete a run record. |
+| `delete_comment` | `(run_id: 'str', comment_logical_id: 'str') -> 'None'` | Delete a comment from a run. |
+| `delete_event_comment` | `(run_id: 'str', event_logical_id: 'str', comment_logical_id: 'str') -> 'None'` | Delete a comment from a specific event within a run. |
+| `evaluation_result` | `(run_id: 'str') -> 'RunEvaluationResult'` | Retrieve the evaluation result for a run. |
+| `execute` | `(workflow_id: 'str', *, run_id: 'Optional[str]' = None, command: "'WorkflowCommand \| str'" = 'start', run_by: 'Optional[str]' = None, version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, runtime_variables: 'Optional[Dict[str, Any]]' = None, miscellaneous: 'Optional[Dict[str, Any]]' = None, run_input: "Optional['WorkflowRunInput']" = None) -> 'InteractiveRunResponse'` | Execute one turn of an interactive workflow session. |
+| `execute_with_input` | `(workflow_id: 'str', *, run_input: "'WorkflowRunInput'", run_id: 'Optional[str]' = None) -> 'InteractiveRunResponse'` | Execute one turn using a typed ``WorkflowRunInput`` payload. |
+| `get` | `(run_id: 'str') -> 'Run'` | Retrieve a single run by ID. |
+| `list` | `(*, workflow_id: 'Optional[str]' = None, status: 'Optional[str]' = None, start: 'Optional[datetime]' = None, end: 'Optional[datetime]' = None, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'SyncPage[Run]'` | List workflow runs with optional filtering (paginated). |
+| `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schemas for workflow run structures. |
+| `stream` | `(*, workflow_id: 'str', command: 'WorkflowCommand' = <WorkflowCommand.START: 'start'>, run_by: 'str' = 'api', version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, runtime_variables: 'Optional[Dict[str, Any]]' = None, run_input: "Optional['WorkflowRunInput']" = None, cast_to: 'Type[RunEvent]' = <class 'interactly.types.runs.run_event.RunEvent'>) -> 'Stream[RunEvent]'` | Open a WebSocket connection and stream workflow run events. |
+
+## Schedules
+
+`client.schedules`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `cancel` | `(schedule_id: 'str') -> 'None'` | Cancel a pending scheduled run. |
+| `create` | `(workflow_id: 'str', *, scheduled_time: 'datetime', run_input: 'Optional[RunInputOrDict]' = None, version: 'Optional[int]' = None, scheduled_by_name: 'Optional[str]' = None) -> 'Schedule'` | Schedule a workflow to run at a future UTC time. |
+| `get` | `(schedule_id: 'str') -> 'Schedule'` | Retrieve a single scheduled run by ID. |
+| `list` | `(workflow_id: 'str', *, status: 'Optional[ScheduleStatus]' = None, skip: 'int' = 0, limit: 'int' = 50) -> 'List[Schedule]'` | List scheduled runs for a specific workflow. |
+| `list_all` | `(*, status: 'Optional[ScheduleStatus]' = None, skip: 'int' = 0, limit: 'int' = 50) -> 'List[Schedule]'` | List all scheduled runs across the entire team. |
+| `update` | `(schedule_id: 'str', *, scheduled_time: 'NotGivenOr[Optional[datetime]]' = NOT_GIVEN, run_input: 'NotGivenOr[Optional[RunInputOrDict]]' = NOT_GIVEN, version: 'NotGivenOr[Optional[int]]' = NOT_GIVEN) -> 'Schedule'` | Modify a pending scheduled run. |
+
+## Webhooks
+
+`client.webhooks`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, name: 'str', url: 'str', actions: 'List[WebhookAction]', enabled: 'bool' = True, bearer_token: 'Optional[str]' = None, timeout_seconds: 'int' = 10, max_retries: 'int' = 3, retry_backoff_seconds: 'int' = 10) -> 'WebhookSubscription'` | Create a new outbound webhook subscription. |
+| `delete` | `(webhook_id: 'str') -> 'None'` | Delete a webhook subscription. |
+| `get` | `(webhook_id: 'str') -> 'WebhookSubscription'` | Retrieve a single webhook subscription by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, enabled: 'Optional[bool]' = None, action: 'Optional[WebhookAction]' = None) -> 'SyncPage[WebhookSubscription]'` | List webhook subscriptions for the team. |
+| `list_delivery_attempts` | `(event_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'SyncPage[WebhookDeliveryAttempt]'` | List delivery attempts for a single webhook event. |
+| `list_events` | `(*, page: 'int' = 1, size: 'int' = 20, subscription_id: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None, action: 'Optional[WebhookAction]' = None, status: 'Optional[WebhookEventStatus]' = None) -> 'SyncPage[WebhookEvent]'` | List webhook delivery events for the team. |
+| `retry_event` | `(event_id: 'str') -> 'Dict[str, str]'` | Retry delivery of a failed or pending webhook event. |
+| `update` | `(webhook_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, url: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, actions: 'NotGivenOr[Optional[List[WebhookAction]]]' = NOT_GIVEN, enabled: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, bearer_token: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, clear_bearer_token: 'NotGivenOr[bool]' = NOT_GIVEN, timeout_seconds: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, max_retries: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, retry_backoff_seconds: 'NotGivenOr[Optional[int]]' = NOT_GIVEN) -> 'WebhookSubscription'` | Partially update a webhook subscription. |
+
+## Simulations
+
+`client.simulations`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, config: 'Dict[str, Any]') -> 'Simulation'` | Create a new simulation configuration. |
+| `delete` | `(simulation_id: 'str') -> 'Dict[str, Any]'` | Delete a simulation configuration. |
+| `evaluation_summary` | `(simulation_id: 'str', *, group_id: 'Optional[str]' = None) -> 'Dict[str, Any]'` | Get aggregated evaluation results for a simulation. |
+| `get` | `(simulation_id: 'str') -> 'Simulation'` | Retrieve a simulation configuration by ID. |
+| `get_run` | `(run_id: 'str') -> 'SimulationGroup'` | Get details of a specific simulation run group. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'SyncPage[Simulation]'` | List simulation configurations for the team. |
+| `list_detailed_executions` | `(run_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'List[Dict[str, Any]]'` | List individual executions with hydrated workflow run details. |
+| `list_executions` | `(run_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'SyncPage[SimulationRun]'` | List individual executions within a simulation run group. |
+| `list_runs` | `(simulation_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'SyncPage[SimulationGroup]'` | List all run groups for a simulation configuration. |
+| `run` | `(simulation_id: 'str', *, runner_name: 'Optional[str]' = None) -> 'SimulationGroup'` | Trigger a new simulation batch run. |
+| `schema` | `() -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a simulation configuration. |
+| `stop_run` | `(run_id: 'str') -> 'SimulationGroup'` | Cancel a simulation run group. |
+| `update` | `(simulation_id: 'str', *, updates: 'Dict[str, Any]') -> 'Simulation'` | Partially update a simulation configuration. |
+
+## Global variables
+
+`client.global_variables`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `bulk_create` | `(*, variables: 'List[Dict[str, Any]]') -> 'List[GlobalVariable]'` | Create multiple global variables in one request. |
+| `create` | `(*, name: 'str', value: 'Optional[str]' = None, description: 'Optional[str]' = None, category: 'Optional[str]' = None, is_secret: 'bool' = False) -> 'GlobalVariable'` | Create a single global variable. |
+| `delete` | `(variable_id: 'str') -> 'None'` | Delete a global variable. |
+| `get` | `(variable_id: 'str') -> 'GlobalVariable'` | Retrieve a single global variable by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, category: 'Optional[str]' = None) -> 'SyncPage[GlobalVariable]'` | List global variables. |
+| `resolve` | `() -> 'Dict[str, Any]'` | Resolve all global variables for the team into a ``{name: value}`` dict. |
+| `update` | `(variable_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, value: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, category: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, is_secret: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN) -> 'GlobalVariable'` | Update a global variable. |
+
+## Super nodes
+
+`client.super_nodes`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `dependents` | `(workflow_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'SyncPage[SuperNodeDependent]'` | List workflows that embed this workflow as a super node (paginated). |
+| `expand_preview` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'SuperNodeExpandPreview'` | Preview a workflow with all super nodes inlined as flat nodes/edges. |
+| `get` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'SuperNodeDetail'` | Retrieve the full super node definition for a workflow version. |
+| `list` | `() -> 'List[SuperNodeSummary]'` | List all super nodes published for the team. |
+| `publish` | `(workflow_id: 'str', *, interface: 'SuperNodeInterfaceOrDict') -> 'Dict[str, Any]'` | Publish a workflow as a super node. |
+| `schema` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a super node's input fields. |
+| `snapshot_status` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Report whether the workflow's super-node snapshot is current. |
+| `unpublish` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Unpublish a workflow version as a super node. |
+
+## Node libraries
+
+`client.node_libraries`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, node_library_config: 'NodeConfigOrDict') -> 'NodeLibrary'` | Create a new node library. |
+| `delete` | `(library_id: 'str') -> 'None'` | Delete a node library. |
+| `get` | `(library_id: 'str') -> 'NodeLibrary'` | Retrieve a single node library by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, access_level: 'Optional[str]' = None) -> 'SyncPage[NodeLibrary]'` | List node libraries. |
+| `schema` | `() -> 'Dict[str, Any]'` | Retrieve the JSON Schema for node library configs. |
+| `update` | `(library_id: 'str', *, node_library_config: 'NotGivenOr[Optional[NodeConfigOrDict]]' = NOT_GIVEN) -> 'NodeLibrary'` | Update a node library's config. |
+
+## Templates
+
+`client.templates`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, config: 'WorkflowTemplateConfigOrDict') -> 'Template'` | Create a new workflow template. |
+| `delete` | `(template_id: 'str') -> 'None'` | Delete a workflow template. |
+| `get` | `(template_id: 'str') -> 'Template'` | Retrieve a single workflow template by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, access_level: 'Optional[str]' = None) -> 'SyncPage[Template]'` | List workflow templates. |
+| `schema` | `() -> 'Dict[str, Any]'` | Retrieve the JSON Schema for workflow template configs. |
+| `update` | `(template_id: 'str', *, config: 'NotGivenOr[Optional[WorkflowTemplateConfigOrDict]]' = NOT_GIVEN) -> 'Template'` | Update a workflow template's config. |
+
+## Categories
+
+`client.categories`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `list` | `() -> 'List[str]'` | Retrieve all available workflow category names for the team. |
+
+## LLM configs
+
+`client.llm_configs`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create` | `(*, name: 'str', config: 'LLMConfigOrDict', description: 'Optional[str]' = None, is_default: 'bool' = False, override_default: 'bool' = False) -> 'LLMConfig'` | Create a saved LLM config (single provider or group). |
+| `delete` | `(llm_config_id: 'str') -> 'None'` | Delete a saved LLM config. |
+| `get` | `(llm_config_id: 'str') -> 'LLMConfig'` | Retrieve a single saved LLM config by ID. |
+| `get_default` | `() -> 'LLMConfig'` | Return the team's default saved LLM config. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'SyncPage[LLMConfig]'` | List the team's saved LLM configs (paginated). |
+| `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for a saved LLM config (``LLMOrGroupConfig``). |
+| `test` | `(llm_config_id: 'str', *, system_prompt: 'str', messages: 'Optional[List[Dict[str, Any]]]' = None, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN) -> 'LLMConfigTestResult'` | Exercise a saved LLM config against a system prompt + optional messages. |
+| `test_inline` | `(*, system_prompt: 'str', config: 'LLMConfigOrDict', messages: 'Optional[List[Dict[str, Any]]]' = None) -> 'LLMConfigTestResult'` | Exercise an unsaved (inline) LLM config before persisting it. |
+| `update` | `(llm_config_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN, is_default: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, override_default: 'bool' = False) -> 'LLMConfig'` | Update a saved LLM config; only supplied fields are sent. |
