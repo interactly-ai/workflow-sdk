@@ -1,0 +1,70 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "interactly"
+version = "0.1.0"
+description = "Python SDK for the Interactly Workflow API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = ["interactly", "workflow", "sdk", "api", "ai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Typing :: Typed",
+]
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "typing-extensions>=4.10.0",
+    "anyio>=3.0.0",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+configs = [
+    "interactly-configs>=0.1.0",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "mypy>=1.9",
+    "ruff>=0.4",
+    "nox>=2024.4",
+    "pre-commit>=3.7",
+    "types-requests",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/interactly"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = ["E501"]  # Line length handled by formatter
+
+[tool.mypy]
+strict = true
+python_version = "3.10"
+files = ["src/interactly"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests that require a live Interactly service (deselect with '-m not integration')",
+]
