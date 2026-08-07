@@ -89,6 +89,10 @@ KNOWN_ONLY_MIRROR: Dict[str, str] = {
     # (workflow_run.py), which the mirror also has; this one adds the `is_terminal()` helper the SDK
     # uses to decide whether another turn may be sent.
     "WorkflowExecutionStatus": "SDK-only run lifecycle enum with is_terminal() helper",
+    # Landing pad for a node type this package does not know yet, so a lagging client neither fails
+    # the whole workflow nor silently drops the node's fields. Upstream needs no equivalent: the
+    # server is by definition current with its own node types.
+    "UnknownNodeConfig": "forward-compat fallback for unknown node types (extra='allow')",
 }
 
 #: Field-level divergences that are deliberate, as ``ClassName.field_name`` -> reason. Each one was
@@ -97,7 +101,15 @@ KNOWN_FIELD_DIVERGENCES: Dict[str, str] = {
     # Typing this as upstream's `List[NodeConfig]` makes the SDK REJECT any workflow containing a node
     # type it does not yet know -- verified empirically. For a client that necessarily lags the
     # server, that is the normal case, and it is the exact failure this sync project exists to manage.
-    # SerializeAsAny keeps subclass fields on the way out, so round-tripping is lossless either way.
+    #
+    # CORRECTION (Phase 3): the original note here claimed "SerializeAsAny keeps subclass fields on
+    # the way out, so round-tripping is lossless either way". That was wrong. SerializeAsAny governs
+    # SERIALIZATION, so it preserves subclass fields only for an object that already IS the subclass.
+    # Validating a plain dict against the annotation coerced it straight to BaseNodeConfig and
+    # silently dropped every subclass field -- a `say_llm` node came back with no `type` and no
+    # `prompt_config`. The annotation is still correct, but it is only safe because
+    # `_upgrade_node_configs` now validates each entry through the union first, with
+    # `UnknownNodeConfig` as the fallback.
     "WorkflowConfigFullyHydrated.node_configs": "forward-compat: unknown node types must not fail validation",
     # Same reasoning as StoredEvents: typing the payload as `Event` would reject event types newer
     # than this package.

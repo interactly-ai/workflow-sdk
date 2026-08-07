@@ -13,7 +13,7 @@ from enum import Enum
 from typing import Any, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field, SerializeAsAny
+from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, TypeAdapter, ValidationError, field_validator
 
 from interactly_configs.acls import AccessControlLevel
 from interactly_configs.edge import EdgeConfig
@@ -221,12 +221,53 @@ class WorkflowConfig(BaseModel):
     )
 
 
+#: Built once — constructing a TypeAdapter per node would dominate the cost of parsing a workflow.
+#: Imported lazily inside the module body to avoid a cycle: node_unions imports config modules that
+#: (indirectly) import this one.
+from interactly_configs.nodes.node_unions import NodeConfig as _NodeConfigUnion  # noqa: E402
+
+_NODE_CONFIG_ADAPTER = TypeAdapter(_NodeConfigUnion)
+
+
+class UnknownNodeConfig(BaseNodeConfig):
+    """Fallback for a node whose ``type`` this package does not know yet.
+
+    A client necessarily lags the server, so a workflow can legitimately contain a node type added
+    after this package was released. Rather than failing the whole workflow, such a node lands here
+    with ``extra="allow"`` so its fields survive validation and a later ``model_dump()`` — which means
+    a fetch/modify/upload round trip does not quietly delete parts of someone's workflow.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+def _coerce_node_config(value: Any) -> Any:
+    """Validate one node through the discriminated union, falling back for unknown types.
+
+    ``List[SerializeAsAny[BaseNodeConfig]]`` alone is NOT enough: ``SerializeAsAny`` governs
+    serialization, so it preserves subclass fields only for an object that is already the subclass.
+    Validating a plain dict against that annotation coerces it straight to ``BaseNodeConfig`` and
+    **silently discards every subclass field** — a `say_llm` node came back with no ``type``, no
+    ``prompt_config`` and no ``wait_for_user_message``. Upgrading through the union here is what makes
+    a server round trip lossless.
+    """
+    if isinstance(value, BaseNodeConfig):
+        return value
+    if isinstance(value, dict):
+        try:
+            return _NODE_CONFIG_ADAPTER.validate_python(value)
+        except ValidationError:
+            return UnknownNodeConfig.model_validate(value)
+    return value
+
+
 class WorkflowConfigFullyHydrated(BaseModel):
     """A fully resolved workflow config with embedded node and edge objects.
 
-    On the server side, ``node_configs`` is typed as the discriminated
-    ``NodeConfig`` union. On the client side, ``BaseNodeConfig`` is used
-    since the full node hierarchy is not published.
+    ``node_configs`` is annotated ``SerializeAsAny[BaseNodeConfig]`` rather than the server's
+    discriminated ``NodeConfig`` union so an unknown node type cannot fail the whole workflow, and a
+    ``mode="before"`` validator upgrades each entry through that union so known types keep full
+    fidelity. See ``_coerce_node_config``.
     """
 
     workflow_config: Optional[WorkflowConfig] = Field(
@@ -237,6 +278,13 @@ class WorkflowConfigFullyHydrated(BaseModel):
         default_factory=list,
         description="List of node configurations for runtime",
     )
+
+    @field_validator("node_configs", mode="before")
+    @classmethod
+    def _upgrade_node_configs(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return [_coerce_node_config(item) for item in value]
+        return value
     edge_configs: List[EdgeConfig] = Field(
         default_factory=list,
         description="List of edge configurations for runtime",

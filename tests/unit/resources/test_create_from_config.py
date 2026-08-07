@@ -178,8 +178,44 @@ class TestCreateFromConfig:
 
 class TestGetFullyHydrated:
     @respx.mock
-    def test_unwraps_workflowsresponse_envelope(self, client: WorkflowClient):
-        # Arrange — backend canonical shape: ``{workflow: {workflow_config, node_configs, edge_configs}, execution_url}``.
+    def test_unwraps_the_real_server_envelope(self, client: WorkflowClient):
+        """The shape the server actually returns, captured from dev.
+
+        The hydrated payload sits TWO levels down: the ``workflow`` key holds the stored document
+        (team_id, _id, timestamps) and *its* ``workflow_config`` is the hydrated config. The unwrap
+        used to stop one level short and return the document, whose ``node_configs`` are absent — so
+        every call produced a config with zero nodes and zero edges instead of failing. The old test
+        here mocked the hydrated config directly under ``workflow``, a shape the server never sends,
+        which is exactly why the bug survived.
+        """
+        # Arrange
+        cfg = _minimal_config().model_dump(mode="json")
+        respx.get(f"{TEST_BASE_URL}/v1/workflows/wf-xyz").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "workflow": {
+                        "_id": "wf-xyz",
+                        "team_id": "t-1",
+                        "active_version_number": 0,
+                        "workflow_config": cfg,
+                    },
+                    "execution_url": "wss://example.com/ws",
+                },
+            )
+        )
+
+        # Act
+        result = client.workflows.get_fully_hydrated("wf-xyz")
+
+        # Assert
+        assert isinstance(result, WorkflowConfigFullyHydrated)
+        assert len(result.node_configs) == 2
+        assert len(result.edge_configs) == 1
+
+    @respx.mock
+    def test_accepts_the_single_wrapped_shape(self, client: WorkflowClient):
+        # Arrange — some mocked backends put the hydrated config directly under ``workflow``.
         cfg = _minimal_config().model_dump(mode="json")
         respx.get(f"{TEST_BASE_URL}/v1/workflows/wf-xyz").mock(
             return_value=httpx.Response(
@@ -192,9 +228,93 @@ class TestGetFullyHydrated:
         result = client.workflows.get_fully_hydrated("wf-xyz")
 
         # Assert
-        assert isinstance(result, WorkflowConfigFullyHydrated)
         assert len(result.node_configs) == 2
         assert len(result.edge_configs) == 1
+
+    @respx.mock
+    def test_nodes_keep_their_concrete_subclass_and_fields(self, client: WorkflowClient):
+        """A fetched node must survive as its real type, not be flattened to BaseNodeConfig.
+
+        ``SerializeAsAny`` governs serialization only, so validating a plain dict against
+        ``List[SerializeAsAny[BaseNodeConfig]]`` used to discard every subclass field — the fetched
+        config could not be re-uploaded because it no longer carried ``type``.
+        """
+        # Arrange
+        respx.get(f"{TEST_BASE_URL}/v1/workflows/wf-xyz").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "workflow": {
+                        "workflow_config": {
+                            "workflow_config": {"name": "wf"},
+                            "node_configs": [
+                                {"type": "say_llm", "name": "greet", "wait_for_user_message": True}
+                            ],
+                            "edge_configs": [],
+                        }
+                    }
+                },
+            )
+        )
+
+        # Act
+        node = client.workflows.get_fully_hydrated("wf-xyz").node_configs[0]
+
+        # Assert
+        assert type(node).__name__ == "SayLLMNodeConfig"
+        dumped = node.model_dump()
+        assert dumped["type"] == "say_llm"
+        assert dumped["wait_for_user_message"] is True
+
+    @respx.mock
+    def test_unknown_node_type_is_preserved_rather_than_failing(self, client: WorkflowClient):
+        # A client necessarily lags the server, so a node type newer than this package must neither
+        # fail the workflow nor lose its fields.
+        respx.get(f"{TEST_BASE_URL}/v1/workflows/wf-xyz").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "workflow": {
+                        "workflow_config": {
+                            "workflow_config": {"name": "wf"},
+                            "node_configs": [
+                                {"type": "future_node_2027", "name": "n", "some_new_field": 7}
+                            ],
+                            "edge_configs": [],
+                        }
+                    }
+                },
+            )
+        )
+
+        node = client.workflows.get_fully_hydrated("wf-xyz").node_configs[0]
+
+        assert type(node).__name__ == "UnknownNodeConfig"
+        assert node.model_dump()["some_new_field"] == 7
+
+    @respx.mock
+    def test_empty_workflow_is_still_recognised_as_hydrated(self, client: WorkflowClient):
+        # Keyed on key presence, not truthiness: a workflow with no nodes yet is still the hydrated
+        # shape, and treating empty lists as "keep looking" would walk straight past it.
+        respx.get(f"{TEST_BASE_URL}/v1/workflows/wf-xyz").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "workflow": {
+                        "workflow_config": {
+                            "workflow_config": {"name": "empty"},
+                            "node_configs": [],
+                            "edge_configs": [],
+                        }
+                    }
+                },
+            )
+        )
+
+        result = client.workflows.get_fully_hydrated("wf-xyz")
+
+        assert result.workflow_config is not None
+        assert result.workflow_config.name == "empty"
 
     @respx.mock
     def test_accepts_flat_hydrated_shape(self, client: WorkflowClient):
