@@ -1,4 +1,4 @@
-.PHONY: install test lint format typecheck clean sync-check parity-check schema-check refs-check
+.PHONY: install test lint format typecheck clean sync-check parity-check schema-check refs-check api-docs api-docs-check
 
 VENV = .venv
 PYTHON = $(VENV)/bin/python
@@ -80,6 +80,23 @@ sync-check:
 refs-check:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
 		$(PYTHON) tests/tools/symbol_refs.py --verbose
+
+# api-docs regenerates docs/api_{sync,async}.md from the client classes.
+#   The tables are pure introspection, so hand-editing them is how they rot.
+#   api-docs-check is the CI gate: it regenerates into a scratch copy and fails
+#   if the committed pages differ, i.e. someone added an endpoint and forgot.
+api-docs:
+	$(PYTHON) wf_examples/internal/gen_api_reference.py
+
+api-docs-check:
+	@cp docs/api_async.md /tmp/api_async.before && cp docs/api_sync.md /tmp/api_sync.before
+	@$(PYTHON) wf_examples/internal/gen_api_reference.py >/dev/null
+	@if ! diff -q /tmp/api_async.before docs/api_async.md >/dev/null || \
+	    ! diff -q /tmp/api_sync.before docs/api_sync.md >/dev/null; then \
+		echo "docs/api_{sync,async}.md are stale — commit the regenerated files (make api-docs)"; \
+		exit 1; \
+	fi
+	@echo "API reference is up to date."
 
 # ------------------------------------------------------------------ #
 # Build                                                                #

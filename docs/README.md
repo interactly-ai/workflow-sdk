@@ -32,6 +32,14 @@ Focused how-tos for each part of the API. Reach for these once you know the basi
 - [Reusable assets](guides/reusable_assets.md) — node libraries, templates, categories
 - [LLM configs](guides/llm_configs.md) — named/team LLM configurations
 
+### Background execution & review
+
+- [Companion threads](guides/companion_threads.md) — fork a background thread off a direct edge
+- [Evaluate while waiting](guides/waiting_evaluation.md) — let a condition fire with no user message
+- [Self-loops & retries](guides/self_loops.md) — bounded re-execution of a node
+- [Re-runs](guides/reruns.md) — replay a finished run from any turn
+- [Run feedback](guides/run_feedback.md) — ratings and comments on finished runs
+
 ## Reference & topics
 
 - [API reference (async)](api_async.md) — every resource method, `await`-style (generated from source)

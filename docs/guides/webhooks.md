@@ -336,9 +336,26 @@ action and branch on the status rather than looking for a failure event that nev
 
 ### Delivery guarantees
 
-- At-least-once delivery: Events may be delivered multiple times (use `event_id` to deduplicate).
-- Retries: Failed deliveries are retried with exponential backoff.
-- Idempotency: Your endpoint should handle duplicate deliveries gracefully.
+- **At-least-once.** Events may be delivered more than once — deduplicate on `event_id`.
+- **Retries are conditional, not universal.** Only a transient failure is retried:
+  a network error/timeout (no status code at all), or one of
+  `408, 409, 425, 429, 500, 502, 503, 504`. Anything else — notably a `4xx` from your handler — is
+  marked `failed` immediately, because re-sending a payload your endpoint has already rejected only
+  duplicates the rejection.
+- **Backoff is exponential with jitter**, from the subscription's `retry_backoff_seconds`, doubling
+  per attempt and capped at 30 minutes. Retries stop at the subscription's `max_retries`.
+- **Idempotency is your side of the contract.** Handle duplicates gracefully.
+
+#### Why a duplicate can still arrive
+
+Delivery is claimed under a **120-second lease** rather than a status flag. Two dispatchers cannot
+claim the same event concurrently, and an event stranded by a crashed dispatcher becomes due again
+once its lease lapses — so recovery is automatic, at the cost of one possible re-delivery of an event
+that was in fact sent. That is the "at-least-once" above, made concrete: your handler must tolerate
+seeing the same `event_id` twice.
+
+Return **2xx quickly**. Your endpoint's own latency is bounded by the subscription's
+`timeout_seconds` (capped at 60), and a timeout counts as a retryable failure.
 
 ### Bearer tokens
 
@@ -384,6 +401,11 @@ never an `await`.
 - [Event types](../api_async.md) — all available `WebhookAction` values
 
 ## Gotchas
+
+- **A 4xx from your handler is not retried.** Only transient statuses and network errors are. If you
+  want a redelivery, return a 5xx (or call `retry_event()`).
+- **The same `event_id` can arrive twice** — the delivery lease trades a rare duplicate for automatic
+  crash recovery. Deduplicate.
 
 - Always verify the signature in your receiver endpoint. A missing or invalid signature means the request did not come from Interactly.
 - Return HTTP 2xx for successful deliveries. Any non-2xx status triggers a retry.

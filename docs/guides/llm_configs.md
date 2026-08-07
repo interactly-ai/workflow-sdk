@@ -59,6 +59,80 @@ llm_config = await client.llm_configs.create(
 )
 ```
 
+### Choosing a provider
+
+Seven config classes, one per provider plus two specials:
+
+| Class | Provider |
+|---|---|
+| `OpenAILLMConfig` | OpenAI |
+| `AzureOpenAILLMConfig` | Azure OpenAI — values are **deployment** names, not vendor model names |
+| `GoogleLLMConfig` | Google (Gemini) |
+| `AnthropicLLMConfig` | Anthropic (Claude) |
+| `BedrockLLMConfig` | Amazon Bedrock — serverless open-weight models |
+| `CustomLLMConfig` | Any OpenAI-compatible endpoint |
+| `WorkflowDefaultLLMConfig` | "Use whatever the workflow is configured with" |
+| `NoLLMConfig` | Explicitly no LLM |
+
+Amazon Bedrock authenticates in one of three ways, in this order of precedence:
+
+```python
+from interactly.configs import BedrockLLMConfig, BEDROCKModel
+
+BedrockLLMConfig(
+    model=BEDROCKModel.GLM_4_7_FLASH,   # the default: cheap, fast, routes edges reliably
+    region="us-east-1",                 # defaults to us-east-1
+    api_key="...",                      # a Bedrock long-term bearer token — wins if set
+    # or an access-key pair:
+    aws_access_key_id="AKIA...",
+    aws_secret_access_key="...",
+    # or leave all three empty to use the platform default / IAM role
+)
+```
+
+Bedrock model availability is **region- and account-dependent**; `aws bedrock list-foundation-models`
+tells you what your account can actually call.
+
+### Provider quirks that cause 400s
+
+These are properties of the models, not of the SDK, and each one produces a provider-side error that
+is easier to avoid than to debug. The values are exported so you can check before sending:
+
+```python
+import interactly_configs as ic
+
+ic.MODELS_WITHOUT_LOW_REASONING_EFFORT   # {gpt-5.4-pro, gpt-5.2-pro}
+ic.ADAPTIVE_THINKING_MODELS              # claude-opus-5, claude-sonnet-5, claude-fable-5, opus-4-7, opus-4-8
+ic.ALWAYS_THINKING_ANTHROPIC_MODELS      # {claude-fable-5}
+ic.ALWAYS_THINKING_GOOGLE_MODELS         # gemini-3.6-flash and the two floating aliases
+```
+
+- **The "pro" OpenAI variants reject low reasoning effort.** `gpt-5.4-pro` and `gpt-5.2-pro` accept
+  only `medium`, `high`, `xhigh` — and `reasoning_effort` defaults to `low`, so every call would fail
+  out of the box. `ic.resolve_reasoning_effort(model, effort)` clamps a value up to the lowest the
+  model accepts:
+
+  ```python
+  ic.resolve_reasoning_effort("gpt-5.4-pro", "low")   # -> "medium"
+  ic.resolve_reasoning_effort("gpt-5", "low")         # -> "low"  (unchanged)
+  ```
+
+- **Adaptive-thinking Claude models reject `temperature`**, and reject the legacy
+  `thinking={"type": "enabled", "budget_tokens": N}` shape. They also count thinking tokens against
+  `max_tokens`, so the usual 4096 fallback truncates sooner — `ic.DEFAULT_ADAPTIVE_THINKING_MAX_TOKENS`
+  (8192) is the more sensible floor.
+
+- **Some models cannot switch thinking off.** `claude-fable-5` and the always-thinking Gemini models
+  reject a zero thinking budget. `claude-fable-5` additionally requires 30-day data retention, so it
+  is unavailable under zero-data-retention agreements.
+
+- **`gpt-4`, `gpt-4o`, `gpt-4o-mini` and `gpt-3.5-turbo` are deprecated** — OpenAI shuts them down on
+  2026-10-23. They remain selectable so stored workflows keep deserialising; prefer the 5.x models for
+  anything new.
+
+Models the server has retired are **removed from the enums**, so a value that no longer exists fails
+at import rather than as a runtime 404.
+
 ### Marking as default
 
 Set `is_default=True` to mark this config as the team's default:

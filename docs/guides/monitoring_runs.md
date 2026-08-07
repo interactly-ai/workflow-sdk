@@ -26,6 +26,20 @@ async with AsyncWorkflowClient() as client:
 page = await client.runs.list(workflow_id="wf_123", size=50)
 ```
 
+### Finding re-runs of a run
+
+```python
+# Every run that was re-run FROM this one
+page = await client.runs.list(source_workflow_run_id="run_abc")
+print(f"{page.total} re-runs")
+
+# Narrow to one turn
+page = await client.runs.list(source_workflow_run_id="run_abc", source_turn_index=3)
+```
+
+`source_turn_index` is ignored on its own — a turn index means nothing without the run it belongs to.
+See [Re-runs](reruns.md).
+
 ### Filtering by status
 
 ```python
@@ -208,6 +222,25 @@ await client.runs.delete_event_comment(
 ```
 
 ---
+
+## Ratings & Turn Feedback
+
+Beyond run- and event-level comments, runs carry **ratings** and **turn-level** comments — the
+reviewing layer:
+
+```python
+import interactly_configs as ic
+
+result = await client.runs.set_turn_rating(run_id, turn_index=2, value=ic.RatingValue.UP)
+result = await client.runs.add_turn_comment(run_id, turn_index=2, content="Missed the callback")
+
+for rating in result.ratings:
+    author = result.feedback_users.get(rating["createdBy"])
+    print(rating["value"], author.email if author else "unknown")
+```
+
+Feedback is refused with **409** while a run is still in progress. Full detail, including reading
+feedback back off `run.input_output_pairs`, is in [Run feedback](run_feedback.md).
 
 ## Run Schema
 

@@ -33,6 +33,7 @@ from interactly.configs import (
     # Node configs
     BaseNodeConfig,
     GlobalNodeConfig,
+    NoOpNodeConfig,
     NodeType,
     NodeCategory,
 
@@ -43,6 +44,15 @@ from interactly.configs import (
     ConditionalEdgeConfig,
     CompanionEdgeConfig,
     ConditionConfig,
+
+    # Background execution
+    CompanionThreadConfig,
+    EvaluateWhileWaitingConfig,
+    WaitingEvaluationTriggerMode,
+    SelfLoopConfig,
+
+    # Feedback
+    RatingValue,
 
     # Tool configs
     ToolConfig,
@@ -157,6 +167,36 @@ edge_cfg = TypeAdapter(EdgeConfig).validate_python({
 assert isinstance(edge_cfg, DirectEdgeConfig)
 ```
 
+## Round-tripping a hydrated config
+
+`WorkflowConfigFullyHydrated.node_configs` is annotated `SerializeAsAny[BaseNodeConfig]`, so an
+unknown node type cannot fail the whole workflow. A `mode="before"` validator upgrades each entry
+through the discriminated union first, which is what keeps *known* types at full fidelity:
+
+```python
+hydrated = await client.workflows.get_fully_hydrated(workflow_id)
+node = hydrated.node_configs[0]
+type(node).__name__     # 'SayLLMNodeConfig' — not 'BaseNodeConfig'
+node.prompt_config      # preserved
+```
+
+Without that validator, validating a plain dict against `SerializeAsAny[BaseNodeConfig]` coerces it
+to the base class and **silently discards every subclass field** — `SerializeAsAny` governs
+serialization, not validation.
+
+A node type this package does not know yet lands in an internal `UnknownNodeConfig` with
+`extra="allow"`, so its fields survive validation and a later `model_dump()`. Branch on `node.type`
+rather than `isinstance` when you need to handle that case:
+
+```python
+known = {t.value for t in ic.NodeType}
+for node in hydrated.node_configs:
+    if node.type not in known:
+        print("newer server node type:", node.type)   # fields still intact
+```
+
+That is what makes a fetch → modify → upload round trip safe against a server ahead of your SDK.
+
 ## Backward compatibility
 
 The `[configs]` extra is **fully optional**.  All SDK methods continue to accept plain
@@ -164,6 +204,9 @@ The `[configs]` extra is **fully optional**.  All SDK methods continue to accept
 Existing code requires no changes.
 
 ## See also
+
+- [Nodes, edges & tools](guides/nodes_edges_tools.md) — the no-op node and edge-level configs
+- [Companion threads](guides/companion_threads.md) / [Evaluate while waiting](guides/waiting_evaluation.md) / [Self-loops](guides/self_loops.md) — what the background-execution configs do
 
 - [Notebook: 17_interactly_configs.ipynb](../notebooks/17_interactly_configs.ipynb)
 - [Build your first workflow (typed)](04_first_workflow.md) and [wf_examples/wf_example_progression_1.py](../wf_examples/wf_example_progression_1.py)

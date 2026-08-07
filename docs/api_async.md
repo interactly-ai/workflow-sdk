@@ -96,7 +96,9 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `delete` | `(tool_id: 'str') -> 'None'` | Delete a tool. |
 | `execute` | `(tool_id: 'str', *, args: 'Optional[Dict[str, Any]]' = None) -> 'ToolExecuteResult'` | Execute a saved tool with the given argument values and return its output. |
 | `execute_inline` | `(*, tool_config: 'ToolConfigOrDict', args: 'Optional[Dict[str, Any]]' = None) -> 'ToolExecuteResult'` | Execute an inline (unsaved) tool config with the given argument values. |
+| `export` | `(tool_id: 'str') -> 'Dict[str, Any]'` | Export a tool as a portable bundle. Secrets are redacted by the server. |
 | `get` | `(tool_id: 'str') -> 'Tool'` | Retrieve a single tool by ID. |
+| `import_bundle` | `(bundle: 'Dict[str, Any]', *, name_override: 'Optional[str]' = None, secret_overrides: 'Optional[Dict[str, Any]]' = None, clear_unresolved_refs: 'bool' = True, confirm_executable: 'bool' = False) -> 'Tool'` | Import a tool bundle produced by :meth:`export`. See the sync counterpart. |
 | `inbuilt` | `() -> 'List[Dict[str, Any]]'` | Retrieve all inbuilt tools from the registry. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, tool_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'AsyncPage[Tool]'` | List tools. |
 | `schema` | `(tool_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific tool type. |
@@ -112,17 +114,38 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 |---|---|---|
 | `add_comment` | `(run_id: 'str', *, content: 'str') -> 'RunComment'` |  |
 | `add_event_comment` | `(run_id: 'str', event_logical_id: 'str', *, content: 'str') -> 'RunComment'` | Add a comment to a specific event within a run. |
-| `checkpoint` | `(workflow_id: 'str', run_id: 'str', *, resume_turn_index: 'int', start_node_logical_id: 'Optional[str]' = None) -> 'Run'` | Trigger a new run branching from a checkpoint of an existing run. |
+| `add_turn_comment` | `(run_id: 'str', turn_index: 'int', content: 'str') -> 'RunFeedbackResponse'` | Comment on a turn as a whole. Content is trimmed and may not be blank. |
 | `delete` | `(run_id: 'str') -> 'None'` |  |
 | `delete_comment` | `(run_id: 'str', comment_logical_id: 'str') -> 'None'` |  |
 | `delete_event_comment` | `(run_id: 'str', event_logical_id: 'str', comment_logical_id: 'str') -> 'None'` | Delete a comment from a specific event within a run. |
+| `delete_event_rating` | `(run_id: 'str', event_logical_id: 'str') -> 'RunFeedbackResponse'` | Remove the caller's rating from an event. |
+| `delete_turn_comment` | `(run_id: 'str', turn_index: 'int', comment_logical_id: 'str') -> 'RunFeedbackResponse'` | Delete one comment from a turn. |
+| `delete_turn_rating` | `(run_id: 'str', turn_index: 'int') -> 'RunFeedbackResponse'` | Remove the caller's rating from a turn. |
+| `drive_background_work` | `(workflow_id: 'str', run_id: 'str', *, interval_seconds: 'float' = 1.0, max_iterations: 'int' = 60) -> 'List[InteractiveRunResponse]'` | Poll :meth:`pump_companions` until no background work remains. See the sync counterpart. |
 | `evaluation_result` | `(run_id: 'str') -> 'RunEvaluationResult'` |  |
 | `execute` | `(workflow_id: 'str', *, run_id: 'Optional[str]' = None, command: "'WorkflowCommand \| str'" = 'start', run_by: 'Optional[str]' = None, version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, runtime_variables: 'Optional[Dict[str, Any]]' = None, miscellaneous: 'Optional[Dict[str, Any]]' = None, run_input: "Optional['WorkflowRunInput']" = None) -> 'InteractiveRunResponse'` | Execute one turn of an interactive workflow session (async). |
 | `execute_with_input` | `(workflow_id: 'str', *, run_input: "'WorkflowRunInput'", run_id: 'Optional[str]' = None) -> 'InteractiveRunResponse'` | Async variant of :meth:`RunsResource.execute_with_input`. |
 | `get` | `(run_id: 'str') -> 'Run'` |  |
-| `list` | `(*, workflow_id: 'Optional[str]' = None, status: 'Optional[str]' = None, start: 'Optional[datetime]' = None, end: 'Optional[datetime]' = None, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'AsyncPage[Run]'` |  |
+| `list` | `(*, workflow_id: 'Optional[str]' = None, status: 'Optional[str]' = None, start: 'Optional[datetime]' = None, end: 'Optional[datetime]' = None, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, source_workflow_run_id: 'Optional[str]' = None, source_turn_index: 'Optional[int]' = None) -> 'AsyncPage[Run]'` | List workflow runs with optional filtering (paginated). |
+| `pump_companions` | `(workflow_id: 'str', run_id: 'str') -> 'InteractiveRunResponse'` | Advance due background work for a paused interactive run, without consuming a user turn. |
 | `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schemas for workflow run structures. |
-| `stream` | `(*, workflow_id: 'str', command: 'WorkflowCommand' = <WorkflowCommand.START: 'start'>, run_by: 'str' = 'api', version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, runtime_variables: 'Optional[Dict[str, Any]]' = None, run_input: "Optional['WorkflowRunInput']" = None, cast_to: 'Type[RunEvent]' = <class 'interactly.types.runs.run_event.RunEvent'>) -> 'AsyncStream[RunEvent]'` | Open an async WebSocket connection and stream workflow run events. |
+| `set_event_rating` | `(run_id: 'str', event_logical_id: 'str', value: 'str') -> 'RunFeedbackResponse'` | Rate one event of a run. At most one rating per user per target. |
+| `set_turn_rating` | `(run_id: 'str', turn_index: 'int', value: 'str') -> 'RunFeedbackResponse'` | Rate a whole turn, as opposed to one of its events. |
+| `stream` | `(*, workflow_id: 'str', command: 'WorkflowCommand' = <WorkflowCommand.START: 'start'>, run_by: 'str' = 'api', version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, runtime_variables: 'Optional[Dict[str, Any]]' = None, run_input: "Optional['WorkflowRunInput']" = None, rerun_token: 'Optional[str]' = None, cast_to: 'Type[RunEvent]' = <class 'interactly.types.runs.run_event.RunEvent'>) -> 'AsyncStream[RunEvent]'` | Open an async WebSocket connection and stream workflow run events. |
+
+## Re-runs
+
+`client.reruns`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `amend_token` | `(workflow_run_id: 'str', turn_index: 'int', rerun_token: 'str', *, dynamic_variables: 'NotGivenOr[Optional[Dict[str, Any]]]' = NOT_GIVEN, runtime_variables: 'NotGivenOr[Optional[Dict[str, Dict[str, Any]]]]' = NOT_GIVEN, message_edits: 'NotGivenOr[Optional[Any]]' = NOT_GIVEN, message_appends: 'NotGivenOr[Optional[Any]]' = NOT_GIVEN, message_deletes: 'NotGivenOr[Optional[Any]]' = NOT_GIVEN) -> 'RerunTokenPreviewResponse'` | Edit a projection before it runs, returning the updated preview. |
+| `create_token` | `(workflow_run_id: 'str', turn_index: 'int', *, target_workflow_id: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, target_version_number: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, history_mode: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, entry_node_logical_id: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, node_id_map: 'NotGivenOr[Optional[Dict[str, str]]]' = NOT_GIVEN, requested_mode: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'RerunTokenResponse'` | Mint a re-run token carrying the projected state. |
+| `execute` | `(workflow_run_id: 'str', turn_index: 'int', *, message: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, run_async: 'bool' = True, target_workflow_id: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, target_version_number: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, history_mode: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, entry_node_logical_id: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, node_id_map: 'NotGivenOr[Optional[Dict[str, str]]]' = NOT_GIVEN, requested_mode: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'RerunStartedResponse'` | Re-run a turn server-side and hand back the new run. |
+| `preflight` | `(workflow_run_id: 'str', turn_index: 'int', *, target_workflow_id: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, target_version_number: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, history_mode: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, entry_node_logical_id: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, node_id_map: 'NotGivenOr[Optional[Dict[str, str]]]' = NOT_GIVEN, requested_mode: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'RerunPreflightResponse'` | Report what a re-run would carry over and drop. No side effects. |
+| `preview_token` | `(workflow_run_id: 'str', turn_index: 'int', rerun_token: 'str') -> 'RerunTokenPreviewResponse'` | Show what a token restores, without starting it. |
+| `rerunnable_turns` | `(workflow_run_id: 'str') -> 'RerunnableTurnsResponse'` | List which turns of a run can be re-run, and how often each already has been. |
 
 ## Schedules
 

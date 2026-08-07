@@ -242,32 +242,30 @@ async with AsyncWorkflowClient() as client:
 
 ---
 
-## Checkpointing & Branching
+## Branching from a past run
 
-Resume execution from a specific turn in a past run, creating a new branched run.
+> **`runs.checkpoint()` has been removed.** The endpoint no longer exists server-side. Use
+> `client.reruns` instead, which does everything checkpointing did and can also replay against a
+> *different* workflow or version.
 
 ```python
-from interactly import AsyncWorkflowClient
-
 async with AsyncWorkflowClient() as client:
-    # Create a new run branching from turn 2 of an existing run
-    new_run = await client.runs.checkpoint(
-        workflow_id="wf_123",
-        run_id="old_run_id",
-        resume_turn_index=2  # 0-based; inherits turns 0, 1, 2
-    )
+    # Which turns can be re-run, and why not if they cannot
+    turns = await client.reruns.rerunnable_turns("old_run_id")
 
-    print(new_run.id)  # New run ID
-    print(new_run.status)  # "started"
+    # Branch from turn 2
+    started = await client.reruns.execute("old_run_id", turn_index=2)
+    print(started.workflow_run_id, started.status)
 
-    # Optionally start from a specific node
-    new_run = await client.runs.checkpoint(
-        workflow_id="wf_123",
-        run_id="old_run_id",
-        resume_turn_index=2,
-        start_node_logical_id="some_node"
+    # Or start from a specific node
+    started = await client.reruns.execute(
+        "old_run_id", turn_index=2, entry_node_logical_id="some_node",
     )
 ```
+
+**Only WebSocket-driven runs can be re-run** — the config snapshot re-running needs is written by
+`stream()`, not by `execute()`. See [Re-runs](reruns.md) for the full picture, including previewing
+what carries over and editing the transcript before replaying.
 
 ---
 
@@ -395,7 +393,7 @@ async with AsyncWorkflowClient() as client:
 - **Streaming requires WebSocket**: Install with `pip install 'interactly[stream]'` to use `.stream()`.
 - **Handles are single-flight**: Do not interleave `.arun()` calls on the same handle from different tasks. Create a new handle per concurrent session.
 - **Variable merging**: When using handles, per-turn `dynamic_variables` override the handle's defaults at the leaf level (deep merge).
-- **Turn index is 0-based**: In `.checkpoint()`, `resume_turn_index=0` includes only the first turn's pair.
+- **Turn index is 0-based**: In `client.reruns`, `turn_index=0` is the first turn's pair.
 - **Async lock on handles**: `AsyncWorkflowHandle.arun()` uses an internal lock to serialize turns, preventing orphaned sessions if concurrent `.arun()` calls happen by accident.
 
 ---
