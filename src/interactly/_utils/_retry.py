@@ -19,6 +19,7 @@ other than 429) are never retried.
 
 from __future__ import annotations
 
+import asyncio
 import email.utils
 import random
 import time
@@ -149,8 +150,6 @@ async def with_retry_async(
     """
     Async variant of `with_retry`.
     """
-    import asyncio
-
     for attempt in range(max_retries + 1):
         response = await send()
         if attempt == max_retries or not should_retry(method, response):

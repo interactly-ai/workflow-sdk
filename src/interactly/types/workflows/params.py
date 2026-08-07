@@ -7,11 +7,11 @@ and mypy type checking without instantiating model classes.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Optional
 
 from typing_extensions import NotRequired, TypedDict
 
-from interactly._types import NOT_GIVEN, NotGivenOr
+from interactly._types import NotGivenOr
 from interactly.types._config_types import WorkflowConfigOrDict
 
 __all__ = [

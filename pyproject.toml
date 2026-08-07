@@ -8,12 +8,13 @@ version = "0.1.0"
 description = "Python SDK for the Interactly Workflow API"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+# No `license` key: the root LICENSE file was deliberately removed in 7d26b4b. Leaving
+# `license = { file = "LICENSE" }` behind made `pip install -e .` fail at metadata generation
+# ("License file does not exist: LICENSE"), which broke the documented `make install` path.
 keywords = ["interactly", "workflow", "sdk", "api", "ai"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -54,8 +55,22 @@ line-length = 120
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP"]
-ignore = ["E501"]  # Line length handled by formatter
+# `UP` (pyupgrade) is deliberately NOT selected. It would rewrite `Optional[X]` -> `X | None` and
+# `List[X]` -> `list[X]` across the tree, and `configs/src/interactly_configs/` is a deliberate mirror
+# of `agentic_workflow_framework/configs/` — which uses the typing-module style. Auto-upgrading would
+# permanently diverge the mirror from upstream and turn every future sync into a manual reconciliation
+# instead of a diff. `src/interactly/` is kept in the same style so the two halves read alike.
+# Re-enable only if upstream itself moves to PEP 604/585 annotations.
+select = ["E", "F", "W", "I", "N"]
+ignore = [
+    "E501",  # Line length handled by formatter
+    # Deliberate pattern: the `interactly.types.*` models import config classes lazily inside
+    # functions (to keep `interactly_configs` an optional dependency and avoid import cycles) and
+    # alias them to short private names — `EdgeConfig as _EC`. N814 reads the uppercase alias as a
+    # misnamed constant. The aliases are intentional and consistent across 8 modules, so this is
+    # ignored globally rather than carrying 11 identical noqa comments.
+    "N814",
+]
 
 [tool.mypy]
 strict = true

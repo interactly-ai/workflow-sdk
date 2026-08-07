@@ -186,9 +186,8 @@ class Run(BaseAPIModel):
         if not isinstance(raw_pairs, list):
             return data
         try:
-            from pydantic import TypeAdapter
-
             from interactly_configs import WorkflowRunInputOutputPair as _Pair
+            from pydantic import TypeAdapter
 
             adapter = TypeAdapter(_Pair)
         except Exception:

@@ -1,5 +1,10 @@
 from interactly.resources.runs import AsyncRunsResource, RunsResource
-from interactly.resources.workflows import AsyncWorkflowsResource, AsyncWorkflowVersionsResource, WorkflowsResource, WorkflowVersionsResource
+from interactly.resources.workflows import (
+    AsyncWorkflowsResource,
+    AsyncWorkflowVersionsResource,
+    WorkflowsResource,
+    WorkflowVersionsResource,
+)
 
 __all__ = [
     "WorkflowsResource",

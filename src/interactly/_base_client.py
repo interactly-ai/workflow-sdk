@@ -27,7 +27,7 @@ from interactly._constants import (
     ENV_TIMEOUT,
     ENV_USER_ID,
 )
-from interactly._exceptions import APIConnectionError, APITimeoutError, _make_status_error
+from interactly._exceptions import APIConnectionError, APITimeoutError
 from interactly._response import APIResponse
 from interactly._utils._logs import logger
 from interactly._utils._retry import with_retry, with_retry_async

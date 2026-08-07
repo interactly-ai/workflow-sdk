@@ -18,17 +18,16 @@ import respx
 
 from interactly import (
     AsyncWorkflowClient,
-    WorkflowClient,
-    WebhookAction,
-    WebhookEventStatus,
-    WebhookEvent,
-    WebhookDeliveryAttempt,
     Simulation,
     SimulationGroup,
     SimulationRun,
     SimulationStatus,
-    CopilotSchema,
     VersionDiff,
+    WebhookAction,
+    WebhookDeliveryAttempt,
+    WebhookEvent,
+    WebhookEventStatus,
+    WorkflowClient,
 )
 from interactly._pagination import SyncPage
 

@@ -20,10 +20,11 @@ import copy
 from typing import TYPE_CHECKING, AsyncIterator, Iterator, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
-    from interactly._client import AsyncWorkflowClient, WorkflowClient
-    from interactly.runtime.events import BaseEvent  # type: ignore[import]
     from interactly_configs import WorkflowConfigFullyHydrated  # type: ignore[import]
     from interactly_configs.workflow_run import WorkflowRunInput  # type: ignore[import]
+
+    from interactly._client import AsyncWorkflowClient, WorkflowClient
+    from interactly.runtime.events import BaseEvent  # type: ignore[import]
 
 __all__ = [
     "AsyncWorkflowHandle",

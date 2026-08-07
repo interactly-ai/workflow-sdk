@@ -20,6 +20,7 @@ import httpx
 from interactly._exceptions import NotFoundError
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
+from interactly._types import NOT_GIVEN, NotGivenOr
 from interactly.types.webhooks.webhook import (
     WebhookAction,
     WebhookDeliveryAttempt,
@@ -27,7 +28,6 @@ from interactly.types.webhooks.webhook import (
     WebhookEventStatus,
     WebhookSubscription,
 )
-from interactly._types import NOT_GIVEN, NotGivenOr
 
 if TYPE_CHECKING:
     pass

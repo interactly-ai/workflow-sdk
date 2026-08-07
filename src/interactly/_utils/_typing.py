@@ -12,7 +12,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import ClassVar, Generic, Literal, TypeVar, Union, final
+from typing import ClassVar, Literal, TypeVar, Union, final
 
 T = TypeVar("T")
 

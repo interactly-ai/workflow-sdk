@@ -30,7 +30,7 @@ from interactly import (
     WebhookSubscription,
     WorkflowClient,
 )
-from tests.conftest import TEST_BASE_URL, TEST_TEAM_ID, TEST_USER_ID, TEST_API_KEY
+from tests.conftest import TEST_API_KEY, TEST_BASE_URL, TEST_TEAM_ID, TEST_USER_ID
 
 # --------------------------------------------------------------------------- #
 # Fixtures                                                                     #
@@ -493,7 +493,7 @@ class TestNodes:
     @respx.mock
     def test_create_node(self, client: WorkflowClient):
         # Arrange
-        route = respx.post(f"{TEST_BASE_URL}/v1/nodes").mock(
+        respx.post(f"{TEST_BASE_URL}/v1/nodes").mock(
             return_value=httpx.Response(200, json=_NODE)
         )
 

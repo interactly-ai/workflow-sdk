@@ -18,10 +18,8 @@ from interactly import (
 )
 from interactly.configs import (
     DirectEdgeConfig,
-    LLMNodeRunInput,
-    NodesRunInputs,
-    OPENAIModel,
     OpenAILLMConfig,
+    OPENAIModel,
     SayLLMNodeConfig,
     SayStaticMessageNodeConfig,
     StaticMessagesConfig,
@@ -37,7 +35,6 @@ from tests.conftest import (
     TEST_USER_ID,
     WORKFLOW_RESPONSE,
 )
-
 
 # --------------------------------------------------------------------------- #
 # Test data builders                                                          #

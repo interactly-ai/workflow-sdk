@@ -5,7 +5,7 @@ Response models for the Simulations API.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from pydantic import model_validator
 

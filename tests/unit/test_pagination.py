@@ -4,10 +4,8 @@ Unit tests for the pagination helpers (SyncPage, AsyncPage).
 
 from __future__ import annotations
 
-import pytest
-
-from interactly._pagination import AsyncPage, PageMetadata, SyncPage
 from interactly._models import BaseAPIModel
+from interactly._pagination import AsyncPage, SyncPage
 
 
 class Item(BaseAPIModel):

@@ -104,7 +104,7 @@ class TestNodesTypedParams:
 class TestEdgesTypedParams:
     @respx.mock
     def test_create_accepts_plain_dict(self, client: WorkflowClient):
-        route = respx.post(f"{TEST_BASE_URL}/v1/edges").mock(
+        respx.post(f"{TEST_BASE_URL}/v1/edges").mock(
             return_value=httpx.Response(200, json=_EDGE_RESP)
         )
         cfg = {"edge_type": "direct", "source_node_logical_id": "a", "destination_node_logical_id": "b"}
@@ -139,7 +139,7 @@ class TestEdgesTypedParams:
 class TestToolsTypedParams:
     @respx.mock
     def test_create_accepts_plain_dict(self, client: WorkflowClient):
-        route = respx.post(f"{TEST_BASE_URL}/v1/tools").mock(
+        respx.post(f"{TEST_BASE_URL}/v1/tools").mock(
             return_value=httpx.Response(200, json=_TOOL_RESP)
         )
         cfg = {"tool_type": "api_call", "name": "My Tool"}

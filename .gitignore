@@ -148,6 +148,11 @@ activemq-data/
 *.sage.py
 
 # Environments
+# `.env` holds a live INTERACTLY_API_KEY. It was previously tracked (commits a266b5d, af22255)
+# and is now untracked — see .env.example for the shape to copy.
+.env
+.env_dev
+.env_qa
 .envrc
 .venv
 env/

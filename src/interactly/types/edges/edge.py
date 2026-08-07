@@ -5,7 +5,7 @@ Response model for workflow edges.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pydantic import model_validator
 
@@ -44,8 +44,8 @@ class Edge(BaseAPIModel):
         if raw is None or not isinstance(raw, dict):
             return data
         try:
-            from pydantic import TypeAdapter
             from interactly_configs import EdgeConfig as _EC
+            from pydantic import TypeAdapter
 
             data["edge_config"] = TypeAdapter(_EC).validate_python(raw)
         except Exception:

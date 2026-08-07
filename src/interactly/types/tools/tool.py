@@ -5,7 +5,7 @@ Response model for tools.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pydantic import model_validator
 
@@ -62,8 +62,8 @@ class Tool(BaseAPIModel):
         if raw is None or not isinstance(raw, dict):
             return data
         try:
-            from pydantic import TypeAdapter
             from interactly_configs import ToolConfig as _TC
+            from pydantic import TypeAdapter
 
             data["tool_config"] = TypeAdapter(_TC).validate_python(raw)
         except Exception:

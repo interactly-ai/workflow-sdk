@@ -5,7 +5,7 @@ Response model for a single Workflow resource.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from pydantic import model_validator
 
@@ -128,7 +128,7 @@ class Workflow(BaseAPIModel):
             data["id"] = str(data["_id"])
         elif "id" in data:
             data["id"] = str(data["id"])
-            
+
         # Extract properties from workflow_config
         config = data.get("workflow_config")
         if isinstance(config, dict):
@@ -138,5 +138,5 @@ class Workflow(BaseAPIModel):
                 data["description"] = config["description"]
             if "status" in config and "status" not in data:
                 data["status"] = config["status"]
-                
+
         return data

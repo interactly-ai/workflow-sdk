@@ -4,8 +4,8 @@ Unit tests for the retry helpers.
 
 from __future__ import annotations
 
-import pytest
 import httpx
+import pytest
 
 from interactly._utils._retry import backoff_delay, should_retry, with_retry
 
