@@ -23,6 +23,12 @@ class GlobalVariable(BaseAPIModel):
     description: Optional[str] = None
     category: Optional[str] = None
     is_secret: bool = False
+
+    #: True for variables the platform provides to every team (e.g. the API base URL and the team's
+    #: API key). They cannot be created, edited or deleted, are returned unpaginated on the first
+    #: page of ``list()``, and their secret values are masked — ``resolve()`` returns the mask, not
+    #: the credential, because that route is reachable by any team member regardless of role.
+    is_system: bool = False
     team_id: Optional[str] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None
