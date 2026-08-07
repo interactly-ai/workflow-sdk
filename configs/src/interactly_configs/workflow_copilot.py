@@ -1,8 +1,9 @@
 from enum import Enum
-from typing import Annotated, Literal, Optional, Union
+from typing import Annotated, List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
 
 class WorkflowCopilotStatus(str, Enum):
     STARTED = "started"
@@ -50,7 +51,7 @@ class LabelValue(BaseModel):
     )
 
 class Checkboxes(BaseModel):
-    options: list[LabelValue] = Field(
+    options: List[LabelValue] = Field(
         default_factory=list,
         description="Options for the checkboxes",
         title="Workflow Copilot Checkboxes Options",
@@ -149,7 +150,7 @@ class ButtonsOutput(BaseOutput):
         title="Button Layout",
     )
 
-    buttons: Optional[list[Button]] = Field(
+    buttons: Optional[List[Button]] = Field(
         default_factory=list,
         description="Output buttons from the workflow copilot",
         title="Workflow Copilot Output Buttons",
@@ -214,7 +215,7 @@ class CodeOutput(BaseOutput):
         description="Whether to show line numbers in the code output",
         title="Code Output Show Line Numbers",
     )
-    highlightLines: Optional[list[int]] = Field(
+    highlightLines: Optional[List[int]] = Field(
         default=None,
         description="List of line numbers to highlight in the code output",
         title="Code Output Highlight Lines",
@@ -300,14 +301,7 @@ class CheckboxesOutput(BaseOutput):
 
 # Workflow Copilot Output
 WorkflowCopilotOutput = Annotated[
-    Union[
-        TextOutput,
-        ButtonsOutput,
-        MarkdownOutput,
-        CodeOutput,
-        WorkflowCardOutput,
-        CheckboxesOutput,
-    ],
+    TextOutput | ButtonsOutput | MarkdownOutput | CodeOutput | WorkflowCardOutput | CheckboxesOutput,
     Field(discriminator="type"),
 ]
 

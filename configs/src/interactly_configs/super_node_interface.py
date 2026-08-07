@@ -3,6 +3,7 @@ from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field
 
+
 class SuperNodeFieldMappingTargetType(str, Enum):
     NODE_CONFIG_FIELD = "node_config_field"
     DYNAMIC_VARIABLE = "dynamic_variable"

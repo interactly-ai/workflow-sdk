@@ -5,6 +5,7 @@ from pydantic import ConfigDict, Field
 from interactly_configs.nodes.node import BaseNodeConfig, BaseNodeRunInput, BaseNodeRunOutput, NodeType
 from interactly_configs.prompt import StaticMessagesConfig
 
+
 class SayStaticMessageNodeConfig(BaseNodeConfig):
     type: Literal["say_static"] = Field(
         default=NodeType.SAY_STATIC.value,

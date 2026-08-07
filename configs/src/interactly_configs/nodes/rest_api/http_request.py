@@ -1,8 +1,7 @@
 from enum import Enum
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import ConfigDict, Field
-from typing_extensions import Optional
 
 from interactly_configs.nodes.node import (
     BaseNodeConfig,
@@ -11,6 +10,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
     NodeType,
 )
+
 
 class HttpMethodEnum(str, Enum):
     GET = "GET"

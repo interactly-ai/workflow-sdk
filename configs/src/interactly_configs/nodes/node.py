@@ -2,12 +2,13 @@ from enum import Enum
 from typing import Literal, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from interactly_configs.base_defs import BaseEntityConfig
 from interactly_configs.condition import ConditionConfig
 from interactly_configs.run_input import BaseRunInput
 from interactly_configs.run_output import BaseRunOutput
+
 
 class NodeType(str, Enum):
     # System nodes
@@ -44,6 +45,9 @@ class NodeType(str, Enum):
     DEDUPLICATE = "deduplicate"
     FIELD_EXTRACTOR = "field_extractor"
 
+    # Utility nodes
+    NO_OP = "no_op"
+
 class NodeCategory(str, Enum):
     """
     Enum representing different categories of nodes.
@@ -68,6 +72,7 @@ class NodeCategory(str, Enum):
     HTTP_REQUEST = "HTTP Request"
     EHR_INTEGRATIONS = "EHR Integrations"
     EVALUATION = "Evaluation"
+    UTILITY = "Utility"
     TOOL = "Tool"
     DEDUPLICATION = "Deduplication"
     EXTRACTION = "Extraction"
@@ -103,6 +108,70 @@ class GlobalNodeConfig(BaseModel):
         ),
         title="Reverse Conditional Edge",
     )
+
+class SelfLoopConfig(BaseModel):
+    """
+    Bounded self-loop / retry policy for a node.
+
+    When ``enabled``, the node re-executes its functionality repeatedly until ONE of the following
+    happens, whichever comes first:
+      1. an outgoing conditional edge matches (the loop's exit), or
+      2. ``max_retries`` re-executions have been performed, or
+      3. the ``expiry_time`` wall-clock budget for the whole loop elapses.
+
+    Outgoing conditional edges are re-evaluated after every execution to decide whether to exit
+    (take a matching edge) or run again. When the loop stops without a matching exit edge, the
+    runtime publishes a ``self_loop_outcome`` runtime variable (``"max_retries"`` | ``"expiry_time"``)
+    that authors can branch on with a dedicated "exhausted"/"timeout" conditional edge.
+
+    This is distinct from the LLM-node ``self_loop: bool`` flag, which governs loop-back while
+    waiting for the next user message and is unaffected by this config.
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description=(
+            "Re-execute this node until a conditional edge matches, max_retries is reached, or "
+            "expiry_time elapses (whichever comes first)."
+        ),
+        title="Self Loop",
+    )
+    max_retries: Optional[int] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description=(
+            "Maximum number of re-executions after the first attempt (total attempts = "
+            "max_retries + 1). Leave empty for no bound by count."
+        ),
+        title="Max Retries",
+    )
+    expiry_time: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=3600,
+        description=(
+            "Overall wall-clock budget in seconds for the whole self-loop. An execution still "
+            "running when this elapses is terminated. Leave empty for no time bound. "
+            "Note: a CPU-bound inline-Python body with no await points cannot be interrupted "
+            "mid-execution; expiry reliably bounds I/O-bound work."
+        ),
+        title="Expiry Time (seconds)",
+    )
+    time_between_retries: int = Field(
+        default=0,
+        ge=0,
+        le=300,
+        description="Seconds to wait between the end of one execution and the start of the next.",
+        title="Time Between Retries (seconds)",
+    )
+
+    @model_validator(mode="after")
+    def _validate_bounds(self) -> "SelfLoopConfig":
+        if self.enabled and self.max_retries is None and self.expiry_time is None:
+            raise ValueError("self_loop_config requires at least one of max_retries or expiry_time when enabled.")
+        return self
+
 
 class BaseNodeConfig(BaseEntityConfig):
     logical_id: Optional[str] = Field(
@@ -151,6 +220,12 @@ class BaseNodeConfig(BaseEntityConfig):
         ),
         title="Is Guardrail Node",
     )
+    self_loop_config: Optional[SelfLoopConfig] = Field(
+        default=None,
+        description="Bounded self-loop / retry policy for this node.",
+        title="Self Loop",
+    )
+
 
 class BaseNodeRunInput(BaseRunInput):
     type: Literal["base_node"] = Field(

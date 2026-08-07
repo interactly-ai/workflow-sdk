@@ -12,6 +12,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
 )
 
+
 class AthenaPatientsSearchNodeConfig(AthenaCredentialsConfig, BaseNodeConfig):
     type: Literal["athena_patients_search"] = Field(
         default="athena_patients_search",

@@ -81,6 +81,47 @@ KNOWN_ONLY_UPSTREAM: Dict[str, str] = {
 
 KNOWN_ONLY_MIRROR: Dict[str, str] = {
     "BaseAPIModel": "SDK-only base model",
+    # Upstream's WorkflowTemplateConfig inherits `AccessControlLevelModel` from
+    # `common/models/access_level_model.py`, a Beanie document base that cannot be vendored. This is
+    # the pure-Pydantic stand-in that supplies the same two fields.
+    "AccessControlLevelConfig": "pure-Pydantic stand-in for common.models.access_level_model",
+    # Client-side lifecycle enum for an interactive run. Upstream's equivalent is `WorkflowStatus`
+    # (workflow_run.py), which the mirror also has; this one adds the `is_terminal()` helper the SDK
+    # uses to decide whether another turn may be sent.
+    "WorkflowExecutionStatus": "SDK-only run lifecycle enum with is_terminal() helper",
+}
+
+#: Field-level divergences that are deliberate, as ``ClassName.field_name`` -> reason. Each one was
+#: adjudicated rather than assumed; see the Phase 2 notes in the update plan.
+KNOWN_FIELD_DIVERGENCES: Dict[str, str] = {
+    # Typing this as upstream's `List[NodeConfig]` makes the SDK REJECT any workflow containing a node
+    # type it does not yet know -- verified empirically. For a client that necessarily lags the
+    # server, that is the normal case, and it is the exact failure this sync project exists to manage.
+    # SerializeAsAny keeps subclass fields on the way out, so round-tripping is lossless either way.
+    "WorkflowConfigFullyHydrated.node_configs": "forward-compat: unknown node types must not fail validation",
+    # Same reasoning as StoredEvents: typing the payload as `Event` would reject event types newer
+    # than this package.
+    "SimulationEvent.payload": "forward-compat: unknown event types must not fail validation",
+    # Upstream declares `thread_id: str` but defaults it to None, so the annotation and the default
+    # disagree. The mirror's Optional[str] is the accurate description of the values that occur.
+    "WorkflowShowStateEvent.thread_id": "upstream annotates str but defaults to None; Optional is accurate",
+    # Supplied by AccessControlLevelConfig above, which stands in for upstream's Beanie base.
+    "WorkflowTemplateConfig.access_level": "from the AccessControlLevelConfig stand-in",
+    "WorkflowTemplateConfig.access_list": "from the AccessControlLevelConfig stand-in",
+}
+
+#: Enum capability data that upstream declares inside an enum body via `enum.nonmember(...)`.
+#: `nonmember` is Python 3.11+, and this package supports 3.10, so the mirror hoists these to module
+#: scope in `llm.py` with the same names and values. Present, just not attached to the enum class.
+KNOWN_HOISTED_NONMEMBERS: Set[str] = {
+    "OPENAIModel.MODELS_WITHOUT_LOW_REASONING_EFFORT",
+    "OPENAIModel.LOW_REASONING_EFFORTS",
+    "OPENAIModel.MINIMUM_PRO_REASONING_EFFORT",
+    "ANTHROPICModel.ADAPTIVE_THINKING_MODELS",
+    "ANTHROPICModel.ALWAYS_THINKING_MODELS",
+    "ANTHROPICModel.DEFAULT_MAX_TOKENS",
+    "ANTHROPICModel.DEFAULT_ADAPTIVE_THINKING_MAX_TOKENS",
+    "GOOGLEModel.ALWAYS_THINKING_MODELS",
 }
 
 #: Class-name renames: mirror name -> upstream name. Reported as "reconciled" rather than as a gap.
@@ -440,7 +481,12 @@ def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> Par
     report = ParityReport()
 
     def ignored(class_name: str, field_name: str) -> bool:
-        return field_name in KNOWN_IGNORED_FIELDS or f"{class_name}.{field_name}" in KNOWN_IGNORED_FIELDS
+        qualified = f"{class_name}.{field_name}"
+        return (
+            field_name in KNOWN_IGNORED_FIELDS
+            or qualified in KNOWN_IGNORED_FIELDS
+            or qualified in KNOWN_FIELD_DIVERGENCES
+        )
 
     mirror_by_upstream_name = {KNOWN_RENAMES.get(n, n): n for n in mirror}
 
@@ -503,6 +549,8 @@ def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> Par
             for value in sorted(mir_values - up_values):
                 report.extra_enum_values.append((name, value))
             for attr in sorted(up_info.nonmembers - mir_info.nonmembers):
+                if f"{name}.{attr}" in KNOWN_HOISTED_NONMEMBERS:
+                    continue  # present at module scope in the mirror; see KNOWN_HOISTED_NONMEMBERS
                 report.missing_nonmembers.append((name, attr))
 
     for name, mir_info in sorted(mirror.items()):

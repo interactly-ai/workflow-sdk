@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Literal, Optional, Union
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +9,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
     NodeType,
 )
+
 
 class GoogleWorkspaceOAuth2Credentials(BaseModel):
     """Configuration for Google Workspace OAuth2 credentials."""
@@ -90,7 +91,7 @@ class GoogleWorkspaceAPIKeyCredentials(BaseModel):
     )
 
 GoogleWorkspaceCredentials = Annotated[
-    Union[GoogleWorkspaceOAuth2Credentials, GoogleWorkspaceServiceAccountCredentials, GoogleWorkspaceAPIKeyCredentials],
+    GoogleWorkspaceOAuth2Credentials | GoogleWorkspaceServiceAccountCredentials | GoogleWorkspaceAPIKeyCredentials,
     Field(discriminator="type"),
 ]
 
@@ -225,7 +226,7 @@ class GoogleDocsUpdateWithTextConfig(BaseModel):
         title="Google Docs Update With Text Node",
     )
 
-GoogleDocsUpdateObject = Annotated[Union[GoogleDocsUpdateWithTextConfig], Field(discriminator="type")]
+GoogleDocsUpdateObject = Annotated[GoogleDocsUpdateWithTextConfig, Field(discriminator="type")]
 
 class GoogleDocsUpdateDocumentConfig(BaseModel):
     """Configuration for updating a Google Docs document."""
@@ -281,7 +282,7 @@ class GoogleDocsUpdateDocumentNodeRunOutput(BaseModel):
 ##################################################
 
 GoogleDocsOperateDocumentConfig = Annotated[
-    Union[GoogleDocsCreateDocumentConfig, GoogleDocsGetDocumentConfig, GoogleDocsUpdateDocumentConfig],
+    GoogleDocsCreateDocumentConfig | GoogleDocsGetDocumentConfig | GoogleDocsUpdateDocumentConfig,
     Field(discriminator="type"),
 ]
 
@@ -317,9 +318,7 @@ class GoogleDocsNodeConfig(BaseNodeConfig):
     )
 
 GoogleDocsOperateRunInput = Annotated[
-    Union[
-        GoogleDocsCreateDocumentNodeRunInput, GoogleDocsGetDocumentNodeRunInput, GoogleDocsUpdateDocumentNodeRunInput
-    ],
+    GoogleDocsCreateDocumentNodeRunInput | GoogleDocsGetDocumentNodeRunInput | GoogleDocsUpdateDocumentNodeRunInput,
     Field(discriminator="type"),
 ]
 
@@ -342,9 +341,7 @@ class GoogleDocsNodeRunInput(BaseNodeRunInput):
     )
 
 GoogleDocsOperateRunOutput = Annotated[
-    Union[
-        GoogleDocsCreateDocumentNodeRunOutput, GoogleDocsGetDocumentNodeRunOutput, GoogleDocsUpdateDocumentNodeRunOutput
-    ],
+    GoogleDocsCreateDocumentNodeRunOutput | GoogleDocsGetDocumentNodeRunOutput | GoogleDocsUpdateDocumentNodeRunOutput,
     Field(discriminator="type"),
 ]
 

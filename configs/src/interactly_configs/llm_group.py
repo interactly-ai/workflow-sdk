@@ -2,7 +2,7 @@
 
 import random
 from enum import Enum
-from typing import Annotated, List, Literal, Optional, Union
+from typing import Annotated, List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -41,6 +41,16 @@ class LLMGroupConfig(BaseModel):
     type: Literal["llm_group"] = Field(
         default="llm_group",
         description="Discriminator field — must always be 'llm_group'.",
+    )
+    named_llm_config_id: Optional[str] = Field(
+        default=None,
+        description="If this configuration was resolved from a reusable named LLM configuration, this holds its ID.",
+        title="Named LLM Config ID",
+    )
+    named_llm_config_name: Optional[str] = Field(
+        default=None,
+        description="If this configuration was resolved from a reusable named LLM configuration, this holds its name.",
+        title="Named LLM Config Name",
     )
     logical_id: Optional[str] = Field(
         default_factory=lambda: "llm_group_" + str(uuid4()),
@@ -81,6 +91,16 @@ class LLMGroupWithBackchannelConfig(BaseModel):
     type: Literal["llm_group_with_backchannel"] = Field(
         default="llm_group_with_backchannel",
         description="Discriminator field — must always be 'llm_group_with_backchannel'.",
+    )
+    named_llm_config_id: Optional[str] = Field(
+        default=None,
+        description="If this configuration was resolved from a reusable named LLM configuration, this holds its ID.",
+        title="Named LLM Config ID",
+    )
+    named_llm_config_name: Optional[str] = Field(
+        default=None,
+        description="If this configuration was resolved from a reusable named LLM configuration, this holds its name.",
+        title="Named LLM Config Name",
     )
     id: Optional[str] = Field(
         default_factory=lambda: "llm_group_with_backchannel_" + str(uuid4()),
@@ -128,6 +148,6 @@ class LLMGroupWithBackchannelConfig(BaseModel):
 
 
 LLMOrGroupConfig = Annotated[
-    Union[LLMConfig, LLMGroupConfig, LLMGroupWithBackchannelConfig],
+    LLMConfig | LLMGroupConfig | LLMGroupWithBackchannelConfig,
     Field(discriminator="type"),
 ]

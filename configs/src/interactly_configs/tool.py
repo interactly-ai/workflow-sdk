@@ -31,7 +31,7 @@ class ToolType(str, Enum):
         return f"Type of the tool. Must be one of: {', '.join(t.value for t in cls.list())}"
 
     @classmethod
-    def get_type_to_config_map(cls) -> dict["ToolType", Type["BaseToolConfig"]]:
+    def get_type_to_config_map(cls) -> Dict["ToolType", Type["BaseToolConfig"]]:
         """Returns a mapping of tool types to their respective configuration classes."""
         return {
             cls.INBUILT_FUNCTION: InbuiltFunctionToolConfig,
@@ -48,6 +48,15 @@ class BaseToolConfig(BaseModel):
         default_factory=lambda: "tool_" + str(uuid4()),
         description="Unique identifier for the tool",
         title="Tool ID",
+    )
+    side_effect: Optional[str] = Field(
+        default=None,
+        description=(
+            "Side-effect classification used by the test-tool feature to decide whether the tool can be "
+            "safely executed directly, or must be dry-run / confirmation-gated first. One of "
+            "'none', 'reads', 'writes', 'sends', 'unknown'. When not set, it is inferred from the tool type."
+        ),
+        title="Side Effect",
     )
     tool_id: Optional[str] = Field(
         default=None,
@@ -210,7 +219,7 @@ class ExternalAPIToolConfig(BaseToolConfig):
 
     @field_validator("api_body", mode="before")
     @classmethod
-    def parse_api_body(cls, v: Optional[Union[dict, str]]) -> Optional[dict]:
+    def parse_api_body(cls, v: dict | str | None) -> Optional[dict]:
         if isinstance(v, str):
             if not v.strip():
                 return None
@@ -280,7 +289,7 @@ class MCPServerConfig(BaseModel):
 
 
 ToolConfig = Annotated[
-    Union[InlinePythonToolConfig, InbuiltFunctionToolConfig, ExternalAPIToolConfig, KnowledgeBaseToolConfig],
+    InlinePythonToolConfig | InbuiltFunctionToolConfig | ExternalAPIToolConfig | KnowledgeBaseToolConfig,
     Field(discriminator="type"),
 ]
 

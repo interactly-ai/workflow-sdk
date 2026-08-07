@@ -2,6 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+
 class EvaluationConfig(BaseModel):
     evaluator_workflow_id: Optional[str] = Field(
         default=None,

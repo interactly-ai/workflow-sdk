@@ -12,6 +12,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
 )
 
+
 class AthenaAppointmentsCreateNodeConfig(AthenaCredentialsConfig, BaseNodeConfig):
     type: Literal["athena_appointments_create"] = Field(
         default="athena_appointments_create",
