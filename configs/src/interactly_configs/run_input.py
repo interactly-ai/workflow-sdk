@@ -2,22 +2,11 @@
 
 The concrete ``WorkflowRunInput`` lives in ``interactly_configs.workflow_run``
 (which the package re-exports); this module only provides the shared
-``BaseRunInput`` and ``WorkflowCommand``.
+``BaseRunInput``.
 """
 
-from enum import Enum
 
 from pydantic import BaseModel, Field
-
-
-class WorkflowCommand(str, Enum):
-    """Commands that can be sent to the workflow execution endpoint."""
-
-    START = "start"
-    DATA = "data"
-    RESUME = "resume"
-    PAUSE = "pause"
-    STOP = "stop"
 
 
 class BaseRunInput(BaseModel):

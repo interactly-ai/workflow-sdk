@@ -135,7 +135,7 @@ class SuperNodeConfig(BaseNodeConfig):
     )
 
     @field_serializer("super_workflow_id", when_used="json")
-    def _ser_super_workflow_id(self, v: Optional[str]) -> Optional[str]:
+    def _ser_super_workflow_id(self, v: str | None) -> Optional[str]:
         # Need this to serialize str to string for JSON output
         return str(v) if v else None
 

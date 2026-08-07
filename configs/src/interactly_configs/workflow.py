@@ -10,11 +10,12 @@ silently create an empty workflow.
 """
 
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, SerializeAsAny
 
+from interactly_configs.acls import AccessControlLevel
 from interactly_configs.edge import EdgeConfig
 from interactly_configs.evaluation import EvaluationConfig
 from interactly_configs.llm import NoLLMConfig
@@ -54,6 +55,39 @@ class GuardrailStrikesConfig(BaseModel):
             "variable templating. If None, the workflow finishes silently."
         ),
         title="Escalation Message",
+    )
+
+
+def _parse_workflow_bool(raw: Any, *, default: bool) -> bool:
+    """Read a ``miscellaneous`` flag that may have been stored as a bool or as a string.
+
+    ``miscellaneous`` is an untyped dict, so a flag set through the dashboard can arrive as the
+    string "true" while the same flag set programmatically arrives as a real bool. Both must mean
+    the same thing.
+    """
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        lowered = raw.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off"):
+            return False
+    return default
+
+
+class WorkflowAccessConfig(BaseModel):
+    """Access control for a workflow."""
+
+    access_level: Optional[AccessControlLevel] = Field(
+        default=None,
+        description="Access level for the workflow",
+        title="Access Level",
+    )
+    access_list: Optional[List[str]] = Field(
+        default=None,
+        description="List of user IDs that have access to this workflow",
+        title="Access List",
     )
 
 
@@ -170,6 +204,11 @@ class WorkflowConfig(BaseModel):
         ),
         title="Miscellaneous Config",
     )
+    access_config: Optional[WorkflowAccessConfig] = Field(
+        default_factory=WorkflowAccessConfig,
+        description="Access control configuration for the workflow",
+        title="Access Config",
+    )
     evaluation_config: Optional[EvaluationConfig] = Field(
         default=None,
         description="Configuration for automatic evaluation of workflow runs",
@@ -210,3 +249,19 @@ class WorkflowConfigFullyHydrated(BaseModel):
         default_factory=dict,
         description="Runtime variables that can be used across nodes and edges",
     )
+
+    def is_keep_skipped_messages_enabled(self) -> bool:
+        """Read the ``keep_skipped_messages_in_history`` miscellaneous flag; default False.
+
+        When True, assistant fragments the caller barged over are RETAINED in the chat history
+        instead of being pruned.
+
+        Operational tradeoff: retained fragments were generated *before* the barge-in and may
+        include content the caller did not fully hear. Once retained, that content stays visible to
+        subsequent workflow / LLM turns, which will treat it as already spoken. Enable only when that
+        is the desired behavior.
+        """
+        if self.workflow_config is None:
+            return False
+        raw = self.workflow_config.miscellaneous.get("keep_skipped_messages_in_history", False)
+        return _parse_workflow_bool(raw, default=False)

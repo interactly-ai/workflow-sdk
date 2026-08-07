@@ -20,6 +20,11 @@ class LLMProvider(str, Enum):
 
 
 class AZUREOPENAIModel(str, Enum):
+    # These are Azure *deployment* names, not vendor model names: a value is only
+    # usable if a deployment with that name exists on the configured Azure OpenAI
+    # resource. Verified against the dev resource on 2026-07-30; the GPT-5.4/5.5/5.6
+    # series exist in the Foundry catalogue but are not deployed for us yet, so they
+    # are deliberately absent here.
     GPT_5_CHAT = "gpt-5-chat"
     GPT_5_MINI = "gpt-5-mini"
     GPT_5_NANO = "gpt-5-nano"
@@ -29,64 +34,181 @@ class AZUREOPENAIModel(str, Enum):
 
 
 class OPENAIModel(str, Enum):
-    # GPT 5.x Models
+    # GPT 5.x Models. These do not consume reasoning tokens by default (unlike the original GPT-5 series)
     GPT_5_4 = "gpt-5.4"
     GPT_5_4_MINI = "gpt-5.4-mini"
     GPT_5_4_NANO = "gpt-5.4-nano"
     GPT_5_2 = "gpt-5.2"
     GPT_5_1 = "gpt-5.1"
 
-    # GPT 5.x Chat Optimized Models
-    GPT_5_CHAT_LATEST = "gpt-5-chat-latest"
-    GPT_5_1_CHAT_LATEST = "gpt-5.1-chat-latest"
-    GPT_5_2_CHAT_LATEST = "gpt-5.2-chat-latest"
-    GPT_5_3_CHAT_LATEST = "gpt-5.3-chat-latest"
-
-    # GPT 5 Models (consume reasoning tokens by default)
+    # GPT 5 Models (they consume reasoning tokens by default)
     GPT_5_NANO = "gpt-5-nano"
     GPT_5_MINI = "gpt-5-mini"
     GPT_5 = "gpt-5"
+
+    # Reasoning-heavy "pro" variants. These are served only by the Responses API
+    # (/v1/chat/completions returns "This is not a chat model").
+    GPT_5_4_PRO = "gpt-5.4-pro"
+    GPT_5_2_PRO = "gpt-5.2-pro"
+
+    # GPT 5.x Chat Optimized Models. These do not consume reasoning tokens by default (unlike the original GPT-5 series)
+    GPT_5_2_CHAT_LATEST = "gpt-5.2-chat-latest"
+    GPT_5_3_CHAT_LATEST = "gpt-5.3-chat-latest"
 
     # GPT 4 Models
     GPT_4_1_NANO = "gpt-4.1-nano"
     GPT_4_1_MINI = "gpt-4.1-mini"
     GPT_4_1 = "gpt-4.1"
+    # DEPRECATED: OpenAI shuts down gpt-4, gpt-4o and gpt-4o-mini on 2026-10-23.
+    # Still callable today; kept only so stored workflows keep deserialising.
     GPT_4 = "gpt-4"
     GPT_4O_MINI = "gpt-4o-mini"
     GPT_4O = "gpt-4o"
 
     # GPT 3.5 Models
+    # DEPRECATED: shuts down 2026-10-23. See note above.
     GPT_3_5_TURBO = "gpt-3.5-turbo"
 
 
 class GOOGLEModel(str, Enum):
-    # Floating models pointing to latest stable versions
+    # Floating models that point to the latest stable versions
     GEMINI_FLASH_LATEST = "gemini-flash-latest"
     GEMINI_FLASH_LITE_LATEST = "gemini-flash-lite-latest"
 
+    GEMINI_3_6_FLASH = "gemini-3.6-flash"
     GEMINI_3_1_PRO_PREVIEW = "gemini-3.1-pro-preview"
+    GEMINI_3_5_FLASH = "gemini-3.5-flash"
+    GEMINI_3_5_FLASH_LITE = "gemini-3.5-flash-lite"
+    GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite"
     GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview"
     GEMINI_2_5_PRO = "gemini-2.5-pro"
     GEMINI_2_5_FLASH = "gemini-2.5-flash"
-    GEMINI_2_0_FLASH = "gemini-2.0-flash"
-    GEMINI_2_0_FLASH_LITE = "gemini-2.0-flash-lite"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
-    GEMINI_3_5_FLASH = "gemini-3.5-flash"
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+    GEMINI_2_5_FLASH_LITE = "gemini-2.5-flash-lite"
+    # REMOVED 2026-07-30: gemini-2.0-flash, gemini-2.0-flash-lite, gemini-1.5-pro,
+    # gemini-1.5-flash and gemini-1.5-flash-8b are shut down and return 404 on
+    # every call, so leaving them selectable only produced runtime failures.
 
 
 class ANTHROPICModel(str, Enum):
+    # Claude 5 models. These reject `temperature` and the legacy
+    # thinking={"type": "enabled", "budget_tokens": N} shape -- see
+    # ADAPTIVE_THINKING_ANTHROPIC_MODELS below.
+    CLAUDE_OPUS_5 = "claude-opus-5"
+    CLAUDE_SONNET_5 = "claude-sonnet-5"
+    # Highest-capability tier. Requires 30-day data retention (unavailable under
+    # zero data retention) and thinking cannot be turned off.
+    CLAUDE_FABLE_5 = "claude-fable-5"
+
+    # Claude 4 models
+    CLAUDE_OPUS_4_8 = "claude-opus-4-8"
+    CLAUDE_OPUS_4_7 = "claude-opus-4-7"
     CLAUDE_OPUS_4_6 = "claude-opus-4-6"
     CLAUDE_OPUS_4_5_20251101 = "claude-opus-4-5-20251101"
+    # DEPRECATED: retires 2026-08-05.
     CLAUDE_OPUS_4_1_20250805 = "claude-opus-4-1-20250805"
-    CLAUDE_OPUS_4_20250514 = "claude-opus-4-20250514"
 
     CLAUDE_SONNET_4_6 = "claude-sonnet-4-6"
     CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929"
-    CLAUDE_SONNET_4_20250514 = "claude-sonnet-4-20250514"
 
+    CLAUDE_HAIKU_4_5 = "claude-haiku-4-5"
+    # Superseded by the CLAUDE_HAIKU_4_5 alias above; retained so stored configs
+    # keep deserialising. Both resolve to the same model.
     CLAUDE_HAIKU_4_5_20251001 = "claude-haiku-4-5-20251001"
+    # REMOVED 2026-07-30: claude-opus-4-20250514 and claude-sonnet-4-20250514 are
+    # retired and return 404 on every call.
+
+
+class BEDROCKModel(str, Enum):
+    # Serverless open-weight models, invoked via the Converse API. All IDs
+    # live-verified in us-east-1 on 2026-08-05; availability is region- and
+    # account-dependent (`aws bedrock list-foundation-models`).
+
+    # Z.ai GLM
+    GLM_5 = "zai.glm-5"
+    GLM_4_7 = "zai.glm-4.7"
+    GLM_4_7_FLASH = "zai.glm-4.7-flash"
+
+    # Moonshot AI Kimi
+    KIMI_K2_5 = "moonshotai.kimi-k2.5"
+    # Always-on reasoning; poor fit for latency-sensitive voice nodes.
+    KIMI_K2_THINKING = "moonshot.kimi-k2-thinking"
+
+    # Alibaba Qwen. Deliberately absent: qwen3-235b-2507 (not served in
+    # us-east-1), qwen3-next-80b (hesitates on edge routing), qwen3-coder-*.
+    QWEN3_VL_235B = "qwen.qwen3-vl-235b-a22b"
+    QWEN3_32B = "qwen.qwen3-32b-v1:0"
+
+
+# --------------------------------------------------------------------------------------------- #
+# Model capability data                                                                           #
+# --------------------------------------------------------------------------------------------- #
+# Upstream carries these INSIDE the enum bodies, wrapped in `enum.nonmember(...)` so they stay
+# capability data instead of becoming selectable members. `enum.nonmember` is Python 3.11+, and this
+# package supports 3.10 (see `requires-python`), so the mirror hoists them to module scope instead —
+# the only mechanism available that keeps them out of the enums' member lists on 3.10. The names and
+# values are upstream's; only the lookup path differs (`MODELS_WITHOUT_LOW_REASONING_EFFORT` rather
+# than `OPENAIModel.MODELS_WITHOUT_LOW_REASONING_EFFORT`).
+#
+# This is client-side reference data: the SDK never calls a provider itself, but knowing these rules
+# lets caller code reject an unsupported combination before paying for a round trip.
+
+#: The "pro" reasoning variants reject the lower effort levels: the Responses API returns 400
+#: "Unsupported value: 'low' is not supported with the 'gpt-5.4-pro' model. Supported values are:
+#: 'medium', 'high', and 'xhigh'." Since `reasoning_effort` defaults to "low", every call to a pro
+#: model would otherwise fail out of the box.
+MODELS_WITHOUT_LOW_REASONING_EFFORT = frozenset({OPENAIModel.GPT_5_4_PRO, OPENAIModel.GPT_5_2_PRO})
+LOW_REASONING_EFFORTS = frozenset({"minimal", "low"})
+MINIMUM_PRO_REASONING_EFFORT = "medium"
+
+#: Anthropic models that reject the `temperature` parameter and the legacy
+#: thinking={"type": "enabled", "budget_tokens": N} shape, taking thinking={"type": "adaptive"}
+#: instead. An explicit set rather than a version comparison because the model IDs do not sort --
+#: "claude-fable-5" carries no version number at all.
+ADAPTIVE_THINKING_MODELS = frozenset(
+    {
+        ANTHROPICModel.CLAUDE_OPUS_5,
+        ANTHROPICModel.CLAUDE_SONNET_5,
+        ANTHROPICModel.CLAUDE_FABLE_5,
+        ANTHROPICModel.CLAUDE_OPUS_4_8,
+        ANTHROPICModel.CLAUDE_OPUS_4_7,
+    }
+)
+
+#: Anthropic models whose thinking cannot be switched off: thinking={"type": "disabled"} returns 400.
+ALWAYS_THINKING_ANTHROPIC_MODELS = frozenset({ANTHROPICModel.CLAUDE_FABLE_5})
+
+#: Google models whose thinking cannot be switched off. The Gemini API rejects
+#: thinkingConfig.thinkingBudget=0 on these. The two floating aliases are listed because they
+#: currently resolve to the 3.6 family.
+ALWAYS_THINKING_GOOGLE_MODELS = frozenset(
+    {
+        GOOGLEModel.GEMINI_3_6_FLASH,
+        GOOGLEModel.GEMINI_FLASH_LATEST,
+        GOOGLEModel.GEMINI_FLASH_LITE_LATEST,
+    }
+)
+
+#: Adaptive-thinking models count thinking tokens against max_tokens, and Claude Opus 5 thinks by
+#: default, so the 4096 fallback used for older models truncates noticeably sooner on them.
+DEFAULT_MAX_TOKENS = 4096
+DEFAULT_ADAPTIVE_THINKING_MAX_TOKENS = 8192
+
+
+def resolve_reasoning_effort(model_name: str | None, reasoning_effort: str | None) -> Optional[str]:
+    """Clamp `reasoning_effort` up to the lowest level the given model accepts.
+
+    Takes a plain string rather than an ``OPENAIModel`` because the same rule applies to
+    ``CustomLLMConfig``, whose model name is free-form. Returns the effort unchanged for every model
+    that accepts the full range.
+    """
+    if not reasoning_effort or not model_name:
+        return reasoning_effort
+    if (
+        model_name.lower() in MODELS_WITHOUT_LOW_REASONING_EFFORT
+        and reasoning_effort.lower() in LOW_REASONING_EFFORTS
+    ):
+        return MINIMUM_PRO_REASONING_EFFORT
+    return reasoning_effort
 
 
 class BaseLLMConfig(BaseModel):
@@ -176,10 +298,32 @@ class BaseLLMConfig(BaseModel):
     )
 
     @field_serializer("api_key")
-    def serialize_api_key(self, value: Optional[SecretStr]) -> Optional[str]:
+    def serialize_api_key(self, value: Union[SecretStr, str, None]) -> Optional[str]:
+        """Unmask ``api_key`` on the way out, whatever concrete type the subclass declared.
+
+        Pydantic applies an inherited field serializer to a field a subclass has REDECLARED, using the
+        subclass's type. ``BedrockLLMConfig`` narrows ``api_key`` to a plain ``str`` (a Bedrock bearer
+        token, alongside its other plain-string AWS credentials), so a serializer that assumed
+        ``SecretStr`` unconditionally raised on it:
+
+            PydanticSerializationError: Error calling function `serialize_api_key`:
+            AttributeError: 'str' object has no attribute 'get_secret_value'
+
+        That fired on any ``model_dump()`` / ``model_dump_json()`` of a Bedrock config that actually
+        had a key set — i.e. persisting one, returning one from the API, or checkpointing a run using
+        one. A config with no key serialized fine, which is why it was easy to miss.
+
+        Handled here rather than by overriding in the subclass so the base is correct for any future
+        subclass that narrows the field the same way, and handled here rather than by widening
+        ``BedrockLLMConfig.api_key`` to ``SecretStr`` because the Bedrock runtime passes the value
+        straight through to langchain as ``bedrock_api_key`` (``runtime/llm.py``), where a ``SecretStr``
+        is not what the client expects.
+        """
         if value is None:
             return None
-        return value.get_secret_value()
+        if isinstance(value, SecretStr):
+            return value.get_secret_value()  # Returns the unmasked value
+        return value
 
 
 class AzureOpenAILLMConfig(BaseLLMConfig):
@@ -326,7 +470,7 @@ class CustomLLMConfig(BaseLLMConfig):
         description="Base URL of the custom OpenAI-compatible LLM gateway.",
         title="Gateway Base URL",
     )
-    default_headers: Optional[Dict] = Field(
+    default_headers: Optional[dict] = Field(
         default=None,
         description="Optional HTTP headers to include in every request to the gateway.",
         title="Headers",
@@ -374,51 +518,63 @@ class CustomLLMConfig(BaseLLMConfig):
 
 
 class BedrockLLMConfig(BaseLLMConfig):
-    model: Optional[str] = Field(
+    api_key: Optional[str] = Field(
         default=None,
-        description="Bedrock model identifier or inference profile ARN (e.g. 'anthropic.claude-sonnet-4-6-v1:0').",
-        title="Bedrock Model ID",
+        description=(
+            "Amazon Bedrock long-term API key (bearer token). If set, it is used for authentication "
+            "and the access-key fields below are ignored. Leave empty to authenticate with an "
+            "access-key pair or the default AWS credential chain (IAM role)."
+        ),
+        title="Bedrock API Key",
+    )
+    model: Optional[BEDROCKModel] = Field(
+        # Cheap/fast tier; routes conditional edges reliably in live tests.
+        default=BEDROCKModel.GLM_4_7_FLASH,
+        description="Name of the Amazon Bedrock model to use",
+        title="Bedrock Model",
     )
     type: Literal["bedrock_llm"] = Field(
         default="bedrock_llm",
-        description="Discriminator field",
+        description=(
+            "Differentiator field that helps in identifying this particular type of config when "
+            "serializing and deserializing"
+        ),
     )
     provider: Optional[LLMProvider] = Field(
         default=LLMProvider.BEDROCK,
         description="The selected Large Language Model provider from the available options.",
         title="LLM Provider",
     )
-    region_name: Optional[str] = Field(
+    region: Optional[str] = Field(
         default=None,
-        description="AWS region hosting the Bedrock endpoint (e.g. 'us-east-1').",
+        description="AWS region the Bedrock model is invoked in. Defaults to us-east-1 if not provided.",
         title="AWS Region",
     )
-    aws_access_key_id: Optional[SecretStr] = Field(
+    aws_access_key_id: Optional[str] = Field(
         default=None,
-        description="AWS access key ID used to authenticate against Bedrock.",
+        description=(
+            "AWS access key ID for Bedrock. Leave empty to use the platform default "
+            "(`BEDROCK_ACCESS_KEY` env var, then the AWS credential chain)."
+        ),
         title="AWS Access Key ID",
     )
-    aws_secret_access_key: Optional[SecretStr] = Field(
+    aws_secret_access_key: Optional[str] = Field(
         default=None,
-        description="AWS secret access key used to authenticate against Bedrock.",
+        description=(
+            "AWS secret access key for Bedrock. Leave empty to use the platform default "
+            "(`BEDROCK_SECRET_KEY` env var, then the AWS credential chain)."
+        ),
         title="AWS Secret Access Key",
     )
-    aws_session_token: Optional[SecretStr] = Field(
-        default=None,
-        description="Optional AWS session token used for temporary credentials.",
-        title="AWS Session Token",
-    )
 
-    @field_serializer("aws_access_key_id", "aws_secret_access_key", "aws_session_token")
-    def serialize_aws_credentials(self, value: Optional[SecretStr]) -> Optional[str]:
-        if value is None:
-            return None
-        return value.get_secret_value()
+    # No serializer override here: `BaseLLMConfig.serialize_api_key` handles both `SecretStr` and
+    # plain `str`, matching upstream after interactly-ai@e2885fac1. No aws_* serializer is needed
+    # either -- those are plain `str` upstream too, and the base declares no serializer for them.
 
     model_config = ConfigDict(title="Bedrock")
 
 
-class GlobalDefaultLLMConfig(BaseLLMConfig):
+class WorkflowDefaultLLMConfig(BaseLLMConfig):
     type: Literal["global_default_llm"] = Field(
         default="global_default_llm",
         description="Discriminator field",
@@ -446,7 +602,7 @@ LLMConfigUnion = Union[
     AnthropicLLMConfig,
     BedrockLLMConfig,
     CustomLLMConfig,
-    GlobalDefaultLLMConfig,
+    WorkflowDefaultLLMConfig,
     NoLLMConfig,
 ]
 

@@ -32,12 +32,15 @@ test-all:
 # Code quality                                                         #
 # ------------------------------------------------------------------ #
 
+# `configs/` is included deliberately: it is its own ruff settings root, and leaving it unlinted is
+# how a stray `ruff check configs/ --fix` silently rewrote the vendored mirror into PEP 604 style and
+# took `make parity-check` from 0 differences to 1194. Linting it here keeps its ruleset honest.
 lint:
-	$(VENV)/bin/ruff check src/ tests/
+	$(VENV)/bin/ruff check src/ tests/ configs/src configs/tests
 
 format:
-	$(VENV)/bin/ruff format src/ tests/
-	$(VENV)/bin/ruff check --fix src/ tests/
+	$(VENV)/bin/ruff format src/ tests/ configs/src configs/tests
+	$(VENV)/bin/ruff check --fix src/ tests/ configs/src configs/tests
 
 typecheck:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" $(VENV)/bin/mypy src/interactly --ignore-missing-imports

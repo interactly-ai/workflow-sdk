@@ -1,7 +1,9 @@
+
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
 
 class StartEndTimings(BaseModel):
     start: str = Field(..., description="Start time in HH:MM format", title="Start Time")

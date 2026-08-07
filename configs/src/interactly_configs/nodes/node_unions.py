@@ -1,4 +1,4 @@
-from typing import Annotated, Union
+from typing import Annotated, Dict, List, Type, Union
 
 from pydantic import BaseModel, Field
 
@@ -27,16 +27,6 @@ from interactly_configs.nodes.communications.sms import (
     SendSMSNodeRunInput,
     SendSMSNodeRunOutput,
 )
-from interactly_configs.nodes.data_transformation.deduplicate import (
-    DeduplicateNodeConfig,
-    DeduplicateNodeRunInput,
-    DeduplicateNodeRunOutput,
-)
-from interactly_configs.nodes.data_transformation.field_extractor import (
-    FieldExtractorNodeConfig,
-    FieldExtractorNodeRunInput,
-    FieldExtractorNodeRunOutput,
-)
 from interactly_configs.nodes.conversations.end_conversation import (
     EndConversationNodeConfig,
     EndConversationNodeRunInput,
@@ -46,6 +36,16 @@ from interactly_configs.nodes.conversations.start_conversation import (
     StartConversationNodeConfig,
     StartConversationNodeRunInput,
     StartConversationNodeRunOutput,
+)
+from interactly_configs.nodes.data_transformation.deduplicate import (
+    DeduplicateNodeConfig,
+    DeduplicateNodeRunInput,
+    DeduplicateNodeRunOutput,
+)
+from interactly_configs.nodes.data_transformation.field_extractor import (
+    FieldExtractorNodeConfig,
+    FieldExtractorNodeRunInput,
+    FieldExtractorNodeRunOutput,
 )
 from interactly_configs.nodes.google_workspace.google_docs import (
     GoogleDocsNodeConfig,
@@ -79,6 +79,11 @@ from interactly_configs.nodes.tool.tool_node import (
     ToolNodeConfig,
     ToolNodeRunInput,
     ToolNodeRunOutput,
+)
+from interactly_configs.nodes.utility.no_op import (
+    NoOpNodeConfig,
+    NoOpNodeRunInput,
+    NoOpNodeRunOutput,
 )
 from interactly_configs.nodes.workflows.workflow_run_evaluator import (
     WorkflowRunEvalLLMNodeConfig,
@@ -118,6 +123,8 @@ NodeConfig = Annotated[
         # Data Transformation nodes
         DeduplicateNodeConfig,
         FieldExtractorNodeConfig,
+        # Utility nodes
+        NoOpNodeConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -149,6 +156,8 @@ NodeRunInput = Annotated[
         # Data Transformation nodes
         DeduplicateNodeRunInput,
         FieldExtractorNodeRunInput,
+        # Utility nodes
+        NoOpNodeRunInput,
     ],
     Field(discriminator="type"),
 ]
@@ -180,6 +189,8 @@ NodeRunOutput = Annotated[
         # Data Transformation nodes
         DeduplicateNodeRunOutput,
         FieldExtractorNodeRunOutput,
+        # Utility nodes
+        NoOpNodeRunOutput,
     ],
     Field(discriminator="type"),
 ]
@@ -189,7 +200,7 @@ class NodesRunInputs(BaseModel):
     Represents the run inputs for multiple nodes in a workflow.
     """
 
-    node_run_inputs: list[NodeRunInput] = Field(
+    node_run_inputs: List[NodeRunInput] = Field(
         default_factory=list,
         description="Mapping of node logical IDs to their respective run inputs",
         title="Node Run Inputs",
@@ -201,7 +212,7 @@ class NodeMetadataRetriever:
     """
 
     @classmethod
-    def get_type_to_default_config_map(cls) -> dict[NodeType, NodeConfig]:
+    def get_type_to_default_config_map(cls) -> Dict[NodeType, NodeConfig]:
         """
         Returns a mapping of node types to their respective configuration classes.
         """
@@ -231,10 +242,12 @@ class NodeMetadataRetriever:
             # Data Transformation nodes
             NodeType.DEDUPLICATE: DeduplicateNodeConfig(),
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeConfig(),
+            # Utility nodes
+            NodeType.NO_OP: NoOpNodeConfig(),
         }
 
     @classmethod
-    def get_type_to_config_class_map(cls) -> dict[NodeType, type[NodeConfig]]:
+    def get_type_to_config_class_map(cls) -> Dict[NodeType, Type[NodeConfig]]:
         """
         Returns a mapping of node types to their respective configuration classes.
         """
@@ -264,6 +277,8 @@ class NodeMetadataRetriever:
             # Data Transformation nodes
             NodeType.DEDUPLICATE: DeduplicateNodeConfig,
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeConfig,
+            # Utility nodes
+            NodeType.NO_OP: NoOpNodeConfig,
         }
 
     @classmethod
@@ -297,6 +312,8 @@ class NodeMetadataRetriever:
             # Data Transformation nodes
             NodeType.DEDUPLICATE: DeduplicateNodeRunInput,
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeRunInput,
+            # Utility nodes
+            NodeType.NO_OP: NoOpNodeRunInput,
         }
 
     @classmethod
@@ -330,4 +347,6 @@ class NodeMetadataRetriever:
             # Data Transformation nodes
             NodeType.DEDUPLICATE: DeduplicateNodeRunOutput,
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeRunOutput,
+            # Utility nodes
+            NodeType.NO_OP: NoOpNodeRunOutput,
         }

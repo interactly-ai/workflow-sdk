@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, PrivateAttr
@@ -9,9 +9,20 @@ from pydantic import BaseModel, Field, PrivateAttr
 from interactly_configs.comment import CommentConfig
 from interactly_configs.evaluation import EvaluationRunInfo
 from interactly_configs.nodes.node_unions import NodeRunOutput, NodesRunInputs
-from interactly_configs.run_input import BaseRunInput, WorkflowCommand
+from interactly_configs.rating import RatingConfig
+from interactly_configs.run_input import BaseRunInput
 from interactly_configs.run_output import BaseRunOutput
 from interactly_configs.workflow import WorkflowConfigFullyHydrated
+
+
+class WorkflowCommand(str, Enum):
+    """Commands that can be sent to the workflow execution endpoint."""
+
+    START = "start"
+    DATA = "data"
+    RESUME = "resume"
+    PAUSE = "pause"
+    STOP = "stop"
 
 class WorkflowStatus(str, Enum):
     NOT_STARTED = "not_started"
@@ -25,7 +36,7 @@ class WorkflowStatus(str, Enum):
     ABORTED_LOOPING_RISK = "aborted_looping_risk"
 
     @staticmethod
-    def is_terminal_run_status(status: Optional[WorkflowStatus]) -> bool:
+    def is_terminal_run_status(status: WorkflowStatus | None) -> bool:
         return status in {
             WorkflowStatus.COMPLETED,
             WorkflowStatus.FAILED,
@@ -35,7 +46,7 @@ class WorkflowStatus(str, Enum):
 
     # Statuses that could represent workflows that are stuck and need to be reaped by the stale run reaper.
     @staticmethod
-    def is_active_run_status(status: Optional[WorkflowStatus]) -> bool:
+    def is_active_run_status(status: WorkflowStatus | None) -> bool:
         return status in {WorkflowStatus.STARTED, WorkflowStatus.RUNNING, WorkflowStatus.WAITING_FOR_USER_INPUT}
         # We are ignoring PAUSED runs because they are intentionally paused and not necessarily stale.
         # The reaper will not mark them as failed.
@@ -91,18 +102,24 @@ class WorkflowRunInput(BaseRunInput):
         title="Initial Workflow State",
     )
 
-    thread_to_node_inputs: dict[str, NodesRunInputs] = Field(
+    thread_to_node_inputs: Dict[str, NodesRunInputs] = Field(
         default_factory=dict,
         description="Mapping of thread IDs to node inputs",
         title="Thread to Node Inputs",
     )
+    welcome_message: Optional[str] = Field(
+        default=None,
+        description="Voice-engine opening line, seeded as the first assistant message on the first run only.",
+        title="Welcome Message",
+    )
+
 
 class WorkflowRunOutput(BaseRunOutput):
     """
     Output of a workflow run.
     """
 
-    thread_to_node_outputs: dict[str, List[NodeRunOutput]] = Field(
+    thread_to_node_outputs: Dict[str, List[NodeRunOutput]] = Field(
         default_factory=dict,
         description="Mapping of thread IDs to lists of node outputs",
         title="Thread to Node Outputs",
@@ -133,6 +150,17 @@ class WorkflowRunInputOutputPair(BaseModel):
         description="A lightweight capture of global state details at the end of the iteration, like history trackers and active threads, to allow accurate resumption without serializing the entire state.",
         title="Iteration End State Miscellaneous",
     )
+    comments: List[CommentConfig] = Field(
+        default_factory=list,
+        description="Reviewer comments on this turn as a whole, as opposed to on one of its events",
+        title="Turn Comments",
+    )
+    ratings: List[RatingConfig] = Field(
+        default_factory=list,
+        description="Reviewer ratings of this turn as a whole, at most one per user",
+        title="Turn Ratings",
+    )
+
 
 class LLMTokenUsage(BaseModel):
     """
@@ -152,7 +180,7 @@ class LLMTokenUsage(BaseModel):
     breakdown_by_models: Optional[List[LLMTokenUsageByModel]] = Field(
         default=None, description="Breakdown of token usage by LLM model and provider"
     )
-    _in_progress_llm_response_ids: set[str] = PrivateAttr(default_factory=set)
+    _in_progress_llm_response_ids: Set[str] = PrivateAttr(default_factory=set)
 
 class LLMTokenUsageByModel(BaseModel):
     """
@@ -202,7 +230,7 @@ class LLMLatencyStats(BaseModel):
     breakdown_by_models: Optional[List[LLMLatencyStatsByModel]] = Field(
         default=None, description="Breakdown of latency stats by LLM model and provider"
     )
-    _processed_llm_response_ids: set[str] = PrivateAttr(default_factory=set)
+    _processed_llm_response_ids: Set[str] = PrivateAttr(default_factory=set)
 
 class WorkflowRun(BaseModel):
     """
@@ -218,6 +246,12 @@ class WorkflowRun(BaseModel):
         default=None,
         description="ID of the workflow being run",
         title="Workflow ID",
+    )
+    voice_conversation_id: Optional[str] = Field(
+        default=None,
+        description="ID of the voice conversation/call that produced this workflow run, if any. "
+        "Used to cross-link the run with its conversation log in the dashboard.",
+        title="Source Voice Conversation ID",
     )
 
     version_number: Optional[int] = Field(

@@ -2,6 +2,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+
 class AthenaBaseRunOutput(BaseModel):
     success: bool = Field(
         default=False,

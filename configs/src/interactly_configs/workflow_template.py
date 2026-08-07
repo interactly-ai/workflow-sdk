@@ -1,9 +1,11 @@
+
 from typing import Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from interactly_configs.acls import AccessControlLevelConfig
+
 
 class WorkflowTemplateConfig(AccessControlLevelConfig):
     logical_id: Optional[str] = Field(

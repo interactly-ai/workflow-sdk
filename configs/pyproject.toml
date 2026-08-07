@@ -58,6 +58,31 @@ python_version = "3.10"
 line-length = 120
 target-version = "py310"
 
+[tool.ruff.lint]
+# THIS SECTION IS LOAD-BEARING. `configs/` is its own ruff settings root, so it does NOT inherit the
+# root pyproject's ruleset. Without an explicit `select` here, ruff falls back to a much broader
+# default and `ruff check configs/ --fix` rewrites every `Optional[X]` into `X | None`.
+#
+# That is not cosmetic. `src/interactly_configs/` is a deliberate mirror of
+# `agentic_workflow_framework/configs/`, which uses typing-module style, and `make parity-check`
+# compares the two. Running that fix once took the parity report from 0 differences to 1194 — the
+# mirror stops being diffable against upstream, which is the whole point of vendoring it this way.
+#
+# `UP` (pyupgrade) is therefore deliberately NOT selected, matching the root pyproject. Re-enable
+# only if upstream itself moves to PEP 604/585 annotations.
+select = ["E", "F", "W", "I", "N"]
+ignore = [
+    "E501",  # Line length handled by the formatter
+    # `createdBy`, `updatedBy`, `createdAt`, `updatedAt` are WIRE FIELD NAMES: the server serializes
+    # them in exactly this camelCase. Renaming them to satisfy the convention would silently change
+    # the payload and break round-tripping, so the mirror keeps upstream's spelling.
+    "N815",
+    # `__init__.py` imports `workflow_run` and `get_node_config_class` *after* the
+    # `SuperNodeConfig.model_rebuild()` call, because the rebuild must run before those modules
+    # resolve their forward references. The order is deliberate and load-bearing.
+    "E402",
+]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

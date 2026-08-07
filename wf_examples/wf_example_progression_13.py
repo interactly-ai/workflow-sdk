@@ -23,7 +23,7 @@ from interactly.configs import (
     ANTHROPICModel,
     AzureOpenAILLMConfig,
     AZUREOPENAIModel,
-    GlobalDefaultLLMConfig,
+    WorkflowDefaultLLMConfig,
     GoogleLLMConfig,
     GOOGLEModel,
     OpenAILLMConfig,
@@ -42,14 +42,14 @@ from _shared_constants import GLOBAL_PROMPT_PREFIX, GLOBAL_PROMPT_SUFFIX
 def build_assistant_workflow():
     """
     Build a workflow that demonstrates all four LLM providers supported by Interactly,
-    plus the GlobalDefaultLLMConfig fallback.
+    plus the WorkflowDefaultLLMConfig fallback.
 
     Key concepts introduced in this example:
     1. OpenAILLMConfig        — direct OpenAI API (GPT-5 / GPT-4.x)
     2. AzureOpenAILLMConfig   — Azure-hosted OpenAI (same models, enterprise auth)
     3. GoogleLLMConfig        — Google Gemini models
     4. AnthropicLLMConfig     — Anthropic Claude models
-    5. GlobalDefaultLLMConfig — defers to the platform-level default; no provider lock-in
+    5. WorkflowDefaultLLMConfig — defers to the platform-level default; no provider lock-in
     6. Assigning per-node llms_config to choose the best model for each task
     """
 
@@ -103,7 +103,7 @@ def build_assistant_workflow():
     # ── GlobalDefault ─────────────────────────────────────────────────────────
     # Inherits whatever LLM the Interactly platform is configured to use by default.
     # This is the most portable option: no provider lock-in, picks up platform upgrades.
-    global_default = GlobalDefaultLLMConfig(
+    global_default = WorkflowDefaultLLMConfig(
         max_tokens=300,
         temperature=0.2,
         do_not_split_sentences=True,
@@ -116,7 +116,7 @@ def build_assistant_workflow():
     workflow_description = f"""
     This workflow illustrates how to configure different LLM providers on a per-node basis.
     Interactly supports OpenAI, Azure OpenAI, Google Gemini, Anthropic Claude, and a
-    GlobalDefaultLLMConfig that delegates to the platform-level default.
+    WorkflowDefaultLLMConfig that delegates to the platform-level default.
 
     Each provider has its own model enum and provider-specific optional fields (e.g.
     reasoning_effort for GPT-5, thinking_budget for Gemini and Claude).
@@ -202,7 +202,7 @@ def build_assistant_workflow():
     You are a general Cigna assistant. Answer any health insurance question the user has.
     If the topic is claims, benefits, or wellness, let them know they can ask more specific questions.
     """
-    # Uses GlobalDefaultLLMConfig — no provider lock-in; picks up whatever the platform default is.
+    # Uses WorkflowDefaultLLMConfig — no provider lock-in; picks up whatever the platform default is.
     general_node = SayLLMNodeConfig(
         name="General Assistant (Platform Default)",
         description="Catch-all node using the platform's global default LLM",

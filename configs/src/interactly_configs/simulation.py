@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+
 class SimulationStatus(str, Enum):
     PENDING = "pending"
     RUNNING = "running"

@@ -11,6 +11,7 @@ from interactly_configs.nodes.node import (
 )
 from interactly_configs.prompt import PromptConfig
 
+
 class EndConversationNodeConfig(BaseNodeConfig):
     type: Literal["end_conversation"] = Field(
         default=NodeType.END_CONVERSATION.value,

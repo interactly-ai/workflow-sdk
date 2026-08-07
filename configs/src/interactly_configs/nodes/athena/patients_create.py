@@ -13,6 +13,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
 )
 
+
 class Gender(str, Enum):
     Empty: str = ""
     Female: str = "Female"

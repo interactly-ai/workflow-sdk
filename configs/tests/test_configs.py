@@ -11,8 +11,6 @@ Covers:
 - ExternalAPIToolConfig: api_body JSON parsing validator
 """
 
-import json
-import re
 
 import pytest
 
@@ -22,7 +20,6 @@ from interactly_configs import (
     AZUREOPENAIModel,
     BaseNodeConfig,
     BaseRunInput,
-    BaseRunOutput,
     CompanionEdgeConfig,
     ConditionalEdgeConfig,
     ConditionConfig,
@@ -32,14 +29,12 @@ from interactly_configs import (
     EdgeConfig,
     EdgeType,
     ExternalAPIToolConfig,
-    GlobalDefaultLLMConfig,
     GoogleLLMConfig,
     InbuiltFunctionToolConfig,
     InlinePythonToolConfig,
     KnowledgeBaseToolConfig,
     LLMConfig,
     LLMGroupConfig,
-    LLMOrGroupConfig,
     LLMProvider,
     MCPServerConfig,
     NodeCategory,
@@ -48,7 +43,6 @@ from interactly_configs import (
     OktaAuthConfig,
     OpenAILLMConfig,
     OperationMode,
-    PromptConfig,
     SelectionMode,
     StaticMessagesConfig,
     ToolConfig,
@@ -57,10 +51,10 @@ from interactly_configs import (
     WorkflowCommand,
     WorkflowConfig,
     WorkflowConfigFullyHydrated,
+    WorkflowDefaultLLMConfig,
     WorkflowExecutionStatus,
     WorkflowRunInput,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -201,7 +195,7 @@ class TestLLMConfig:
             (_llm_payload("google_llm"), GoogleLLMConfig),
             (_llm_payload("anthropic_llm"), AnthropicLLMConfig),
             (_llm_payload("custom_llm"), CustomLLMConfig),
-            (_llm_payload("global_default_llm"), GlobalDefaultLLMConfig),
+            (_llm_payload("global_default_llm"), WorkflowDefaultLLMConfig),
         ],
     )
     def test_discriminator_resolves_correct_subtype(self, payload, expected_class):

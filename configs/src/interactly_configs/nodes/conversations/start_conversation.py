@@ -4,6 +4,7 @@ from pydantic import ConfigDict, Field
 
 from interactly_configs.nodes.node import BaseNodeConfig, BaseNodeRunInput, BaseNodeRunOutput, NodeType
 
+
 class StartConversationNodeConfig(BaseNodeConfig):
     type: Literal["start_conversation"] = Field(
         default=NodeType.START_CONVERSATION.value,

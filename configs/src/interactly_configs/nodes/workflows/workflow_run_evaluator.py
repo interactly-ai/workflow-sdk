@@ -9,6 +9,7 @@ from interactly_configs.nodes.llm.llm import (
     WorkerLLMNodeRunOutput,
 )
 
+
 class WorkflowRunEvalLLMNodeConfig(WorkerLLMNodeConfig):
     """Configuration for nodes that evaluate workflow runs.
 

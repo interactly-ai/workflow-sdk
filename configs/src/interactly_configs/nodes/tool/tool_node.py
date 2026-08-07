@@ -9,6 +9,7 @@ from interactly_configs.nodes.node import (
 )
 from interactly_configs.tool import ToolConfig
 
+
 class ToolNodeConfig(BaseNodeConfig):
     type: Literal["tool_node"] = Field(
         default="tool_node",

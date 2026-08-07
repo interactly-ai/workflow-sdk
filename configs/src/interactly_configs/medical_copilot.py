@@ -3,6 +3,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+
 class MedicalCopilotCommand(str, Enum):
     DATA = "data"
     STOP = "stop"

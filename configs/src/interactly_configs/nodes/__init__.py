@@ -4,6 +4,8 @@ Re-exports all public symbols from the nodes subpackage for convenience.
 Users can import directly from submodules or from this package root.
 """
 
+from typing import Optional, Type
+
 from interactly_configs.nodes.node import (
     BaseNodeConfig,
     BaseNodeRunInput,
@@ -12,6 +14,7 @@ from interactly_configs.nodes.node import (
     GlobalNodeConfig,
     NodeCategory,
     NodeType,
+    SelfLoopConfig,
 )
 from interactly_configs.nodes.node_unions import (
     NodeConfig,
@@ -21,22 +24,24 @@ from interactly_configs.nodes.node_unions import (
 )
 
 __all__ = [
-    "NodeType",
-    "NodeCategory",
-    "GlobalConditionEdgeEvaluationMethod",
-    "GlobalNodeConfig",
     "BaseNodeConfig",
     "BaseNodeRunInput",
     "BaseNodeRunOutput",
+    "GlobalConditionEdgeEvaluationMethod",
+    "GlobalNodeConfig",
+    "NodeCategory",
     "NodeConfig",
     "NodeRunInput",
     "NodeRunOutput",
+    "NodeType",
     "NodesRunInputs",
+    "SelfLoopConfig",
 ]
 
 from interactly_configs.nodes.node_unions import NodeMetadataRetriever
 
-def get_node_config_class(node_type: str | NodeType) -> type[BaseNodeConfig] | None:
+
+def get_node_config_class(node_type: str | NodeType) -> Optional[Type[BaseNodeConfig]]:
     """Get the node configuration class associated with a node type."""
     if isinstance(node_type, str):
         try:

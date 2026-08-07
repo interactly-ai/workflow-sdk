@@ -1,8 +1,8 @@
-from typing import Any, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import ConfigDict, Field
 
-from interactly_configs.llm import GlobalDefaultLLMConfig
+from interactly_configs.llm import WorkflowDefaultLLMConfig
 from interactly_configs.llm_group import LLMOrGroupConfig
 from interactly_configs.nodes.node import BaseNodeConfig, BaseNodeRunInput, BaseNodeRunOutput, NodeType
 from interactly_configs.prompt import PromptConfig
@@ -31,7 +31,7 @@ class BaseLLMNodeConfig(BaseNodeConfig):
         description="ID of the named LLM Configuration to use. If provided, overrides inline configuration.",
     )
     llms_config: Optional[LLMOrGroupConfig] = Field(
-        default=GlobalDefaultLLMConfig(),
+        default=WorkflowDefaultLLMConfig(),
         description="LLM or a group of LLMs to be used in this node",
         title="LLM Configuration",
     )
@@ -164,7 +164,7 @@ class SayLLMNodeConfig(BaseLLMNodeConfig):
 
 class LLMNodeRunInput(BaseNodeRunInput):
     type: Literal["llm"] = Field(default="llm", description="Discriminator field which must always be 'llm'")
-    messages: list[Any] = Field(
+    messages: List[Any] = Field(
         default_factory=list,
         description="Input user messages to be processed by the LLM node",
         title="Input User Messages",
