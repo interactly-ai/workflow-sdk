@@ -176,6 +176,48 @@ class ToolsResource(SyncAPIResource):
             body = serialise_config(tool_config)
         return self._client.patch(f"{_PATH}/{tool_id}", body=body, cast_to=Tool)
 
+    def export(self, tool_id: str) -> Dict[str, Any]:
+        """Export a tool as a portable bundle.
+
+        Secrets are **redacted** by the server, not included. The bundle records which fields were
+        redacted so :meth:`import_bundle` can tell you what to re-supply via ``secret_overrides``.
+        """
+        return self._client.get(f"{_PATH}/{tool_id}/export", cast_to=dict)
+
+    def import_bundle(
+        self,
+        bundle: Dict[str, Any],
+        *,
+        name_override: Optional[str] = None,
+        secret_overrides: Optional[Dict[str, Any]] = None,
+        clear_unresolved_refs: bool = True,
+        confirm_executable: bool = False,
+    ) -> Tool:
+        """Import a tool bundle produced by :meth:`export`.
+
+        Args:
+            bundle:                The exported bundle.
+            name_override:         Name for the imported tool.
+            secret_overrides:      Dotted-path → value for each redacted field being re-supplied,
+                                   e.g. ``{"api_headers.Authorization": "Bearer ..."}``.
+            clear_unresolved_refs: Clear team-scoped references (such as knowledge-base ids) that
+                                   cannot resolve in the importing team, rather than importing a
+                                   tool that points at another team's resources.
+            confirm_executable:    **Required True to import an `inline_python` tool.** Such a bundle
+                                   carries executable code that will run in your team's context, so
+                                   the server refuses it unless you say so explicitly.
+        """
+        body: Dict[str, Any] = {
+            "bundle": bundle,
+            "clear_unresolved_refs": clear_unresolved_refs,
+            "confirm_executable": confirm_executable,
+        }
+        if name_override is not None:
+            body["name_override"] = name_override
+        if secret_overrides is not None:
+            body["secret_overrides"] = secret_overrides
+        return self._client.post(f"{_PATH}/import", body=body, cast_to=Tool)
+
     def delete(self, tool_id: str) -> None:
         """
         Delete a tool.
@@ -288,6 +330,31 @@ class AsyncToolsResource(AsyncAPIResource):
         if is_given(tool_config) and tool_config is not None:
             body = serialise_config(tool_config)
         return await self._client.patch(f"{_PATH}/{tool_id}", body=body, cast_to=Tool)
+
+    async def export(self, tool_id: str) -> Dict[str, Any]:
+        """Export a tool as a portable bundle. Secrets are redacted by the server."""
+        return await self._client.get(f"{_PATH}/{tool_id}/export", cast_to=dict)
+
+    async def import_bundle(
+        self,
+        bundle: Dict[str, Any],
+        *,
+        name_override: Optional[str] = None,
+        secret_overrides: Optional[Dict[str, Any]] = None,
+        clear_unresolved_refs: bool = True,
+        confirm_executable: bool = False,
+    ) -> Tool:
+        """Import a tool bundle produced by :meth:`export`. See the sync counterpart."""
+        body: Dict[str, Any] = {
+            "bundle": bundle,
+            "clear_unresolved_refs": clear_unresolved_refs,
+            "confirm_executable": confirm_executable,
+        }
+        if name_override is not None:
+            body["name_override"] = name_override
+        if secret_overrides is not None:
+            body["secret_overrides"] = secret_overrides
+        return await self._client.post(f"{_PATH}/import", body=body, cast_to=Tool)
 
     async def delete(self, tool_id: str) -> None:
         """Delete a tool."""

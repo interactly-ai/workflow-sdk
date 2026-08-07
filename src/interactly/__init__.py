@@ -20,6 +20,7 @@ from interactly._exceptions import (
     APIError,
     APITimeoutError,
     AuthenticationError,
+    BadRequestError,
     ConflictError,
     InteractlyError,
     InternalServerError,
@@ -30,7 +31,13 @@ from interactly._exceptions import (
     UnprocessableEntityError,
 )
 from interactly._pagination import AsyncPage, SyncPage
-from interactly._streaming import AsyncStream, Stream, StreamError
+from interactly._streaming import (
+    AsyncStream,
+    InvalidStreamInputError,
+    RerunTokenError,
+    Stream,
+    StreamError,
+)
 from interactly._types import NOT_GIVEN, NotGiven, NotGivenOr
 from interactly._version import __version__
 from interactly.runtime import (
@@ -110,6 +117,7 @@ __all__ = [
     "APIConnectionError",
     "APITimeoutError",
     "AuthenticationError",
+    "BadRequestError",
     "PermissionDeniedError",
     "NotFoundError",
     "ConflictError",
@@ -118,6 +126,8 @@ __all__ = [
     "InternalServerError",
     "NoMorePagesError",
     "StreamError",
+    "InvalidStreamInputError",
+    "RerunTokenError",
     # Pagination
     "SyncPage",
     "AsyncPage",

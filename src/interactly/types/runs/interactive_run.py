@@ -69,3 +69,14 @@ class InteractiveRunResponse(BaseAPIModel):
     # BusyWaitForUserMessageEvent payload populated when is_waiting_for_input=True.
     # Provides a hint about what kind of input the workflow expects next.
     next_input_hint: Optional[Dict[str, Any]] = None
+
+    #: True when fork-companion threads are still running background work after this turn.
+    #: Retained for backward compatibility; ``has_background_work`` is the superset to poll on.
+    has_active_companions: bool = False
+
+    #: True when ANY background work remains: an active fork companion, or a parked thread with an
+    #: armed conditional-edge evaluation. **This is the flag to poll ``pump_companions`` on.** Without
+    #: pumping, a REST-driven run with companions or waiting-evaluations never advances. Note that a
+    #: pump may return MAIN-thread assistant output, when a waiting condition matched and the
+    #: workflow moved on without a user turn.
+    has_background_work: bool = False

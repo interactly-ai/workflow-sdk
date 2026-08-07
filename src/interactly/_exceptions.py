@@ -24,6 +24,7 @@ __all__ = [
     "APIError",
     "APIConnectionError",
     "APITimeoutError",
+    "BadRequestError",
     "AuthenticationError",
     "PermissionDeniedError",
     "NotFoundError",
@@ -116,6 +117,16 @@ class APIError(InteractlyError):
         )
 
 
+class BadRequestError(APIError):
+    """HTTP 400 — The server rejected the request as invalid.
+
+    The workflow service uses this for its config validation rules — companion-thread layout,
+    evaluate-while-waiting edges, and similar. Those responses carry two strings: ``message`` names
+    the category and ``error`` says which rule failed. Both are joined into ``str(exc)``, and the
+    raw body stays available on ``.body`` (see ``_extract_error_message``).
+    """
+
+
 class AuthenticationError(APIError):
     """HTTP 401 — API key missing, invalid, or expired."""
 
@@ -148,6 +159,31 @@ class InternalServerError(APIError):
 # Factory                                                                      #
 # --------------------------------------------------------------------------- #
 
+def _extract_error_message(response: httpx.Response, body: Optional[Any]) -> str:
+    """Build the most useful one-line message the error body can support.
+
+    The workflow service's validation responses carry BOTH keys, and they say different things::
+
+        {"message": "Invalid 'evaluate while waiting for user input' edge configuration",
+         "error":   "Edge 'x' names trigger_node_logical_ids that wait for user input: [...]"}
+
+    ``message`` is the category; ``error`` is the rule that actually failed. Picking whichever
+    appeared first in a chain of ``or`` meant the specific reason was thrown away and the caller was
+    told only that *something* about the edge was wrong. Both are joined here, category first, so the
+    exception reads as "what kind of problem: which rule". FastAPI's own errors use ``detail`` and
+    carry no second field, so they are unaffected.
+    """
+    status = response.status_code
+    if not isinstance(body, dict):
+        return response.reason_phrase or f"HTTP {status}"
+
+    category = body.get("detail") or body.get("message")
+    reason = body.get("error")
+    if category and reason and str(reason) != str(category):
+        return f"{category}: {reason}"
+    return str(category or reason or response.reason_phrase or f"HTTP {status}")
+
+
 def _make_status_error(
     response: httpx.Response,
     body: Optional[Any] = None,
@@ -157,11 +193,7 @@ def _make_status_error(
     Called by _base_client after receiving a non-2xx response.
     """
     status = response.status_code
-    # Extract a readable message from the response body.
-    if isinstance(body, dict):
-        message = str(body.get("detail") or body.get("message") or body.get("error") or response.reason_phrase)
-    else:
-        message = response.reason_phrase or f"HTTP {status}"
+    message = _extract_error_message(response, body)
 
     kwargs: dict[str, Any] = {
         "message": message,
@@ -171,6 +203,8 @@ def _make_status_error(
         "response": response,
     }
 
+    if status == 400:
+        return BadRequestError(**kwargs)
     if status == 401:
         return AuthenticationError(**kwargs)
     if status == 403:

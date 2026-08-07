@@ -25,6 +25,10 @@ class RunListParams(TypedDict):
     page: NotRequired[int]
     size: NotRequired[int]
     search: NotRequired[Optional[str]]
+    #: Only runs re-run FROM this run.
+    source_workflow_run_id: NotRequired[Optional[str]]
+    #: Narrows the above to one turn; ignored without it.
+    source_turn_index: NotRequired[Optional[int]]
 
 
 class RunStreamParams(TypedDict):
@@ -40,6 +44,9 @@ class RunStreamParams(TypedDict):
     run_by: NotRequired[str]
     # If omitted the server uses the currently active version.
     version_number: NotRequired[Optional[int]]
+    #: Redeems a re-run projection minted by ``client.reruns.create_token``. Only valid on a
+    #: ``start`` frame; an expired or mismatched token closes the socket with code 4007.
+    rerun_token: NotRequired[Optional[str]]
 
 
 class RunCommentParams(TypedDict):

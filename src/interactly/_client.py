@@ -44,6 +44,7 @@ from interactly.resources.global_variables.global_variables import AsyncGlobalVa
 from interactly.resources.llm_configs.llm_configs import AsyncLLMConfigsResource, LLMConfigsResource
 from interactly.resources.node_libraries.node_libraries import AsyncNodeLibrariesResource, NodeLibrariesResource
 from interactly.resources.nodes.nodes import AsyncNodesResource, NodesResource
+from interactly.resources.reruns.reruns import AsyncRerunsResource, RerunsResource
 from interactly.resources.runs.runs import AsyncRunsResource, RunsResource
 from interactly.resources.schedules.schedules import AsyncSchedulesResource, SchedulesResource
 from interactly.resources.simulations.simulations import AsyncSimulationsResource, SimulationsResource
@@ -80,6 +81,7 @@ class WorkflowClient(SyncAPIClient):
         schedules:        :class:`SchedulesResource` — manage scheduled workflow runs.
         templates:        :class:`TemplatesResource` — CRUD for workflow templates.
         categories:       :class:`CategoriesResource` — read workflow categories.
+        reruns:           :class:`RerunsResource` — re-run a finished run from a turn.
         nodes:            :class:`NodesResource` — CRUD for standalone nodes.
         edges:            :class:`EdgesResource` — CRUD for standalone edges.
         super_nodes:      :class:`SuperNodesResource` — manage super node publications.
@@ -97,6 +99,7 @@ class WorkflowClient(SyncAPIClient):
     schedules: SchedulesResource
     templates: TemplatesResource
     categories: CategoriesResource
+    reruns: RerunsResource
     nodes: NodesResource
     edges: EdgesResource
     super_nodes: SuperNodesResource
@@ -132,6 +135,7 @@ class WorkflowClient(SyncAPIClient):
         self.schedules = SchedulesResource(self)
         self.templates = TemplatesResource(self)
         self.categories = CategoriesResource(self)
+        self.reruns = RerunsResource(self)
         self.nodes = NodesResource(self)
         self.edges = EdgesResource(self)
         self.super_nodes = SuperNodesResource(self)
@@ -162,6 +166,7 @@ class AsyncWorkflowClient(AsyncAPIClient):
         schedules:        :class:`AsyncSchedulesResource` — manage scheduled workflow runs.
         templates:        :class:`AsyncTemplatesResource` — CRUD for workflow templates.
         categories:       :class:`AsyncCategoriesResource` — read workflow categories.
+        reruns:           :class:`AsyncRerunsResource` — re-run a finished run from a turn.
         nodes:            :class:`AsyncNodesResource` — CRUD for standalone nodes.
         edges:            :class:`AsyncEdgesResource` — CRUD for standalone edges.
         super_nodes:      :class:`AsyncSuperNodesResource` — manage super node publications.
@@ -179,6 +184,7 @@ class AsyncWorkflowClient(AsyncAPIClient):
     schedules: AsyncSchedulesResource
     templates: AsyncTemplatesResource
     categories: AsyncCategoriesResource
+    reruns: AsyncRerunsResource
     nodes: AsyncNodesResource
     edges: AsyncEdgesResource
     super_nodes: AsyncSuperNodesResource
@@ -214,6 +220,7 @@ class AsyncWorkflowClient(AsyncAPIClient):
         self.schedules = AsyncSchedulesResource(self)
         self.templates = AsyncTemplatesResource(self)
         self.categories = AsyncCategoriesResource(self)
+        self.reruns = AsyncRerunsResource(self)
         self.nodes = AsyncNodesResource(self)
         self.edges = AsyncEdgesResource(self)
         self.super_nodes = AsyncSuperNodesResource(self)

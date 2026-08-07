@@ -13,6 +13,18 @@ Known event types (non-exhaustive — the server may add new types):
     ``reverse_conditional_edge``  — a global node returned control back to its
                                     caller node (non-terminal navigation event;
                                     carries ``global_node_logical_id``)
+    ``workflow_ready_for_input``  — every non-companion thread has settled and the
+                                    workflow will accept the next user message. This,
+                                    NOT ``end_workflow_iteration``, is the "your turn"
+                                    signal once companion threads are in play
+    ``companion_step_boundary``   — one companion self-loop step completed
+    ``waiting_evaluation_boundary`` — a parked thread's waiting-edges were evaluated
+    ``waiting_condition_matched`` — a conditional edge fired while its source node was
+                                    parked, with no user message
+    ``self_loop_delay``           — waiting before a bounded self-loop retry
+    ``self_loop_exhausted``       — a bounded self-loop hit max_retries / expiry_time
+    ``node_expired``              — an in-flight execution was terminated by expiry_time
+    ``guardrail_escalation_edge`` — the guardrail-strikes threshold escalated the run
 """
 
 from __future__ import annotations
@@ -56,6 +68,12 @@ class RunEvent(BaseAPIModel):
     # Additional arbitrary payload from the server.
     data: Optional[Dict[str, Any]] = None
 
+    # Author-facing display id for the event's thread: ``"0"`` for the main thread, or a fork
+    # companion's configured ``thread_id``. Derived server-side from the internal
+    # ``"<parent>_companion_<id>"``, so it is the id to show a user and to match against a
+    # ``[[thread_<id>.<var>]]`` reference.
+    thread_reference_id: Optional[str] = None
+
     @model_validator(mode="before")
     @classmethod
     def _normalize(cls, data: Any) -> Any:
@@ -83,5 +101,19 @@ class RunEvent(BaseAPIModel):
         ``workflow_error`` (error termination). Navigation events such as
         ``conditional_edge`` and ``reverse_conditional_edge`` are explicitly
         *not* terminal.
+
+        Note that ``end_workflow`` now means **all** threads have ended, companions included. To
+        detect "the workflow wants my next message", use :meth:`is_ready_for_input`.
         """
         return self.type in {"end_workflow", "workflow_error"}
+
+    def is_ready_for_input(self) -> bool:
+        """Return True when the workflow will accept the next user message.
+
+        Distinct from :meth:`is_terminal` and from ``end_workflow_iteration``. Once companion
+        threads are in play the three diverge: an iteration marker is per-turn accounting,
+        ``end_workflow`` is true completion of every thread, and this is the moment the main thread
+        is parked and waiting. Loops that break on ``end_workflow_iteration`` will hang or race when
+        a companion is still emitting.
+        """
+        return self.type == "workflow_ready_for_input"

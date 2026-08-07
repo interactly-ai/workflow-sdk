@@ -8,8 +8,19 @@ Protocol:
     1. Client opens WebSocket connection with auth headers.
     2. Client sends a JSON message conforming to WorkflowRunInput:
            {"workflow_id": "...", "command": "start", "run_by": "api"}
+       A ``rerun_token`` may be included on the first ``start`` frame to resume a projected re-run
+       (see ``client.reruns``).
     3. Server streams JSON event messages until the run completes.
     4. Connection closes (server-initiated) when run finishes or errors.
+
+Two things the server may do that are easy to misread:
+
+* **Background events arrive mid-wait.** While the workflow waits for the next user message, fork
+  companions keep running and their events keep arriving. ``end_workflow_iteration`` therefore does
+  not mean "your turn" — ``workflow_ready_for_input`` does.
+* **Some closures are rejections, not endings.** Close code 4006 means the start frame carried
+  ``initial_state`` (never allowed from a client); 4007 means the ``rerun_token`` was expired or
+  did not match. Both raise a specific exception rather than a generic StreamError.
 
 SDK design:
     - ``AsyncStream[T]``  — async-native iterator.  Use with ``async for``.
@@ -32,9 +43,37 @@ from interactly._utils._logs import logger
 class StreamError(InteractlyError):
     """Raised when a streaming connection drops abnormally or a frame is malformed."""
 
+
+class InvalidStreamInputError(StreamError):
+    """The server rejected the start frame because it carried state a client may not supply.
+
+    Close code **4006**. The workflow service enforces one invariant absolutely: *a client is never
+    the source of run state*. Sending ``initial_state`` — even a correct-looking one — is refused
+    rather than merged, because a run whose state came from the wire cannot be audited. To resume or
+    branch a run, mint a re-run token (``client.reruns.create_token``) and pass ``rerun_token``
+    instead; the server rebuilds the state itself from the stored run.
+    """
+
+
+class RerunTokenError(StreamError):
+    """The ``rerun_token`` in the start frame was not usable.
+
+    Close code **4007**. Raised when the token has expired, was minted for a different workflow or
+    version, or the workflow changed after the token was created. Mint a fresh one with
+    ``client.reruns.create_token``; the reason is included in the message.
+    """
+
+
+#: WebSocket close codes the workflow service uses to reject a start frame, mapped to the exception
+#: that explains what to do about it. Anything else stays a generic ``StreamError``.
+_CLOSE_CODE_ERRORS: dict[int, type[StreamError]] = {
+    4006: InvalidStreamInputError,
+    4007: RerunTokenError,
+}
+
 ItemT = TypeVar("ItemT")
 
-__all__ = ["AsyncStream", "Stream", "StreamError"]
+__all__ = ["AsyncStream", "InvalidStreamInputError", "RerunTokenError", "Stream", "StreamError"]
 
 
 class AsyncStream(Generic[ItemT]):
@@ -122,9 +161,17 @@ class AsyncStream(Generic[ItemT]):
             logger.debug("WebSocket closed normally (1000)")
             raise StopAsyncIteration
         except websockets.exceptions.ConnectionClosed as exc:
-            # Any non-1000 closure is an abnormal termination, not end-of-stream.
-            logger.debug("WebSocket closed abnormally", extra={"reason": str(exc)})
-            raise StreamError(f"WebSocket connection closed abnormally: {exc}") from exc
+            # Any non-1000 closure is an abnormal termination, not end-of-stream. Some of them are
+            # the server rejecting the start frame for a specific, fixable reason — surface those as
+            # their own exception rather than as an opaque "closed abnormally".
+            close_frame = getattr(exc, "rcvd", None)
+            code: Optional[int] = getattr(close_frame, "code", None)
+            reason: str = getattr(close_frame, "reason", "") or str(exc)
+            logger.debug("WebSocket closed abnormally", extra={"code": code, "reason": reason})
+            error_cls = _CLOSE_CODE_ERRORS.get(code) if code is not None else None
+            if error_cls is None:
+                raise StreamError(f"WebSocket connection closed abnormally: {exc}") from exc
+            raise error_cls(f"{reason} (close code {code})") from exc
 
         try:
             data = json.loads(raw)

@@ -15,7 +15,6 @@ import pytest
 import respx
 
 from interactly import AsyncWorkflowClient, InteractiveRunResponse, WorkflowClient
-from interactly.types.runs.run import Run
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -350,100 +349,3 @@ class TestRunsExecute:
         # Assert
         assert isinstance(result, InteractiveRunResponse)
         assert result.run_id == "run-1"
-
-
-# ===========================================================================
-# Runs — checkpoint
-# ===========================================================================
-
-
-class TestRunsCheckpoint:
-    @respx.mock
-    def test_checkpoint_returns_run(self, client: WorkflowClient):
-        # Arrange
-        checkpoint_run = {**_RUN, "id": "run-2", "status": "running"}
-        respx.post(f"{TEST_BASE_URL}/v1/workflows/wf-1/runs/run-1/checkpoint-run").mock(
-            return_value=httpx.Response(200, json=checkpoint_run)
-        )
-
-        # Act
-        result = client.runs.checkpoint("wf-1", "run-1", resume_turn_index=2)
-
-        # Assert
-        assert isinstance(result, Run)
-        assert result.id == "run-2"
-
-    @respx.mock
-    def test_checkpoint_sends_resume_turn_index(self, client: WorkflowClient):
-        # Arrange
-        route = respx.post(f"{TEST_BASE_URL}/v1/workflows/wf-1/runs/run-1/checkpoint-run").mock(
-            return_value=httpx.Response(200, json={**_RUN, "id": "run-2"})
-        )
-
-        # Act
-        client.runs.checkpoint("wf-1", "run-1", resume_turn_index=3)
-
-        # Assert
-        import json
-        body = json.loads(route.calls.last.request.content)
-        assert body["resume_turn_index"] == 3
-
-    @respx.mock
-    def test_checkpoint_sends_start_node_logical_id(self, client: WorkflowClient):
-        # Arrange
-        route = respx.post(f"{TEST_BASE_URL}/v1/workflows/wf-1/runs/run-1/checkpoint-run").mock(
-            return_value=httpx.Response(200, json={**_RUN, "id": "run-2"})
-        )
-
-        # Act
-        client.runs.checkpoint("wf-1", "run-1", resume_turn_index=1, start_node_logical_id="node_abc")
-
-        # Assert
-        import json
-        body = json.loads(route.calls.last.request.content)
-        assert body["start_node_logical_id"] == "node_abc"
-
-    @respx.mock
-    def test_checkpoint_omits_start_node_when_not_provided(self, client: WorkflowClient):
-        # Arrange
-        route = respx.post(f"{TEST_BASE_URL}/v1/workflows/wf-1/runs/run-1/checkpoint-run").mock(
-            return_value=httpx.Response(200, json={**_RUN, "id": "run-2"})
-        )
-
-        # Act
-        client.runs.checkpoint("wf-1", "run-1", resume_turn_index=0)
-
-        # Assert
-        import json
-        body = json.loads(route.calls.last.request.content)
-        assert "start_node_logical_id" not in body
-
-    @respx.mock
-    def test_checkpoint_zero_turn_index_is_valid(self, client: WorkflowClient):
-        # Arrange
-        route = respx.post(f"{TEST_BASE_URL}/v1/workflows/wf-1/runs/run-1/checkpoint-run").mock(
-            return_value=httpx.Response(200, json={**_RUN, "id": "run-2"})
-        )
-
-        # Act
-        result = client.runs.checkpoint("wf-1", "run-1", resume_turn_index=0)
-
-        # Assert
-        import json
-        body = json.loads(route.calls.last.request.content)
-        assert body["resume_turn_index"] == 0
-        assert isinstance(result, Run)
-
-    @respx.mock
-    async def test_async_checkpoint_returns_run(self, async_client: AsyncWorkflowClient):
-        # Arrange
-        respx.post(f"{TEST_BASE_URL}/v1/workflows/wf-1/runs/run-1/checkpoint-run").mock(
-            return_value=httpx.Response(200, json={**_RUN, "id": "run-2"})
-        )
-
-        # Act
-        result = await async_client.runs.checkpoint("wf-1", "run-1", resume_turn_index=2)
-
-        # Assert
-        assert isinstance(result, Run)
-        assert result.id == "run-2"

@@ -39,21 +39,50 @@ __all__ = ["WorkflowsResource", "AsyncWorkflowsResource"]
 _PATH = "/v1/workflows"
 
 
+def _is_hydrated_shape(candidate: Dict[str, Any]) -> bool:
+    """True when this dict is the ``WorkflowConfigFullyHydrated`` payload itself.
+
+    Keyed on the *presence* of the node/edge lists rather than their truthiness: a workflow with no
+    nodes yet is still the hydrated shape, and treating an empty list as "keep looking" would walk
+    straight past it.
+    """
+    return isinstance(candidate.get("node_configs"), list) or isinstance(candidate.get("edge_configs"), list)
+
+
 def _extract_hydrated_config(raw: Any) -> Dict[str, Any]:
     """Unwrap a ``GET /workflows/{id}?fully_hydrate=true`` response.
 
-    The backend returns ``WorkflowsResponse{workflow, execution_url}`` where
-    ``workflow.workflow_config`` is the ``WorkflowConfigFullyHydrated`` payload.
-    A subset of test/mock backends return the flat config directly; fall back
-    to those shapes so callers do not have to care.
+    The server nests this two levels deep::
+
+        {"workflow": {..., "workflow_config": {"workflow_config": {...},
+                                               "node_configs": [...],
+                                               "edge_configs": [...]}},
+         "execution_url": "..."}
+
+    The outer ``workflow`` is the stored document (team_id, _id, timestamps); the hydrated payload is
+    its ``workflow_config``. This used to stop one level short and return the document, whose
+    ``node_configs`` and ``edge_configs`` are absent — so every call silently produced a config with
+    **zero nodes and zero edges** rather than failing. The unit tests missed it because they mocked
+    the hydrated config directly under ``workflow``, a shape the server does not actually return.
+
+    Descends while the payload is still a wrapper, so the flat and single-wrapped shapes that mocked
+    backends return keep working.
     """
     if not isinstance(raw, dict):
         return cast(Dict[str, Any], raw)
+
     payload: Dict[str, Any] = raw
-    if "workflow" in payload and isinstance(payload["workflow"], dict):
+    if isinstance(payload.get("workflow"), dict):
         payload = payload["workflow"]
-    if "workflow_config" in payload and isinstance(payload["workflow_config"], dict):
-        return payload  # already the hydrated shape (workflow_config + node_configs + edge_configs)
+
+    # Bounded: the real response needs one descent, and a cycle would otherwise spin.
+    for _ in range(4):
+        if _is_hydrated_shape(payload):
+            return payload
+        inner = payload.get("workflow_config")
+        if not isinstance(inner, dict):
+            break
+        payload = inner
     return payload
 
 
