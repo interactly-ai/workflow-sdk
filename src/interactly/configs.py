@@ -28,7 +28,7 @@ If ``interactly-configs`` is not installed, importing this module raises an
 from __future__ import annotations
 
 try:
-    from interactly_configs import (  # type: ignore[import]
+    from interactly_configs import (
         AnthropicLLMConfig,
         ANTHROPICModel,
         AzureOpenAILLMConfig,

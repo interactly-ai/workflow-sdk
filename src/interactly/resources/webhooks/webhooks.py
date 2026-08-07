@@ -449,8 +449,12 @@ class AsyncWorkflowWebhooksResource(AsyncAPIResource):
         items = [WebhookEvent.model_validate(e) for e in raw.get("events", [])]
         total = raw.get("total", len(items))
 
-        def _next_page(p: int) -> "AsyncPage[WebhookEvent]":
-            return self.list_events(
+        async def _next_page(p: int) -> "AsyncPage[WebhookEvent]":
+            # `async def` + `await`, matching every other async pager. The sync version this replaced
+            # returned the un-awaited coroutine; `AsyncPage.next_page` awaits whatever it gets, so it
+            # happened to work — but the annotation was a lie and any direct caller would have been
+            # handed a coroutine where the signature promised a page.
+            return await self.list_events(
                 page=p, size=size, subscription_id=subscription_id,
                 workflow_id=workflow_id, action=action, status=status,
             )

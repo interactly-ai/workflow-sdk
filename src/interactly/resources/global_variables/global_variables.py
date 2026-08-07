@@ -15,7 +15,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -187,7 +187,7 @@ class GlobalVariablesResource(SyncAPIResource):
             A plain dict mapping each variable name to its resolved value.
         """
         raw = self._client.get(f"{_PATH}/resolve", cast_to=dict)
-        return raw.get("variables", raw)
+        return cast(Dict[str, Any], raw.get("variables", raw))
 
 
 class AsyncGlobalVariablesResource(AsyncAPIResource):
@@ -284,4 +284,4 @@ class AsyncGlobalVariablesResource(AsyncAPIResource):
             A plain dict mapping each variable name to its resolved value.
         """
         raw = await self._client.get(f"{_PATH}/resolve", cast_to=dict)
-        return raw.get("variables", raw)
+        return cast(Dict[str, Any], raw.get("variables", raw))

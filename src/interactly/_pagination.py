@@ -17,7 +17,7 @@ SyncPage / AsyncPage implement the iterator protocol and provide a
 from __future__ import annotations
 
 import math
-from typing import Any, Callable, Generic, Iterator, Optional, Type, TypeVar
+from typing import Any, Awaitable, Callable, Generic, Iterator, Optional, Type, TypeVar
 
 from interactly._exceptions import NoMorePagesError
 from interactly._models import BaseAPIModel
@@ -141,7 +141,14 @@ class SyncPage(Generic[ItemT]):
         fetch_page: Callable[[int], "SyncPage[ItemT]"],
     ) -> "SyncPage[ItemT]":
         raw_items: list[Any] = _extract_items(raw)
-        items = [item_type.model_validate(i) if hasattr(item_type, "model_validate") else item_type(i) for i in raw_items]  # type: ignore[attr-defined]
+        # `item_type` is a pydantic model in every real call, but `ItemT` is unbounded, so a checker
+        # sees `type[object]` and rejects both branches: `.model_validate` is undefined on `object`
+        # and `object(i)` takes no arguments. The `hasattr` branch is the runtime contract; the ignore
+        # covers both codes rather than only `attr-defined`, which left `call-arg` reported.
+        items = [
+            item_type.model_validate(i) if hasattr(item_type, "model_validate") else item_type(i)  # type: ignore[attr-defined, call-arg]
+            for i in raw_items
+        ]
         meta = _build_metadata(raw)
         return cls(items=items, metadata=meta, fetch_page=fetch_page)
 
@@ -211,7 +218,7 @@ class AsyncPage(Generic[ItemT]):
         *,
         items: list[ItemT],
         metadata: PageMetadata,
-        fetch_page: Callable[[int], "Any"],  # Coroutine returning AsyncPage[ItemT]
+        fetch_page: Callable[[int], Awaitable["AsyncPage[ItemT]"]],
     ) -> None:
         self.items = items
         self.metadata = metadata
@@ -222,10 +229,17 @@ class AsyncPage(Generic[ItemT]):
         cls,
         raw: dict[str, Any],
         item_type: Type[ItemT],
-        fetch_page: Callable[[int], "Any"],
+        fetch_page: Callable[[int], Awaitable["AsyncPage[ItemT]"]],
     ) -> "AsyncPage[ItemT]":
         raw_items: list[Any] = _extract_items(raw)
-        items = [item_type.model_validate(i) if hasattr(item_type, "model_validate") else item_type(i) for i in raw_items]  # type: ignore[attr-defined]
+        # `item_type` is a pydantic model in every real call, but `ItemT` is unbounded, so a checker
+        # sees `type[object]` and rejects both branches: `.model_validate` is undefined on `object`
+        # and `object(i)` takes no arguments. The `hasattr` branch is the runtime contract; the ignore
+        # covers both codes rather than only `attr-defined`, which left `call-arg` reported.
+        items = [
+            item_type.model_validate(i) if hasattr(item_type, "model_validate") else item_type(i)  # type: ignore[attr-defined, call-arg]
+            for i in raw_items
+        ]
         meta = _build_metadata(raw)
         return cls(items=items, metadata=meta, fetch_page=fetch_page)
 

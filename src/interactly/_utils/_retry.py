@@ -24,7 +24,7 @@ import email.utils
 import random
 import time
 from datetime import datetime, timezone
-from typing import Callable, Optional
+from typing import Any, Callable, Coroutine, Optional
 
 import httpx
 
@@ -139,11 +139,14 @@ def with_retry(
         time.sleep(delay)
 
     # Unreachable, but satisfies the type checker.
-    return response  # type: ignore[return-value]
+    return response
 
 
 async def with_retry_async(
-    send: Callable[[], "asyncio.Coroutine[None, None, httpx.Response]"],
+    # `Coroutine[Any, Any, Response]`, not the `asyncio.Coroutine[...]` this used to say — that name
+    # does not exist on the asyncio module, so the annotation was unresolvable and every value flowing
+    # through it degraded to `Any`, taking the two return types with it.
+    send: Callable[[], Coroutine[Any, Any, httpx.Response]],
     max_retries: int,
     method: str,
 ) -> httpx.Response:
@@ -161,4 +164,4 @@ async def with_retry_async(
         )
         await asyncio.sleep(delay)
 
-    return response  # type: ignore[return-value]
+    return response

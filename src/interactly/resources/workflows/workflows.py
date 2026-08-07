@@ -19,7 +19,7 @@ Sub-resource (versions) is exposed as ``resource.versions``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -30,7 +30,8 @@ from interactly.types._config_types import WorkflowConfigOrDict
 from interactly.types.workflows.workflow import Workflow
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
-    from interactly.configs import WorkflowConfigFullyHydrated  # type: ignore[import]
+    from interactly._client import AsyncWorkflowClient, WorkflowClient
+    from interactly.configs import WorkflowConfigFullyHydrated
     from interactly.runtime.handle import AsyncWorkflowHandle, WorkflowHandle
 
 __all__ = ["WorkflowsResource", "AsyncWorkflowsResource"]
@@ -47,7 +48,7 @@ def _extract_hydrated_config(raw: Any) -> Dict[str, Any]:
     to those shapes so callers do not have to care.
     """
     if not isinstance(raw, dict):
-        return raw
+        return cast(Dict[str, Any], raw)
     payload: Dict[str, Any] = raw
     if "workflow" in payload and isinstance(payload["workflow"], dict):
         payload = payload["workflow"]
@@ -66,7 +67,11 @@ def _apply_hydrated_name(body: Dict[str, Any], *, name: Optional[str], descripti
     — up to the top level so the server persists it. Without this the created
     workflow's name comes back ``null``.
     """
-    workflow_config = body.get("workflow_config") if isinstance(body.get("workflow_config"), dict) else {}
+    # Bound once, then narrowed: `isinstance(body.get(...), dict)` narrows the call's result, not the
+    # separate call on the other side of the ternary, so the old one-liner still typed as
+    # `Any | dict | None` and `.get` below was unchecked.
+    raw_config = body.get("workflow_config")
+    workflow_config: Dict[str, Any] = raw_config if isinstance(raw_config, dict) else {}
     effective_name = name if name is not None else workflow_config.get("name")
     effective_description = description if description is not None else workflow_config.get("description")
     if effective_name is not None:
@@ -344,7 +349,11 @@ class WorkflowsResource(SyncAPIResource):
 
         config = self.get_fully_hydrated(workflow_id)
         return WorkflowHandle(
-            client=self._client,
+            # `_client` is declared as the transport base `SyncAPIClient`, but a resource is only ever
+            # constructed from the public `WorkflowClient` — which is what the handle needs, since it
+            # reaches for `client.runs`. Narrowed here rather than widening the handle's parameter,
+            # which would type away the very attribute it uses.
+            client=cast("WorkflowClient", self._client),
             workflow_id=workflow_id,
             config=config,
             dynamic_variables=dynamic_variables,
@@ -554,7 +563,8 @@ class AsyncWorkflowsResource(AsyncAPIResource):
 
         config = await self.get_fully_hydrated(workflow_id)
         return AsyncWorkflowHandle(
-            client=self._client,
+            # See the sync counterpart above.
+            client=cast("AsyncWorkflowClient", self._client),
             workflow_id=workflow_id,
             config=config,
             dynamic_variables=dynamic_variables,

@@ -44,7 +44,7 @@ def serialise_config(obj: Any, *, exclude_unset: bool = False) -> Any:
         otherwise *obj* unchanged.
     """
     try:
-        from pydantic import BaseModel  # type: ignore[import]
+        from pydantic import BaseModel
 
         if isinstance(obj, BaseModel):
             return obj.model_dump(mode="json", exclude_unset=exclude_unset)

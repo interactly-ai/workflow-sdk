@@ -6,7 +6,7 @@ Requires the ``[configs]`` extra::
 """
 
 try:
-    from interactly_configs.events import (  # type: ignore[import]
+    from interactly_configs.events import (
         AssistantResponseEvent,
         AthenaNodeEvent,
         BaseEvent,
@@ -55,7 +55,7 @@ try:
 
     # These two LLM-node events are defined in the ``event`` submodule but not
     # re-exported from the ``events`` package, so import them directly.
-    from interactly_configs.events.event import (  # type: ignore[import]
+    from interactly_configs.events.event import (
         ConditionEvaluatorLLMNodeEvent,
         DiscardedMainLLMNodeEvent,
     )

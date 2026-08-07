@@ -32,7 +32,7 @@ from interactly.types.runs.run_event import RunEvent
 from interactly.types.shared import WorkflowCommand
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
-    from interactly.configs import WorkflowRunInput  # type: ignore[import]
+    from interactly.configs import WorkflowRunInput
 
 __all__ = ["RunsResource", "AsyncRunsResource"]
 

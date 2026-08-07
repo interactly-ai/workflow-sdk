@@ -23,7 +23,7 @@ Pass ``cast_to=RunEvent`` to get typed events back.
 from __future__ import annotations
 
 import json
-from typing import Any, Awaitable, Callable, Generic, Iterator, Optional, Type, TypeVar
+from typing import Any, Awaitable, Callable, Generic, Iterator, Optional, Type, TypeVar, cast
 
 from interactly._exceptions import InteractlyError
 from interactly._utils._logs import logger
@@ -66,7 +66,7 @@ class AsyncStream(Generic[ItemT]):
 
     async def __aenter__(self) -> "AsyncStream[ItemT]":
         try:
-            import websockets  # type: ignore[import]
+            import websockets
         except ImportError as exc:
             raise ImportError(
                 "The 'websockets' package is required for streaming. "
@@ -108,7 +108,7 @@ class AsyncStream(Generic[ItemT]):
             raise StopAsyncIteration
 
         try:
-            import websockets  # type: ignore[import]
+            import websockets
         except ImportError as exc:
             raise ImportError(
                 "The 'websockets' package is required for streaming. "
@@ -136,8 +136,10 @@ class AsyncStream(Generic[ItemT]):
     def _parse(self, data: dict[str, Any]) -> ItemT:
         if self._cast_to is None:
             return data  # type: ignore[return-value]
+        # Same unbounded-`ItemT` situation as `_pagination._from_response`: the runtime contract is
+        # the `hasattr` branch, but a checker only sees `type[object]`.
         if hasattr(self._cast_to, "model_validate"):
-            return self._cast_to.model_validate(data)  # type: ignore[union-attr]
+            return cast(ItemT, self._cast_to.model_validate(data))  # type: ignore[attr-defined]
         return self._cast_to(data)  # type: ignore[call-arg]
 
 
@@ -175,7 +177,7 @@ class Stream(Generic[ItemT]):
 
     def __enter__(self) -> "Stream[ItemT]":
         try:
-            from anyio.from_thread import start_blocking_portal  # type: ignore[import]
+            from anyio.from_thread import start_blocking_portal
         except ImportError as exc:
             raise ImportError(
                 "The 'anyio' package is required for synchronous streaming. "
@@ -225,7 +227,7 @@ class Stream(Generic[ItemT]):
         if self._async_stream is None or self._portal is None:
             raise StopIteration
         try:
-            return self._portal.call(self._async_stream.__anext__)
+            return cast(ItemT, self._portal.call(self._async_stream.__anext__))
         except StopAsyncIteration:
             raise StopIteration
         except StopIteration:
