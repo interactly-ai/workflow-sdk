@@ -1,4 +1,4 @@
-.PHONY: install test lint format typecheck clean
+.PHONY: install test lint format typecheck clean sync-check parity-check schema-check
 
 VENV = .venv
 PYTHON = $(VENV)/bin/python
@@ -41,6 +41,33 @@ format:
 
 typecheck:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" $(VENV)/bin/mypy src/interactly --ignore-missing-imports
+
+# ------------------------------------------------------------------ #
+# Sync checks — is the SDK still in step with the workflow service?    #
+# ------------------------------------------------------------------ #
+# parity-check compares the vendored configs against the interactly-ai
+#   SOURCE tree. Needs the monorepo; skips cleanly without it.
+# schema-check compares them against a RUNNING server's JSON schemas.
+#   Needs INTERACTLY_BASE_URL + INTERACTLY_API_KEY; skips cleanly without.
+# They catch different drift — run both. Reports land in docs/_sync/.
+
+PARITY_REPORT ?= docs/_sync/config-parity.md
+SCHEMA_REPORT ?= docs/_sync/schema-drift.md
+
+parity-check:
+	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
+		$(PYTHON) tests/tools/config_parity.py -o $(PARITY_REPORT)
+
+schema-check:
+	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
+		$(PYTHON) tests/tools/schema_sync.py -o $(SCHEMA_REPORT)
+
+# Both run even when the first reports drift: these are reports, and stopping at the first
+# non-zero exit would hide the other half. `-` tells make to ignore the exit status. The individual
+# targets keep their real exit codes, so they still work as gates in CI (plan Phase 6.2).
+sync-check:
+	-@$(MAKE) parity-check
+	-@$(MAKE) schema-check
 
 # ------------------------------------------------------------------ #
 # Build                                                                #
