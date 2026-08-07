@@ -2,13 +2,12 @@
 
 - Upstream sources (3): `configs`, `event.py`, `acls.py`
 - Mirror:   `/Users/shivachaitanya/Documents/work/Interactly/repos_for_shiva_learnings/workflow-sdk/configs/src/interactly_configs`
-- **Total differences: 143** (2 placement differences, reported but not counted)
+- **Total differences: 147** (2 placement differences, reported but not counted)
 
-## Classes missing from the mirror (31)
+## Classes missing from the mirror (30)
 
 | Class | Upstream module |
 |---|---|
-| `AgenticGraphHolder` | `workflow.py` |
 | `BEDROCKModel` | `llm.py` |
 | `CallForwardExtraConfig` | `configurable_inbuilt_tools/call_forward.py` |
 | `CommentRequest` | `comment.py` |
@@ -140,6 +139,16 @@
 | `WorkflowRunFetchNodeRunOutput` | `events` | `StoredEvents` | `List` |
 | `WorkflowRunOutput` | `events` | `StoredEvents` | `List` |
 | `WorkflowShowStateEvent` | `thread_id` | `str` | `Optional[str]` |
+
+## Default value mismatches (5)
+
+| Class | Field | Upstream default | Mirror default |
+|---|---|---|---|
+| `BaseLLMNodeConfig` | `llms_config` | `WorkflowDefaultLLMConfig()` | `GlobalDefaultLLMConfig()` |
+| `BedrockLLMConfig` | `model` | `BEDROCKModel.GLM_4_7_FLASH` | `None` |
+| `SayLLMNodeConfig` | `llms_config` | `WorkflowDefaultLLMConfig()` | `GlobalDefaultLLMConfig()` |
+| `WorkerLLMNodeConfig` | `llms_config` | `WorkflowDefaultLLMConfig()` | `GlobalDefaultLLMConfig()` |
+| `WorkflowRunEvalLLMNodeConfig` | `llms_config` | `WorkflowDefaultLLMConfig()` | `GlobalDefaultLLMConfig()` |
 
 ## Enum values missing from the mirror (14)
 

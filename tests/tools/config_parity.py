@@ -71,7 +71,13 @@ KNOWN_MODULE_MAPPING: Dict[str, str] = {
 }
 
 #: Classes that legitimately exist on only one side, with the reason. Anything not listed is reported.
-KNOWN_ONLY_UPSTREAM: Dict[str, str] = {}
+KNOWN_ONLY_UPSTREAM: Dict[str, str] = {
+    # Server-runtime scaffolding, not wire contract: it holds a live WorkflowRuntime and pickled
+    # checkpoint BYTES, neither of which a client can construct, send, or interpret. Vendoring it
+    # would put an opaque `Optional[bytes]` blob in the public surface and imply the SDK can resume a
+    # runtime it has no way to run. Deliberately excluded (plan revision 4, risk 2).
+    "AgenticGraphHolder": "server-runtime scaffolding (live runtime + pickled checkpoint bytes)",
+}
 
 KNOWN_ONLY_MIRROR: Dict[str, str] = {
     "BaseAPIModel": "SDK-only base model",
@@ -105,6 +111,12 @@ class ClassInfo:
     bases: List[str] = field(default_factory=list)
     #: field name -> normalised annotation source
     fields: Dict[str, str] = field(default_factory=dict)
+    #: field name -> normalised default ("<required>" when the field has none)
+    defaults: Dict[str, str] = field(default_factory=dict)
+    #: field name -> {constraint kwarg: value}, e.g. {"ge": "0", "le": "100"}
+    constraints: Dict[str, Dict[str, str]] = field(default_factory=dict)
+    #: validator signatures, e.g. "field_validator:content" / "model_validator:after"
+    validators: Set[str] = field(default_factory=set)
     #: enum member name -> literal value (only for Enum subclasses)
     enum_members: Dict[str, object] = field(default_factory=dict)
     #: names assigned via `nonmember(...)` — capability data, not selectable members
@@ -113,6 +125,21 @@ class ClassInfo:
     @property
     def is_enum(self) -> bool:
         return any("Enum" in b for b in self.bases)
+
+
+#: `Field()` keywords that constrain accepted VALUES. A mismatch here is a real contract difference —
+#: the mirror would accept input the server rejects (or vice versa) without any type error to warn you.
+#: Presentation-only keywords (`title`, `description`, `json_schema_extra`) are deliberately absent.
+CONSTRAINT_KWARGS: Tuple[str, ...] = (
+    "ge", "gt", "le", "lt",
+    "min_length", "max_length",
+    "min_items", "max_items",
+    "pattern", "regex",
+    "multiple_of",
+)
+
+#: Marker for a field declared with no default — i.e. required.
+REQUIRED = "<required>"
 
 
 def _normalise_type(annotation: str) -> str:
@@ -143,11 +170,17 @@ def _extract_module(path: Path, module_name: str) -> Dict[str, ClassInfo]:
             name=node.name,
             module=module_name,
             bases=[ast.unparse(b) for b in node.bases],
+            validators=_extract_validators(node),
         )
         for stmt in node.body:
             # Annotated field: `name: Type = Field(...)`
             if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
-                info.fields[stmt.target.id] = _normalise_type(ast.unparse(stmt.annotation))
+                field_name = stmt.target.id
+                info.fields[field_name] = _normalise_type(ast.unparse(stmt.annotation))
+                info.defaults[field_name] = _extract_default(stmt.value)
+                constraints = _extract_constraints(stmt.value)
+                if constraints:
+                    info.constraints[field_name] = constraints
             # Bare assignment: an enum member, or capability data, or `model_config`.
             elif isinstance(stmt, ast.Assign):
                 for target in stmt.targets:
@@ -163,6 +196,108 @@ def _extract_module(path: Path, module_name: str) -> Dict[str, ClassInfo]:
                         continue
         out[node.name] = info
     return out
+
+
+def _is_field_call(value: Optional[ast.expr]) -> Optional[ast.Call]:
+    """The `Field(...)` call in `x: int = Field(default=5)`, or None if the RHS is a plain value."""
+    if isinstance(value, ast.Call):
+        func = value.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        if name == "Field":
+            return value
+    return None
+
+
+def _canonical_default(rendered: str) -> str:
+    """Collapse the ways of spelling the same default into one form.
+
+    Pydantic v2 deep-copies a mutable default per instance, so `default=Thing()` and
+    `default_factory=Thing` produce identical behaviour — likewise `default={}` and
+    `default_factory=dict`. Reporting those as differences would bury the ones that actually change
+    what the server receives, like `BEDROCKModel.GLM_4_7_FLASH` vs `None`.
+
+    Note this deliberately does NOT run `_normalise_type`: that applies house-style casing
+    (`dict` -> `Dict`), which is right for annotations and wrong for values — it would turn the
+    callable `dict` into the non-callable `Dict`.
+    """
+    text = " ".join(rendered.split()).replace('"', "'")
+    equivalents = {"factory:dict": "{}", "factory:list": "[]", "factory:set": "set()", "factory:tuple": "()"}
+    if text in equivalents:
+        return equivalents[text]
+    # `factory:Thing` <-> `Thing()`
+    if text.startswith("factory:"):
+        return f"{text[len('factory:'):]}()"
+    return text
+
+
+def _extract_default(value: Optional[ast.expr]) -> str:
+    """Normalised default for a field, or REQUIRED when it has none.
+
+    `Field(None, ...)` and `Field(default=None, ...)` mean the same thing and must compare equal, so
+    a leading positional argument is read as `default`. `Field(...)` (literal Ellipsis) means required.
+    """
+    if value is None:
+        return REQUIRED
+
+    call = _is_field_call(value)
+    if call is None:
+        return _canonical_default(ast.unparse(value))
+
+    for keyword in call.keywords:
+        if keyword.arg == "default":
+            return _canonical_default(ast.unparse(keyword.value))
+        if keyword.arg == "default_factory":
+            return _canonical_default(f"factory:{ast.unparse(keyword.value)}")
+    if call.args:
+        rendered = ast.unparse(call.args[0])
+        return REQUIRED if rendered == "..." else _canonical_default(rendered)
+    return REQUIRED
+
+
+def _extract_constraints(value: Optional[ast.expr]) -> Dict[str, str]:
+    """Value constraints declared on a `Field(...)`, e.g. `{"ge": "0", "le": "100"}`."""
+    call = _is_field_call(value)
+    if call is None:
+        return {}
+    return {
+        keyword.arg: ast.unparse(keyword.value)
+        for keyword in call.keywords
+        if keyword.arg in CONSTRAINT_KWARGS
+    }
+
+
+def _extract_validators(node: ast.ClassDef) -> Set[str]:
+    """Validator decorators on a class, as comparable signatures.
+
+    Compares *presence and target*, not body: a validator's logic is prose to an AST walk, but a
+    missing one is a concrete gap — `SelfLoopConfig`'s cross-field check and `CommentRequest`'s
+    blank-rejection are contract, and silently dropping either would let the mirror build a config
+    the server refuses.
+    """
+    found: Set[str] = set()
+    for stmt in node.body:
+        if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in stmt.decorator_list:
+            call = decorator if isinstance(decorator, ast.Call) else None
+            func = call.func if call else decorator
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+            if name not in ("field_validator", "model_validator", "validator", "root_validator"):
+                continue
+            targets = []
+            if call:
+                targets = [
+                    ast.literal_eval(arg)
+                    for arg in call.args
+                    if isinstance(arg, ast.Constant) and isinstance(arg.value, str)
+                ]
+                targets += [
+                    ast.unparse(kw.value).strip("'\"")
+                    for kw in call.keywords
+                    if kw.arg == "mode"
+                ]
+            found.add(f"{name}:{','.join(sorted(targets)) or '*'}")
+    return found
 
 
 def _is_nonmember_call(value: ast.expr) -> bool:
@@ -199,8 +334,8 @@ def extract_tree(roots: List[Path]) -> Dict[str, ClassInfo]:
     return index
 
 
-def resolve_fields(name: str, index: Dict[str, ClassInfo]) -> Dict[str, str]:
-    """All fields visible on a class, including inherited ones. Subclass declarations win.
+def _resolve_attribute(name: str, index: Dict[str, ClassInfo], attribute: str) -> Dict[str, object]:
+    """Merge one per-field mapping (`fields` / `defaults` / `constraints`) across the inheritance chain.
 
     Without this, a field declared on a base upstream but re-declared per subclass (or vice versa)
     reads as a difference when the two are equivalent — the `tool_id` false positive that motivated
@@ -208,15 +343,47 @@ def resolve_fields(name: str, index: Dict[str, ClassInfo]) -> Dict[str, str]:
     """
     seen: Set[str] = set()
 
-    def walk(class_name: str) -> Dict[str, str]:
+    def walk(class_name: str) -> Dict[str, object]:
         if class_name in seen or class_name not in index:
             return {}
         seen.add(class_name)
         info = index[class_name]
-        merged: Dict[str, str] = {}
+        merged: Dict[str, object] = {}
         for base in info.bases:
             merged.update(walk(base))
-        merged.update(info.fields)  # own declarations override inherited ones
+        merged.update(getattr(info, attribute))  # own declarations override inherited ones
+        return merged
+
+    return walk(name)
+
+
+def resolve_fields(name: str, index: Dict[str, ClassInfo]) -> Dict[str, str]:
+    """All fields visible on a class, including inherited ones. Subclass declarations win."""
+    return {k: str(v) for k, v in _resolve_attribute(name, index, "fields").items()}
+
+
+def resolve_defaults(name: str, index: Dict[str, ClassInfo]) -> Dict[str, str]:
+    """All field defaults visible on a class, inherited ones included."""
+    return {k: str(v) for k, v in _resolve_attribute(name, index, "defaults").items()}
+
+
+def resolve_constraints(name: str, index: Dict[str, ClassInfo]) -> Dict[str, Dict[str, str]]:
+    """All field value-constraints visible on a class, inherited ones included."""
+    return {k: dict(v) for k, v in _resolve_attribute(name, index, "constraints").items()}  # type: ignore[arg-type]
+
+
+def resolve_validators(name: str, index: Dict[str, ClassInfo]) -> Set[str]:
+    """All validator signatures visible on a class, inherited ones included."""
+    seen: Set[str] = set()
+
+    def walk(class_name: str) -> Set[str]:
+        if class_name in seen or class_name not in index:
+            return set()
+        seen.add(class_name)
+        info = index[class_name]
+        merged: Set[str] = set(info.validators)
+        for base in info.bases:
+            merged |= walk(base)
         return merged
 
     return walk(name)
@@ -234,6 +401,9 @@ class ParityReport:
     missing_fields: List[Tuple[str, str, str]] = field(default_factory=list)  # (class, field, type)
     extra_fields: List[Tuple[str, str, str]] = field(default_factory=list)
     type_mismatches: List[Tuple[str, str, str, str]] = field(default_factory=list)  # cls, fld, up, mir
+    default_mismatches: List[Tuple[str, str, str, str]] = field(default_factory=list)
+    constraint_mismatches: List[Tuple[str, str, str, str]] = field(default_factory=list)
+    missing_validators: List[Tuple[str, str]] = field(default_factory=list)  # (class, signature)
     missing_enum_values: List[Tuple[str, str]] = field(default_factory=list)  # (enum, value)
     extra_enum_values: List[Tuple[str, str]] = field(default_factory=list)
     missing_nonmembers: List[Tuple[str, str]] = field(default_factory=list)   # (enum, attr)
@@ -247,6 +417,9 @@ class ParityReport:
             + len(self.missing_fields)
             + len(self.extra_fields)
             + len(self.type_mismatches)
+            + len(self.default_mismatches)
+            + len(self.constraint_mismatches)
+            + len(self.missing_validators)
             + len(self.missing_enum_values)
             + len(self.extra_enum_values)
             + len(self.missing_nonmembers)
@@ -256,6 +429,11 @@ class ParityReport:
     def is_clean(self) -> bool:
         """Placement differences are informational and do not fail the report."""
         return self.total == 0
+
+
+def _render_rules(rules: Dict[str, str]) -> str:
+    """`{"ge": "0", "le": "100"}` -> `ge=0, le=100`; empty -> `(none)`."""
+    return ", ".join(f"{k}={v}" for k, v in sorted(rules.items())) or "(none)"
 
 
 def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> ParityReport:
@@ -292,6 +470,30 @@ def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> Par
         for fname, ftype in sorted(mir_fields.items()):
             if not ignored(name, fname) and fname not in up_fields:
                 report.extra_fields.append((name, fname, ftype))
+
+        # Defaults, value constraints and validators. A field can match on name AND type and still
+        # behave differently — a default of None vs 3, a missing `le=100`, or an absent cross-field
+        # validator all let the mirror build a config the server rejects, with no type error to warn you.
+        up_defaults, mir_defaults = resolve_defaults(name, upstream), resolve_defaults(mirror_name, mirror)
+        for fname, up_default in sorted(up_defaults.items()):
+            if ignored(name, fname) or fname not in mir_defaults:
+                continue  # absent fields are already reported above
+            if mir_defaults[fname] != up_default:
+                report.default_mismatches.append((name, fname, up_default, mir_defaults[fname]))
+
+        up_constraints = resolve_constraints(name, upstream)
+        mir_constraints = resolve_constraints(mirror_name, mirror)
+        for fname, up_rules in sorted(up_constraints.items()):
+            if ignored(name, fname) or fname not in mir_fields:
+                continue
+            mir_rules = mir_constraints.get(fname, {})
+            if mir_rules != up_rules:
+                report.constraint_mismatches.append(
+                    (name, fname, _render_rules(up_rules), _render_rules(mir_rules))
+                )
+
+        for signature in sorted(resolve_validators(name, upstream) - resolve_validators(mirror_name, mirror)):
+            report.missing_validators.append((name, signature))
 
         if up_info.is_enum or mir_info.is_enum:
             up_values = {str(v) for v in up_info.enum_members.values()}
@@ -405,6 +607,24 @@ def render_markdown(report: ParityReport, upstream_roots: List[Path], mirror_roo
         "|---|---|---|---|",
     )
     section(
+        "Default value mismatches",
+        [f"| `{c}` | `{f}` | `{u}` | `{m}` |" for c, f, u, m in report.default_mismatches],
+        "| Class | Field | Upstream default | Mirror default |",
+        "|---|---|---|---|",
+    )
+    section(
+        "Value constraint mismatches",
+        [f"| `{c}` | `{f}` | `{u}` | `{m}` |" for c, f, u, m in report.constraint_mismatches],
+        "| Class | Field | Upstream | Mirror |",
+        "|---|---|---|---|",
+    )
+    section(
+        "Validators missing from the mirror",
+        [f"| `{c}` | `{s}` |" for c, s in report.missing_validators],
+        "| Class | Validator |",
+        "|---|---|",
+    )
+    section(
         "Enum values missing from the mirror",
         [f"| `{e}` | `{v}` |" for e, v in report.missing_enum_values],
         "| Enum | Value |",
@@ -458,6 +678,9 @@ def main() -> int:
         f"classes missing={len(report.missing_classes)} extra={len(report.extra_classes)} | "
         f"fields missing={len(report.missing_fields)} extra={len(report.extra_fields)} "
         f"type-mismatch={len(report.type_mismatches)} | "
+        f"default-mismatch={len(report.default_mismatches)} "
+        f"constraint-mismatch={len(report.constraint_mismatches)} "
+        f"validators-missing={len(report.missing_validators)} | "
         f"enum missing={len(report.missing_enum_values)} extra={len(report.extra_enum_values)} "
         f"nonmember-missing={len(report.missing_nonmembers)} | "
         f"placement={len(report.placement)}"

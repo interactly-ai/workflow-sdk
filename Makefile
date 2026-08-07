@@ -1,4 +1,4 @@
-.PHONY: install test lint format typecheck clean sync-check parity-check schema-check
+.PHONY: install test lint format typecheck clean sync-check parity-check schema-check refs-check
 
 VENV = .venv
 PYTHON = $(VENV)/bin/python
@@ -68,6 +68,15 @@ schema-check:
 sync-check:
 	-@$(MAKE) parity-check
 	-@$(MAKE) schema-check
+
+# refs-check resolves every interactly/interactly_configs symbol used in
+#   wf_examples/, notebooks/ and docs/ against the INSTALLED packages. Renaming
+#   a class or deleting an enum member breaks those files without touching a
+#   single unit test, and this catches it offline in under a second.
+#   Run it after every Phase 2 rename or enum deletion.
+refs-check:
+	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
+		$(PYTHON) tests/tools/symbol_refs.py --verbose
 
 # ------------------------------------------------------------------ #
 # Build                                                                #
