@@ -2,7 +2,7 @@
 
 > **Progressive curriculum · step 13 of 23.** Configure nodes to use alternative model providers (Azure / Google / Anthropic) and a platform default.
 
-**Concepts introduced here:** provider LLM configs, `GlobalDefaultLLMConfig`, per-node model selection
+**Concepts introduced here:** provider LLM configs, `WorkflowDefaultLLMConfig`, per-node model selection
 
 | | |
 |---|---|
@@ -15,7 +15,7 @@
 
 This workflow illustrates how to configure different LLM providers on a per-node basis.
 Interactly supports OpenAI, Azure OpenAI, Google Gemini, Anthropic Claude, and a
-GlobalDefaultLLMConfig that delegates to the platform-level default.
+WorkflowDefaultLLMConfig that delegates to the platform-level default.
 
 Each provider has its own model enum and provider-specific optional fields (e.g.
 reasoning_effort for GPT-5, thinking_budget for Gemini and Claude).
