@@ -239,6 +239,30 @@ When `is_secret=True`:
 
 Use `is_secret=True` for API keys, tokens, passwords, and other sensitive data.
 
+### System-provided variables (`is_system`)
+
+Two variables are provided automatically for every team and appear in `list()` and `resolve()`
+alongside your own:
+
+| Name | Contents |
+|---|---|
+| `interactly_api_base_url` | Public API base URL for this environment. |
+| `interactly_api_token` | Your team's API key, for calling Interactly APIs from a tool. Returned **masked**. |
+
+They carry `is_system=True`, category `"System"`, and a synthetic id of the form `system:<name>`.
+They **cannot be created, updated, or deleted** — the write endpoints only ever touch your team's own
+variables, and a name collision is refused.
+
+```python
+page = await client.global_variables.list()
+mine = [v for v in page.items if not v.is_system]
+```
+
+Use them in a workflow exactly like any other: `{{global.interactly_api_base_url}}`. The token is
+masked in every list/resolve response — the execution engine substitutes the real value at run time.
+Filter them out whenever you render an editable list, or a user will try to edit one and get an
+error.
+
 ### Naming conventions
 
 Variable names must be valid for use in `{{global.<name>}}` syntax. Use lowercase letters, digits, and underscores:
@@ -283,6 +307,9 @@ resolved = client.global_variables.resolve()
 - [Global Variables API reference](../api_async.md) — endpoint documentation
 
 ## Gotchas
+
+- **System variables are read-only.** `is_system=True` rows cannot be updated or deleted, and
+  `interactly_api_token` is always masked in responses.
 
 - Variable names are case-sensitive. `api_key` and `API_KEY` are different variables.
 - Once a variable is set as `is_secret=True`, its value is redacted in all API responses. You can update the value, but you cannot read it back.

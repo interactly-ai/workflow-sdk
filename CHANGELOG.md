@@ -9,6 +9,81 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Workflow-service sync (2026-08)
+
+Brings the SDK back in line with the workflow service, which had drifted since 2026-07-20. The SDK
+remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bson` or `pymongo`.
+
+#### Added
+- **Re-runs** — `client.reruns`: `rerunnable_turns`, `preflight`, `create_token`, `preview_token`,
+  `amend_token`, `execute`. Replay a finished run from any turn, optionally against a different
+  workflow or version. Two preconditions worth knowing: only **WebSocket-driven** runs can be re-run
+  (the config snapshot is written by `stream()`, not `execute()`), and a token is redeemed by passing
+  `rerun_token=` to `stream()`. See [`docs/guides/reruns.md`](docs/guides/reruns.md).
+- **Run feedback** — ratings and comments at turn and event level:
+  `set_turn_rating`, `set_event_rating`, `delete_turn_rating`, `delete_event_rating`,
+  `add_turn_comment`, `delete_turn_comment`. Every write returns the full list plus a
+  `feedback_users` map. Refused with `409` while the run is still in progress.
+  See [`docs/guides/run_feedback.md`](docs/guides/run_feedback.md).
+- **Background work** — `client.runs.pump_companions()` and the bounded
+  `client.runs.drive_background_work()`, plus `has_background_work` on `InteractiveRunResponse`.
+  REST-driven runs do not advance companion threads on their own.
+- **Companion threads** (`CompanionThreadConfig` on direct edges), **evaluate-while-waiting**
+  (`EvaluateWhileWaitingConfig` on conditional edges) and **bounded self-loops** (`SelfLoopConfig` on
+  nodes), with the `edge_is_companion` / `edge_companion_thread_id` /
+  `edge_evaluates_while_waiting` / `edge_waiting_evaluation_config` accessors.
+- **`NoOpNodeConfig`** — a node that runs and succeeds without doing anything: a fan-in junction, a
+  placeholder, or a branch-testing stand-in. Not the same as `disabled=True`, which emits nothing.
+- **Run lineage filters** — `client.runs.list(source_workflow_run_id=..., source_turn_index=...)`.
+- **Tool portability** — `client.tools.export()` / `client.tools.import_bundle()`. Secrets are
+  redacted on export; an `inline_python` bundle requires `confirm_executable=True`.
+- **Streaming exceptions** — `InvalidStreamInputError` (close 4006) and `RerunTokenError`
+  (close 4007), both subclasses of `StreamError`; and `BadRequestError` for graph-validation 400s,
+  whose message joins the server's category and the specific rule that failed.
+- Seven new event types re-exported from `interactly.runtime.events`:
+  `CompanionStepBoundaryEvent`, `WaitingEvaluationBoundaryEvent`, `WaitingConditionMatchedEvent`,
+  `WorkflowReadyForInputEvent`, `SelfLoopDelayEvent`, `SelfLoopExhaustedEvent`, `NodeExpiredEvent` —
+  along with `GuardrailEscalationEdgeEvent`, `WorkflowIterationMetrics` and
+  `should_persist_background_event`.
+- **`is_system` on global variables** — `interactly_api_base_url` and `interactly_api_token` are
+  provided automatically for every team and are read-only.
+- **Drift harnesses** and their make targets: `make parity-check` (SDK configs vs. upstream source),
+  `make schema-check` (vs. a live server's JSON schemas), `make refs-check` (symbols referenced in
+  docs/notebooks/examples), `make api-docs-check` (generated API reference is current).
+
+#### Changed
+- **`client.runs.checkpoint()` removed.** The endpoint no longer exists server-side; `client.reruns`
+  replaces it and does more.
+- `client.runs.stream()` takes `rerun_token=`; a frame carrying `initial_state` is now rejected by
+  the server with close code 4006.
+- `WorkflowConfigFullyHydrated` upgrades each node through the discriminated union on validation.
+  Previously, validating a plain `dict` against `SerializeAsAny[BaseNodeConfig]` coerced it to the
+  base class and **silently discarded every subclass field**, so a fetch → modify → upload round trip
+  lost most of the workflow. An unknown node type now falls back to an `extra="allow"` model rather
+  than failing the whole workflow.
+- `client.workflows.get_fully_hydrated()` unwraps the server's nested response shape, which had
+  never returned a usable config.
+
+#### Fixed
+- `make install` had been broken since 2026-07-14: `pyproject.toml` still declared
+  `license = { file = "LICENSE" }` after the root `LICENSE` was deleted, so metadata generation
+  failed.
+- `make typecheck` was checking nothing — two stray empty `__init__.py` files made mypy bail with
+  "Source file found twice". Removing them surfaced 79 real type errors, all now fixed.
+- `is_given()` returned `bool` rather than `TypeGuard[T]`, so narrowing never happened at any call
+  site.
+
+#### Docs
+- New guides: [re-runs](docs/guides/reruns.md), [companion threads](docs/guides/companion_threads.md),
+  [evaluate while waiting](docs/guides/waiting_evaluation.md),
+  [self-loops](docs/guides/self_loops.md), [run feedback](docs/guides/run_feedback.md).
+- `docs/streaming.md` rewritten. It had documented four `RunEvent` fields that do not exist, the
+  wrong types for `is_terminal()`, a `run.output` attribute that does not exist, and the removed
+  `checkpoint` endpoint.
+- `wf_examples/internal/gen_api_reference.py` restored (it was referenced by both API-reference
+  pages but absent from the repo, so the "generated" tables had been drifting by hand). `make
+  api-docs` regenerates; `make api-docs-check` gates.
+
 ### Added
 - **Direct tool execution**: `client.tools.execute(tool_id, args=...)` runs a saved tool with the given argument values and returns a typed `ToolExecuteResult` (`success`, `result`, `error`, `latency_ms`) — no workflow required. `client.tools.execute_inline(tool_config=..., args=...)` does the same for an unsaved config. Backed by new `POST /v1/tools/{id}/execute` and `POST /v1/tools/execute` endpoints on the Interactly Workflow API (with a wall-clock timeout; tool failures return `success=False` rather than an HTTP error). Note: inline-Python tools execute via unsandboxed `exec` server-side — intended for authoring/debugging within a team's own workspace.
 - **Runtime surface**: `WorkflowRuntime` / `AsyncWorkflowRuntime` with `from_config(config, *, client, dynamic_variables=None, ...)` — a `from_config(...)` runtime that reads like an in-process runtime, the only difference being the `client=` argument (execution is remote). Exported from `interactly` and `interactly.runtime`.

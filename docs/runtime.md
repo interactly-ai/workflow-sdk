@@ -124,11 +124,32 @@ to a generic `BaseEvent` (so a newer server never breaks an older SDK). The main
 | Turn / thread | `AssistantResponseEvent`, `UserMessagesEvent`, `BusyWaitEvent`, `BusyWaitForUserMessageEvent`, `PauseEvent`, `StartThreadEvent`, `EndThreadEvent`, `PauseThreadEvent` |
 | Node run | `StartRunNodeEvent`, `EndRunNodeEvent`, `SayLLMNodeEvent`, `WorkerLLMNodeEvent`, `SayStaticMessageNodeEvent`, `HttpRequestNodeEvent`, `SendSMSNodeEvent`, `StartConversationNodeEvent`, `EndConversationNodeEvent`, `AthenaNodeEvent`, `GoogleDocs*NodeEvent`, `ForceTransferToNodeEvent` |
 | LLM detail | `BaseLLMNodeEvent`, `ConditionEvaluatorLLMNodeEvent`, `DiscardedMainLLMNodeEvent` |
-| Edge | `DirectEdgeEvent`, `ConditionalEdgeEvent`, `CompanionEdgeEvent`, `ReverseConditionalEdgeEvent`, `SelfLoopEdgeEvent` |
+| Edge | `DirectEdgeEvent`, `ConditionalEdgeEvent`, `CompanionEdgeEvent`, `ReverseConditionalEdgeEvent`, `SelfLoopEdgeEvent`, `GuardrailEscalationEdgeEvent` |
+| Background execution | `CompanionStepBoundaryEvent`, `WaitingEvaluationBoundaryEvent`, `WaitingConditionMatchedEvent`, `WorkflowReadyForInputEvent` |
+| Bounded self-loops | `SelfLoopDelayEvent`, `SelfLoopExhaustedEvent` (carries `SelfLoopOutcome`), `NodeExpiredEvent` |
 
 The two you'll handle most often: **`AssistantResponseEvent`** (the assistant said something —
 `event.content`) and **`BusyWaitForUserMessageEvent`** (the workflow is waiting for the user's next
 message). Use `parse_event(raw_dict)` to deserialize a raw event dict into its typed instance.
+
+### Background work
+
+Once a workflow has [companion threads](guides/companion_threads.md) or
+[evaluate-while-waiting edges](guides/waiting_evaluation.md), `EndWorkflowIterationEvent` stops
+meaning "your turn" — companions may still be running. Wait for `WorkflowReadyForInputEvent`, which
+also carries `active_companion_thread_ids`.
+
+Every event exposes `thread_reference_id` as a **computed field**: `"0"` for the main thread, or the
+companion's configured `thread_id`. It is derived from the internal thread id rather than stored, so
+it is present on events written before the feature existed.
+
+`should_persist_background_event(event)` mirrors the server's own rule: non-transitioning
+`WaitingEvaluationBoundaryEvent`s recur on every background pass and are not written to the run
+record, though they do arrive on the wire.
+
+`EndWorkflowIterationEvent` carries `WorkflowIterationMetrics` — including
+`IterationCallLatencyStats` and `StructuredOutputRetryMetadata` when an LLM call had to retry to
+produce valid structured output.
 
 See [`wf_examples/wf_example_progression_1.py`](../wf_examples/wf_example_progression_1.py) for an
 end-to-end runnable example and [`wf_examples/README.md`](../wf_examples/README.md) for the full

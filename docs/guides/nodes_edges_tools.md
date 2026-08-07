@@ -25,6 +25,27 @@ async with AsyncWorkflowClient() as client:
     # ]
 ```
 
+### The no-op node
+
+`no_op` runs and succeeds without doing anything else. Three uses:
+
+```python
+import interactly_configs as ic
+
+junction = ic.NoOpNodeConfig(name="junction")                      # fan-in point
+placeholder = ic.NoOpNodeConfig(name="eligibility", note="TODO: real check")
+slow = ic.NoOpNodeConfig(name="slow", delay_seconds=2.0)           # testing only
+failing = ic.NoOpNodeConfig(name="boom", simulate_failure=True)    # testing only
+```
+
+**It is not `disabled=True`.** A disabled node is skipped entirely and emits nothing, so downstream
+conditional edges have nothing to branch on. A no-op node *runs*: it emits the usual node
+start/end events and writes `no_op_result` and `no_op_result_success` to thread state — which is
+exactly what makes it usable as a fan-in junction or a branch-testing stand-in.
+
+`simulate_failure=True` reports `success=False` without aborting the run, so you can exercise a
+failure branch with no failing integration behind it.
+
 ### Node schema
 
 Retrieve the JSON Schema for a specific node type (config, run inputs, run outputs).
@@ -149,6 +170,34 @@ schema = await client.edges.schema("conditional")
 #     "config_schema": {...},
 #     "run_input_schema": {...}
 # }
+```
+
+### Extra edge behaviour
+
+Three optional configs change *when* an edge is considered, not where it goes. Each has its own
+guide:
+
+| Config | On | Effect |
+|---|---|---|
+| `companion_thread_config` | direct edges | Forks a background thread — [Companion threads](companion_threads.md) |
+| `evaluate_while_waiting_config` | conditional edges | Fires while the source node is parked — [Evaluate while waiting](waiting_evaluation.md) |
+| `self_loop_config` | **nodes**, not edges | Bounded re-execution — [Self-loops](self_loops.md) |
+
+```python
+ic.DirectEdgeConfig(
+    source_node_logical_id=entry.logical_id,
+    destination_node_logical_id=poller.logical_id,
+    companion_thread_config=ic.CompanionThreadConfig(is_companion_thread=True, thread_id="labpoll"),
+)
+```
+
+Read them back with the defensive helpers, which are safe on any edge:
+
+```python
+ic.edge_is_companion(edge)
+ic.edge_companion_thread_id(edge)
+ic.edge_evaluates_while_waiting(edge)
+ic.edge_waiting_evaluation_config(edge)
 ```
 
 ### Create a standalone edge
@@ -415,6 +464,31 @@ updated_tool = await client.tools.update(
 )
 ```
 
+### Export & import a tool
+
+Move a tool between teams or environments:
+
+```python
+bundle = await client.tools.export(tool_id)
+
+imported = await client.tools.import_bundle(
+    bundle,
+    name_override="Eligibility check (staging)",
+    secret_overrides={"api_headers.Authorization": "Bearer ..."},
+)
+```
+
+Two things the server insists on, both worth knowing before the call fails:
+
+- **Secrets are redacted on export**, never included. The bundle records which fields were dropped;
+  re-supply them by dotted path via `secret_overrides`.
+- **`inline_python` bundles require `confirm_executable=True`.** Such a bundle carries code that will
+  run in your team's context, so it is refused unless you say so explicitly.
+
+`clear_unresolved_refs` (default `True`) strips team-scoped references — knowledge-base ids and the
+like — that cannot resolve in the importing team, rather than importing a tool that silently points
+at another team's resources.
+
 ### Delete a tool
 
 ```python
@@ -487,6 +561,8 @@ Tools are attached to LLM nodes via the node's `tools_config`; there is no separ
 - **Inbuilt tools don't need creation**: They are pre-registered globally and referenced by `tool_id` (e.g., `"math_add"`).
 - **Standalone node/edge/tool IDs vs. workflow nodes**: A standalone node created via `nodes.create()` gets a `id`. When that node is added to a workflow, it is part of the graph's JSON config and referenced by its `logical_id`.
 - **Tool attachment**: Tools are attached to LLM nodes via the node's `tools_config`; the SDK does not enforce this at the node/tool API level.
+- **`no_op` is not `disabled`**: a disabled node emits nothing; a no-op node runs and emits events.
+- **Import refuses `inline_python` by default**: pass `confirm_executable=True` deliberately.
 - **Typed configs need the extra**: The typed classes require `pip install interactly[configs]`. Without it, use the dict form shown in each section.
 
 ---
@@ -519,6 +595,9 @@ for node in page:
 
 ## See also
 
+- [Companion threads](companion_threads.md) — `companion_thread_config` on direct edges
+- [Evaluate while waiting](waiting_evaluation.md) — `evaluate_while_waiting_config`
+- [Self-loops](self_loops.md) — `self_loop_config` on nodes
 - [Workflows and Versions](workflows_and_versions.md) — manage workflow lifecycle and versioning
 - [Running Workflows](running_workflows.md) — execute a workflow with its nodes and edges
 - [Monitoring Runs](monitoring_runs.md) — inspect node outputs and events

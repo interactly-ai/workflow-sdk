@@ -113,3 +113,31 @@ class TestConfigsModuleWhenInstalled:
                 f"interactly.configs should re-export {symbol!r} when interactly_configs is installed"
             )
 
+
+
+class TestFacadeIsExhaustive:
+    """The facade must re-export everything ``interactly_configs`` publishes.
+
+    A hand-maintained re-export list drifts silently: a symbol added upstream is simply absent from
+    ``interactly.configs``, and to a caller that is indistinguishable from the symbol not existing.
+    This test is what keeps the module docstring's promise true.
+    """
+
+    def test_all_matches_interactly_configs(self):
+        import interactly_configs
+
+        import interactly.configs as facade
+
+        # ``__version__`` is deliberately excluded — see the note in configs.py.
+        expected = set(interactly_configs.__all__) - {"__version__"}
+        missing = sorted(expected - set(facade.__all__))
+        assert not missing, (
+            "interactly.configs is missing re-exports that interactly_configs publishes: "
+            f"{missing}. Add them to the import block and __all__ in src/interactly/configs.py."
+        )
+
+    def test_every_exported_name_resolves(self):
+        import interactly.configs as facade
+
+        unresolved = sorted(name for name in facade.__all__ if not hasattr(facade, name))
+        assert not unresolved, f"interactly.configs.__all__ lists names it does not define: {unresolved}"

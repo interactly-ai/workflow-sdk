@@ -19,6 +19,8 @@ dashboard, expressed as typed Python config objects and driven through a typed c
 | Understand what the SDK is and read a guided tour | [`docs/`](docs/) — start at [`docs/README.md`](docs/README.md) |
 | Run interactive, executable lessons | [`notebooks/`](notebooks/) — start at `00_index.ipynb` |
 | Look up a method signature | [`docs/api_async.md`](docs/api_async.md) (async) · [`docs/api_sync.md`](docs/api_sync.md) (sync) |
+| Run work in the background while the caller talks | [`docs/guides/companion_threads.md`](docs/guides/companion_threads.md) |
+| Replay a finished run from any turn | [`docs/guides/reruns.md`](docs/guides/reruns.md) |
 
 ---
 
@@ -267,8 +269,13 @@ workflow_sdk/
   client-side reference. See [`docs/runtime.md`](docs/runtime.md).
 - The client comes in **sync** (`WorkflowClient`) and **async** (`AsyncWorkflowClient`) forms with
   identical surfaces. List endpoints return paginated `SyncPage` / `AsyncPage` objects.
+- A run can carry **companion threads** — background threads that keep working while the main thread
+  waits for the caller — and a finished run driven over WebSocket can be **re-run** from any turn.
+  See [`docs/guides/companion_threads.md`](docs/guides/companion_threads.md) and
+  [`docs/guides/reruns.md`](docs/guides/reruns.md).
 
 ## License
 
-See [`LICENSE`](LICENSE). Security policy in [`SECURITY.md`](SECURITY.md); contribution guide in
+Proprietary — internal Interactly code, distributed to customers under their existing agreement.
+Security policy in [`SECURITY.md`](SECURITY.md); contribution guide in
 [`CONTRIBUTING.md`](CONTRIBUTING.md); release history in [`CHANGELOG.md`](CHANGELOG.md).

@@ -11,6 +11,7 @@ from `InteractlyError` (the exception is `WebhookVerificationError`, a standalon
 ```
 InteractlyError
 ├── APIError                       # Any response received from the API
+│   ├── BadRequestError            # 400 — request rejected as invalid
 │   ├── AuthenticationError        # 401 — invalid or missing credentials
 │   ├── PermissionDeniedError      # 403 — caller lacks required permissions
 │   ├── NotFoundError              # 404 — resource does not exist
@@ -22,6 +23,8 @@ InteractlyError
 │   └── APITimeoutError            # Request timed out
 ├── NoMorePagesError               # Advanced past the last page of a paginator
 └── StreamError                    # WebSocket / streaming failure
+    ├── InvalidStreamInputError    # close 4006 — start frame carried client-supplied state
+    └── RerunTokenError            # close 4007 — re-run token expired or mismatched
 
 WebhookVerificationError           # Standalone Exception (not an InteractlyError) — HMAC signature mismatch
 ```
@@ -103,6 +106,84 @@ async with AsyncWorkflowClient() as client:
     except UnprocessableEntityError as e:
         print(e.message)
 ```
+
+---
+
+## Graph Validation Errors (400)
+
+The workflow service rejects a graph that violates one of its structural rules with
+`400 Bad Request` — companion-thread layout, evaluate-while-waiting edges, and similar. These arrive as
+`BadRequestError`.
+
+Such responses carry **two** strings: `message` names the category, and `error` says which rule
+actually failed. The SDK joins both, so the exception tells you what to change rather than only that
+something is wrong:
+
+```python
+from interactly import AsyncWorkflowClient, BadRequestError
+
+async with AsyncWorkflowClient() as client:
+    try:
+        await client.workflows.create_from_config(config)
+    except BadRequestError as exc:
+        print(exc)
+        # Invalid 'evaluate while waiting for user input' edge configuration:
+        # Edge 'e1' has evaluate_while_waiting_config enabled but its source node also has
+        # outgoing direct edges, which take precedence on the normal transition path.
+
+        print(exc.body)   # the raw {"message": ..., "error": ...} dict
+```
+
+The rules behind these are documented in
+[Companion threads](guides/companion_threads.md#the-four-graph-rules) and
+[Evaluate while waiting](guides/waiting_evaluation.md#the-validation-rules).
+
+---
+
+## Streaming Errors
+
+Most WebSocket closures simply end the stream. Two are the server rejecting your start frame, and each
+raises a specific subclass of `StreamError`:
+
+```python
+from interactly import InvalidStreamInputError, RerunTokenError, StreamError
+
+try:
+    async with client.runs.stream(workflow_id=wf_id, rerun_token=token) as events:
+        async for event in events:
+            ...
+except InvalidStreamInputError:
+    # close 4006 — the frame carried `initial_state`. A client is never the source of run
+    # state; mint a re-run token instead.
+    ...
+except RerunTokenError:
+    # close 4007 — expired, or minted for a different workflow/version. Mint a fresh one.
+    ...
+except StreamError:
+    # anything else: an abnormal closure.
+    ...
+```
+
+See [Streaming → close codes](streaming.md#close-codes-and-errors).
+
+---
+
+## Conflicts (409)
+
+`ConflictError` covers duplicate creates and state conflicts. One case worth knowing: **feedback on a
+run that is still in progress**.
+
+```python
+from interactly import ConflictError
+
+try:
+    await client.runs.set_turn_rating(run_id, 0, "up")
+except ConflictError as exc:
+    print(exc)
+    # Feedback cannot be left while the run is still in progress.
+```
+
+See [Run feedback](guides/run_feedback.md).
 
 ---
 
