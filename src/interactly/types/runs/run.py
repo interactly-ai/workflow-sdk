@@ -26,7 +26,38 @@ else:
     # to a real ``WorkflowRunInputOutputPair`` when the package is installed.
     WorkflowRunInputOutputPair = Any
 
-__all__ = ["Run", "RunComment", "RunEvaluationResult"]
+__all__ = ["FeedbackUser", "Run", "RunComment", "RunEvaluationResult", "RunFeedbackResponse"]
+
+
+class FeedbackUser(BaseAPIModel):
+    """Display identity for one feedback author.
+
+    Deliberately minimal — a run response is not an access path to the user directory. Ids that no
+    longer resolve are simply absent from the map rather than raising.
+    """
+
+    id: Optional[str] = None
+    firstName: Optional[str] = None  # noqa: N815 - server field name
+    lastName: Optional[str] = None  # noqa: N815 - server field name
+    email: Optional[str] = None
+
+
+class RunFeedbackResponse(BaseAPIModel):
+    """Result of a rating or comment write.
+
+    Scoped to the mutated target rather than the whole run: a run document carries every event of
+    every turn, and a thumbs-up does not justify shipping that back. The *full* list is returned
+    (not just the caller's record) so a client can render aggregate counts without a refetch.
+
+    ``ratings`` and ``comments`` stay untyped dicts because only one of them is populated per
+    endpoint and their stored shape carries server-assigned fields the SDK does not model.
+    """
+
+    ratings: List[Dict[str, Any]] = Field(default_factory=list)
+    comments: List[Dict[str, Any]] = Field(default_factory=list)
+    #: Display identities for the authors above, keyed by user id. Sent on every write so a rating
+    #: left by someone who joined after the page loaded still renders with a name.
+    feedback_users: Dict[str, FeedbackUser] = Field(default_factory=dict)
 
 
 class RunComment(BaseAPIModel):
@@ -107,6 +138,11 @@ class Run(BaseAPIModel):
     error: Optional[str] = None
 
     team_id: Optional[str] = None
+
+    #: Display identities for every user referenced by this run's feedback, keyed by user id.
+    #: Shipped with the run so a client can attribute a comment or rating without holding a copy of
+    #: the team roster.
+    feedback_users: Dict[str, FeedbackUser] = Field(default_factory=dict)
 
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

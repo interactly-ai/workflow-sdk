@@ -14,20 +14,21 @@ Endpoints implemented:
     WS     /v1/workflow-runs/ws                                → stream (context manager)
     POST   /v1/workflows/{id}/execute  (turn 1: new session)  → execute (run_id=None)
     POST   /v1/workflows/{id}/execute  (turn N: resume)       → execute (run_id=<echo>)
-    POST   /v1/workflows/{id}/runs/{run_id}/checkpoint-run     → checkpoint
 """
 
 from __future__ import annotations
 
+import asyncio
+import time
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Optional, Type
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._streaming import AsyncStream, Stream
 from interactly._utils._serialise import serialise_config
 from interactly.types.runs.interactive_run import InteractiveRunResponse
-from interactly.types.runs.run import Run, RunComment, RunEvaluationResult
+from interactly.types.runs.run import Run, RunComment, RunEvaluationResult, RunFeedbackResponse
 from interactly.types.runs.run_event import RunEvent
 from interactly.types.shared import WorkflowCommand
 
@@ -73,6 +74,7 @@ class RunsResource(SyncAPIResource):
         dynamic_variables: Optional[Dict[str, Any]] = None,
         runtime_variables: Optional[Dict[str, Any]] = None,
         run_input: Optional["WorkflowRunInput"] = None,
+        rerun_token: Optional[str] = None,
         cast_to: Type[RunEvent] = RunEvent,
     ) -> Stream[RunEvent]:
         """
@@ -114,6 +116,7 @@ class RunsResource(SyncAPIResource):
             dynamic_variables=dynamic_variables,
             runtime_variables=runtime_variables,
             run_input=run_input,
+            rerun_token=rerun_token,
         )
 
         return Stream(
@@ -137,8 +140,17 @@ class RunsResource(SyncAPIResource):
         page: int = 1,
         size: int = 20,
         search: Optional[str] = None,
+        source_workflow_run_id: Optional[str] = None,
+        source_turn_index: Optional[int] = None,
     ) -> SyncPage[Run]:
-        """List workflow runs with optional filtering (paginated)."""
+        """List workflow runs with optional filtering (paginated).
+
+        Args:
+            source_workflow_run_id: Only runs that were re-run FROM this run. Backs the
+                "N re-runs from this turn" view.
+            source_turn_index:      Narrow ``source_workflow_run_id`` to one turn. Ignored on its
+                own — a turn index means nothing without the run it belongs to.
+        """
         params: dict[str, Any] = {"page": page, "size": size}
         if workflow_id is not None:
             params["workflow_id"] = workflow_id
@@ -150,6 +162,10 @@ class RunsResource(SyncAPIResource):
             params["end"] = end.isoformat()
         if search is not None:
             params["search"] = search
+        if source_workflow_run_id is not None:
+            params["source_workflow_run_id"] = source_workflow_run_id
+        if source_turn_index is not None:
+            params["source_turn_index"] = source_turn_index
 
         raw = self._client.get(_PATH, params=params, cast_to=dict)
 
@@ -162,6 +178,8 @@ class RunsResource(SyncAPIResource):
                 page=p,
                 size=size,
                 search=search,
+                source_workflow_run_id=source_workflow_run_id,
+                source_turn_index=source_turn_index,
             )
 
         return SyncPage._from_response(raw, Run, fetch_page)
@@ -231,6 +249,116 @@ class RunsResource(SyncAPIResource):
             f"{_PATH}/{run_id}/events/{event_logical_id}/comments/{comment_logical_id}",
             cast_to=type(None),
         )
+
+    # ---------------------------------------------------------------------- #
+    # Feedback: ratings and turn comments                                      #
+    # ---------------------------------------------------------------------- #
+
+    def set_event_rating(self, run_id: str, event_logical_id: str, value: str) -> RunFeedbackResponse:
+        """Rate one event of a run. At most one rating per user per target — re-rating replaces
+        the caller's record rather than appending.
+
+        Args:
+            value: ``"up"``, ``"down"`` or ``"strong_up"`` (see ``interactly_configs.RatingValue``).
+        """
+        return self._client.put(
+            f"{_PATH}/{run_id}/events/{event_logical_id}/rating",
+            body={"value": getattr(value, "value", value)},
+            cast_to=RunFeedbackResponse,
+        )
+
+    def delete_event_rating(self, run_id: str, event_logical_id: str) -> RunFeedbackResponse:
+        """Remove the caller's rating from an event."""
+        return self._client.delete(
+            f"{_PATH}/{run_id}/events/{event_logical_id}/rating", cast_to=RunFeedbackResponse
+        )
+
+    def set_turn_rating(self, run_id: str, turn_index: int, value: str) -> RunFeedbackResponse:
+        """Rate a whole turn, as opposed to one of its events."""
+        return self._client.put(
+            f"{_PATH}/{run_id}/turns/{turn_index}/rating",
+            body={"value": getattr(value, "value", value)},
+            cast_to=RunFeedbackResponse,
+        )
+
+    def delete_turn_rating(self, run_id: str, turn_index: int) -> RunFeedbackResponse:
+        """Remove the caller's rating from a turn."""
+        return self._client.delete(
+            f"{_PATH}/{run_id}/turns/{turn_index}/rating", cast_to=RunFeedbackResponse
+        )
+
+    def add_turn_comment(self, run_id: str, turn_index: int, content: str) -> RunFeedbackResponse:
+        """Comment on a turn as a whole. Content is trimmed and may not be blank."""
+        return self._client.post(
+            f"{_PATH}/{run_id}/turns/{turn_index}/comments",
+            body={"content": content},
+            cast_to=RunFeedbackResponse,
+        )
+
+    def delete_turn_comment(
+        self, run_id: str, turn_index: int, comment_logical_id: str
+    ) -> RunFeedbackResponse:
+        """Delete one comment from a turn."""
+        return self._client.delete(
+            f"{_PATH}/{run_id}/turns/{turn_index}/comments/{comment_logical_id}",
+            cast_to=RunFeedbackResponse,
+        )
+
+    # ---------------------------------------------------------------------- #
+    # Background work (companion threads / waiting-condition evaluation)       #
+    # ---------------------------------------------------------------------- #
+
+    def pump_companions(self, workflow_id: str, run_id: str) -> InteractiveRunResponse:
+        """Advance due background work for a paused interactive run, WITHOUT consuming a user turn.
+
+        Runs due fork companions, then any armed conditional-edge evaluations on parked threads.
+        Returns the events produced — which may include MAIN-thread assistant output, if a waiting
+        condition matched and the workflow advanced on its own — and whether more work remains.
+
+        Only the REST driver needs this: the WebSocket driver pumps background work itself while it
+        waits for the next message. Most callers want :meth:`drive_background_work`.
+        """
+        return self._client.post(
+            f"/v1/workflows/{workflow_id}/runs/{run_id}/pump-companions",
+            body={},
+            cast_to=InteractiveRunResponse,
+        )
+
+    def drive_background_work(
+        self,
+        workflow_id: str,
+        run_id: str,
+        *,
+        interval_seconds: float = 1.0,
+        max_iterations: int = 60,
+    ) -> List[InteractiveRunResponse]:
+        """Poll :meth:`pump_companions` until no background work remains.
+
+        Without this, every REST caller using companion threads or waiting-condition edges has to
+        hand-roll the loop, and the two easy mistakes — never stopping, or stopping after one pass —
+        are both silent.
+
+        **Bounded on purpose.** A companion can legitimately run for a long time, so this returns
+        after ``max_iterations`` pumps rather than blocking forever; check the last response's
+        ``has_background_work`` to see whether it finished or merely ran out of iterations.
+
+        Args:
+            interval_seconds: Delay between pumps. The server debounces armed evaluations, so
+                polling faster than the workflow's own debounce only adds load.
+            max_iterations:   Hard cap on pumps.
+
+        Returns:
+            Every response received, in order — so no events are lost to the caller.
+        """
+        responses: List[InteractiveRunResponse] = []
+        for iteration in range(max_iterations):
+            response = self.pump_companions(workflow_id, run_id)
+            responses.append(response)
+            if not response.has_background_work:
+                break
+            if iteration < max_iterations - 1:
+                time.sleep(interval_seconds)
+        return responses
 
     def schema(self) -> Dict[str, Any]:
         """Return the JSON schemas for workflow run structures.
@@ -338,48 +466,6 @@ class RunsResource(SyncAPIResource):
             cast_to=InteractiveRunResponse,
         )
 
-    def checkpoint(
-        self,
-        workflow_id: str,
-        run_id: str,
-        *,
-        resume_turn_index: int,
-        start_node_logical_id: Optional[str] = None,
-    ) -> Run:
-        """
-        Trigger a new run branching from a checkpoint of an existing run.
-
-        Copies conversation pairs from the source run up to and including
-        ``resume_turn_index``, then continues execution from that point
-        (optionally from a specific node).  Useful for replaying or
-        branching conversations.
-
-        Args:
-            workflow_id:           ObjectId of the workflow.
-            run_id:                ObjectId of the source run.
-            resume_turn_index:     0-based index of the turn to resume from.
-                                   The new run inherits all pairs up to this
-                                   index and then continues execution.
-            start_node_logical_id: Optional logical ID of the node to start
-                                   execution from, bypassing the default
-                                   start node.
-
-        Returns:
-            The newly created :class:`Run` record (status ``started``).
-
-        Raises:
-            NotFoundError:      If the source run does not exist.
-            BadRequestError:    If ``resume_turn_index`` is out of range or
-                                the source run has no stored workflow config.
-        """
-        body: Dict[str, Any] = {"resume_turn_index": resume_turn_index}
-        if start_node_logical_id is not None:
-            body["start_node_logical_id"] = start_node_logical_id
-        return self._client.post(
-            f"/v1/workflows/{workflow_id}/runs/{run_id}/checkpoint-run",
-            body=body,
-            cast_to=Run,
-        )
 
 
 class AsyncRunsResource(AsyncAPIResource):
@@ -404,6 +490,7 @@ class AsyncRunsResource(AsyncAPIResource):
         dynamic_variables: Optional[Dict[str, Any]] = None,
         runtime_variables: Optional[Dict[str, Any]] = None,
         run_input: Optional["WorkflowRunInput"] = None,
+        rerun_token: Optional[str] = None,
         cast_to: Type[RunEvent] = RunEvent,
     ) -> AsyncStream[RunEvent]:
         """
@@ -423,6 +510,7 @@ class AsyncRunsResource(AsyncAPIResource):
             dynamic_variables=dynamic_variables,
             runtime_variables=runtime_variables,
             run_input=run_input,
+            rerun_token=rerun_token,
         )
 
         return AsyncStream(
@@ -443,7 +531,14 @@ class AsyncRunsResource(AsyncAPIResource):
         page: int = 1,
         size: int = 20,
         search: Optional[str] = None,
+        source_workflow_run_id: Optional[str] = None,
+        source_turn_index: Optional[int] = None,
     ) -> AsyncPage[Run]:
+        """List workflow runs with optional filtering (paginated).
+
+        ``source_workflow_run_id`` selects only runs that were re-run FROM that run;
+        ``source_turn_index`` narrows it to one turn and is ignored on its own.
+        """
         params: dict[str, Any] = {"page": page, "size": size}
         if workflow_id is not None:
             params["workflow_id"] = workflow_id
@@ -455,6 +550,10 @@ class AsyncRunsResource(AsyncAPIResource):
             params["end"] = end.isoformat()
         if search is not None:
             params["search"] = search
+        if source_workflow_run_id is not None:
+            params["source_workflow_run_id"] = source_workflow_run_id
+        if source_turn_index is not None:
+            params["source_turn_index"] = source_turn_index
 
         raw = await self._client.get(_PATH, params=params, cast_to=dict)
 
@@ -467,6 +566,8 @@ class AsyncRunsResource(AsyncAPIResource):
                 page=p,
                 size=size,
                 search=search,
+                source_workflow_run_id=source_workflow_run_id,
+                source_turn_index=source_turn_index,
             )
 
         return AsyncPage._from_response(raw, Run, fetch_page)
@@ -509,6 +610,90 @@ class AsyncRunsResource(AsyncAPIResource):
             f"{_PATH}/{run_id}/events/{event_logical_id}/comments/{comment_logical_id}",
             cast_to=type(None),
         )
+
+    # ---------------------------------------------------------------------- #
+    # Feedback: ratings and turn comments                                      #
+    # ---------------------------------------------------------------------- #
+
+    async def set_event_rating(
+        self, run_id: str, event_logical_id: str, value: str
+    ) -> RunFeedbackResponse:
+        """Rate one event of a run. At most one rating per user per target."""
+        return await self._client.put(
+            f"{_PATH}/{run_id}/events/{event_logical_id}/rating",
+            body={"value": getattr(value, "value", value)},
+            cast_to=RunFeedbackResponse,
+        )
+
+    async def delete_event_rating(self, run_id: str, event_logical_id: str) -> RunFeedbackResponse:
+        """Remove the caller's rating from an event."""
+        return await self._client.delete(
+            f"{_PATH}/{run_id}/events/{event_logical_id}/rating", cast_to=RunFeedbackResponse
+        )
+
+    async def set_turn_rating(self, run_id: str, turn_index: int, value: str) -> RunFeedbackResponse:
+        """Rate a whole turn, as opposed to one of its events."""
+        return await self._client.put(
+            f"{_PATH}/{run_id}/turns/{turn_index}/rating",
+            body={"value": getattr(value, "value", value)},
+            cast_to=RunFeedbackResponse,
+        )
+
+    async def delete_turn_rating(self, run_id: str, turn_index: int) -> RunFeedbackResponse:
+        """Remove the caller's rating from a turn."""
+        return await self._client.delete(
+            f"{_PATH}/{run_id}/turns/{turn_index}/rating", cast_to=RunFeedbackResponse
+        )
+
+    async def add_turn_comment(
+        self, run_id: str, turn_index: int, content: str
+    ) -> RunFeedbackResponse:
+        """Comment on a turn as a whole. Content is trimmed and may not be blank."""
+        return await self._client.post(
+            f"{_PATH}/{run_id}/turns/{turn_index}/comments",
+            body={"content": content},
+            cast_to=RunFeedbackResponse,
+        )
+
+    async def delete_turn_comment(
+        self, run_id: str, turn_index: int, comment_logical_id: str
+    ) -> RunFeedbackResponse:
+        """Delete one comment from a turn."""
+        return await self._client.delete(
+            f"{_PATH}/{run_id}/turns/{turn_index}/comments/{comment_logical_id}",
+            cast_to=RunFeedbackResponse,
+        )
+
+    # ---------------------------------------------------------------------- #
+    # Background work (companion threads / waiting-condition evaluation)       #
+    # ---------------------------------------------------------------------- #
+
+    async def pump_companions(self, workflow_id: str, run_id: str) -> InteractiveRunResponse:
+        """Advance due background work for a paused interactive run, without consuming a user turn."""
+        return await self._client.post(
+            f"/v1/workflows/{workflow_id}/runs/{run_id}/pump-companions",
+            body={},
+            cast_to=InteractiveRunResponse,
+        )
+
+    async def drive_background_work(
+        self,
+        workflow_id: str,
+        run_id: str,
+        *,
+        interval_seconds: float = 1.0,
+        max_iterations: int = 60,
+    ) -> List[InteractiveRunResponse]:
+        """Poll :meth:`pump_companions` until no background work remains. See the sync counterpart."""
+        responses: List[InteractiveRunResponse] = []
+        for iteration in range(max_iterations):
+            response = await self.pump_companions(workflow_id, run_id)
+            responses.append(response)
+            if not response.has_background_work:
+                break
+            if iteration < max_iterations - 1:
+                await asyncio.sleep(interval_seconds)
+        return responses
 
     async def schema(self) -> Dict[str, Any]:
         """Return the JSON schemas for workflow run structures."""
@@ -566,23 +751,6 @@ class AsyncRunsResource(AsyncAPIResource):
             cast_to=InteractiveRunResponse,
         )
 
-    async def checkpoint(
-        self,
-        workflow_id: str,
-        run_id: str,
-        *,
-        resume_turn_index: int,
-        start_node_logical_id: Optional[str] = None,
-    ) -> Run:
-        """Trigger a new run branching from a checkpoint of an existing run."""
-        body: Dict[str, Any] = {"resume_turn_index": resume_turn_index}
-        if start_node_logical_id is not None:
-            body["start_node_logical_id"] = start_node_logical_id
-        return await self._client.post(
-            f"/v1/workflows/{workflow_id}/runs/{run_id}/checkpoint-run",
-            body=body,
-            cast_to=Run,
-        )
 
 
 # --------------------------------------------------------------------------- #
@@ -599,6 +767,7 @@ def _build_stream_payload(
     dynamic_variables: Optional[Dict[str, Any]],
     runtime_variables: Optional[Dict[str, Any]],
     run_input: Optional["WorkflowRunInput"],
+    rerun_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the WebSocket handshake payload for ``/workflow-runs/ws``.
 
@@ -619,6 +788,11 @@ def _build_stream_payload(
     payload.setdefault("run_by", run_by)
     if version_number is not None:
         payload["version_number"] = version_number
+    if rerun_token is not None:
+        # Only meaningful on a `start` frame: the server redeems it once, rebuilds the projected
+        # state server-side, and rejects the connection with close code 4007 if it is expired or
+        # was minted for a different workflow/version.
+        payload["rerun_token"] = rerun_token
     if dynamic_variables is not None:
         payload["dynamic_variables"] = dynamic_variables
     if runtime_variables is not None:
