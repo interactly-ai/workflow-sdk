@@ -5,7 +5,7 @@ TypedDicts for schedule request parameters.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from typing_extensions import NotRequired, Required, TypedDict
 

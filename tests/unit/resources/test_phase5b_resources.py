@@ -14,8 +14,7 @@ import httpx
 import pytest
 import respx
 
-from interactly import AsyncWorkflowClient, WorkflowClient
-from interactly import InteractiveRunResponse
+from interactly import AsyncWorkflowClient, InteractiveRunResponse, WorkflowClient
 from interactly.types.runs.run import Run
 
 # ---------------------------------------------------------------------------

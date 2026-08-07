@@ -124,7 +124,7 @@ class Run(BaseAPIModel):
         return cls._coerce_input_output_pairs(data)
 
     @staticmethod
-    def _flatten_server_document(data: dict) -> dict:
+    def _flatten_server_document(data: Dict[str, Any]) -> Dict[str, Any]:
         """Flatten the server's nested run document into this model's flat shape.
 
         The workflow-runs endpoints return a persisted record that nests the run
@@ -168,7 +168,7 @@ class Run(BaseAPIModel):
         }
 
     @staticmethod
-    def _coerce_input_output_pairs(data: dict) -> dict:
+    def _coerce_input_output_pairs(data: Dict[str, Any]) -> Dict[str, Any]:
         """Upgrade each raw input/output pair dict into a typed
         ``WorkflowRunInputOutputPair`` when ``interactly_configs`` is installed.
 
@@ -186,9 +186,8 @@ class Run(BaseAPIModel):
         if not isinstance(raw_pairs, list):
             return data
         try:
-            from pydantic import TypeAdapter
-
             from interactly_configs import WorkflowRunInputOutputPair as _Pair
+            from pydantic import TypeAdapter
 
             adapter = TypeAdapter(_Pair)
         except Exception:

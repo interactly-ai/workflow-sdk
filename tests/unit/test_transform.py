@@ -4,8 +4,6 @@ Unit tests for the transform utilities (_strip_not_given, build_body).
 
 from __future__ import annotations
 
-import pytest
-
 from interactly._utils._transform import build_body, strip_not_given
 from interactly._utils._typing import NOT_GIVEN
 

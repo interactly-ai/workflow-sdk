@@ -7,7 +7,7 @@ while making `.parse()` the idiomatic way to get a typed model instance.
 
 from __future__ import annotations
 
-from typing import Generic, Type, TypeVar
+from typing import Generic, Optional, Type, TypeVar, cast
 
 import httpx
 from pydantic import BaseModel
@@ -52,7 +52,8 @@ class APIResponse(Generic[ModelT]):
 
     @property
     def request_id(self) -> str | None:
-        return self._http_response.headers.get("X-Request-Id")
+        # httpx's Headers.get is untyped, so the value arrives as Any.
+        return cast(Optional[str], self._http_response.headers.get("X-Request-Id"))
 
     # ---------------------------------------------------------------------- #
     # Parsing                                                                  #
@@ -83,7 +84,7 @@ class APIResponse(Generic[ModelT]):
 
         # Pydantic model validation.
         if isinstance(self._cast_to, type) and issubclass(self._cast_to, BaseModel):
-            return self._cast_to.model_validate(body)  # type: ignore[return-value]
+            return self._cast_to.model_validate(body)
 
         # Explicit dict/list casts: validate the body shape rather than falling
         # through to ``self._cast_to(body)`` (which would silently do e.g.
@@ -110,8 +111,9 @@ class APIResponse(Generic[ModelT]):
                 )
             return body  # type: ignore[return-value]
 
-        # Primitive types (str, int, bool).
-        return self._cast_to(body)  # type: ignore[call-arg, return-value]
+        # Primitive types (str, int, bool). `ResponseT` is unbounded, so a checker sees `object()`
+        # and objects to the argument; at runtime this branch only ever holds a real primitive type.
+        return self._cast_to(body)  # type: ignore[call-arg]
 
     def _try_parse_json(self) -> object:
         try:

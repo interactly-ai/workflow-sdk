@@ -4,12 +4,10 @@ Unit tests for the exception hierarchy and factory function.
 
 from __future__ import annotations
 
-import pytest
 import httpx
 
 from interactly._exceptions import (
     APIConnectionError,
-    APIError,
     APITimeoutError,
     AuthenticationError,
     ConflictError,

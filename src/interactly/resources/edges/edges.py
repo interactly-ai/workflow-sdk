@@ -13,7 +13,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -37,8 +37,8 @@ class EdgesResource(SyncAPIResource):
         Returns:
             A list of edge type strings.
         """
-        raw: Dict = self._client.get(f"{_PATH}/types", cast_to=dict)
-        return raw.get("edge_types", [])
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/types", cast_to=dict)
+        return cast(List[str], raw.get("edge_types", []))
 
     def schema(self, edge_type: str) -> Dict[str, Any]:
         """
@@ -152,8 +152,8 @@ class AsyncEdgesResource(AsyncAPIResource):
 
     async def types(self) -> List[str]:
         """Retrieve all available edge type identifiers."""
-        raw: Dict = await self._client.get(f"{_PATH}/types", cast_to=dict)
-        return raw.get("edge_types", [])
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/types", cast_to=dict)
+        return cast(List[str], raw.get("edge_types", []))
 
     async def schema(self, edge_type: str) -> Dict[str, Any]:
         """Retrieve the JSON Schema for a specific edge type."""

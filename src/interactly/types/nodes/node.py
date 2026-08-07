@@ -5,7 +5,7 @@ Response model for workflow nodes.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from pydantic import model_validator
 
@@ -44,9 +44,8 @@ class Node(BaseAPIModel):
         if raw is None or not isinstance(raw, dict):
             return data
         try:
-            from pydantic import TypeAdapter
-
             from interactly_configs import NodeConfig as _NC
+            from pydantic import TypeAdapter
 
             # Validate through the discriminated union so the concrete subclass
             # (e.g. ``SayLLMNodeConfig``) is returned, preserving its ``type``

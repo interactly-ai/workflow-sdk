@@ -7,7 +7,7 @@ This module contains lower-level internal aliases and the NOT_GIVEN sentinel.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional, TypeVar, Union
 
 import httpx
 from typing_extensions import TypeAlias
@@ -45,7 +45,6 @@ AnyMapping: TypeAlias = Dict[str, Any]
 # --------------------------------------------------------------------------- #
 # Generic return-type placeholder used in method signatures                   #
 # --------------------------------------------------------------------------- #
-from typing import TypeVar
 
 ResponseT = TypeVar("ResponseT")
 ModelT = TypeVar("ModelT")

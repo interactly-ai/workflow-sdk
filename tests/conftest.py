@@ -6,10 +6,8 @@ from __future__ import annotations
 
 import pytest
 import respx
-import httpx
 
-from interactly import WorkflowClient, AsyncWorkflowClient
-
+from interactly import AsyncWorkflowClient, WorkflowClient
 
 TEST_API_KEY = "test-api-key"
 TEST_TEAM_ID = "test-team-id"

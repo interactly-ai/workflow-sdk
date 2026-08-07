@@ -4,18 +4,18 @@ Unit tests for RunsResource using respx mocks.
 
 from __future__ import annotations
 
+import httpx
 import pytest
 import respx
-import httpx
 
-from interactly import WorkflowClient, Run
+from interactly import Run, WorkflowClient
 from tests.conftest import (
+    RUN_LIST_RESPONSE,
+    RUN_RESPONSE,
     TEST_API_KEY,
     TEST_BASE_URL,
     TEST_TEAM_ID,
     TEST_USER_ID,
-    RUN_RESPONSE,
-    RUN_LIST_RESPONSE,
 )
 
 

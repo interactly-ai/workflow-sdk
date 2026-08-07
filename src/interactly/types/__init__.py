@@ -1,10 +1,21 @@
-from interactly.types.runs import Run, RunComment, RunCommentParams, RunEvaluationResult, RunEvent, RunListParams, RunStreamParams
+from interactly.types.runs import (
+    Run,
+    RunComment,
+    RunCommentParams,
+    RunEvaluationResult,
+    RunEvent,
+    RunListParams,
+    RunStreamParams,
+)
 from interactly.types.shared import RunStatus, WorkflowCommand, WorkflowStatus
 from interactly.types.workflows import (
     EdgeDiff,
     FieldDiff,
     NodeDiff,
+    VersionConfigUpdateParams,
+    VersionCreateParams,
     VersionDiff,
+    VersionUpdateParams,
     Workflow,
     WorkflowCloneParams,
     WorkflowConcurrencyParams,
@@ -12,9 +23,6 @@ from interactly.types.workflows import (
     WorkflowListParams,
     WorkflowUpdateParams,
     WorkflowVersion,
-    VersionCreateParams,
-    VersionUpdateParams,
-    VersionConfigUpdateParams,
 )
 
 __all__ = [

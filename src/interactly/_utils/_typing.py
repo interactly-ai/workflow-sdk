@@ -12,7 +12,9 @@ Usage:
 
 from __future__ import annotations
 
-from typing import ClassVar, Generic, Literal, TypeVar, Union, final
+from typing import ClassVar, Literal, TypeVar, Union, final
+
+from typing_extensions import TypeGuard
 
 T = TypeVar("T")
 
@@ -44,6 +46,14 @@ NOT_GIVEN = NotGiven()
 NotGivenOr = Union[T, NotGiven]
 
 
-def is_given(value: NotGivenOr[T]) -> bool:
-    """Return True iff *value* is not the NOT_GIVEN sentinel."""
+def is_given(value: NotGivenOr[T]) -> TypeGuard[T]:
+    """Return True iff *value* is not the NOT_GIVEN sentinel.
+
+    Declared as a ``TypeGuard[T]`` rather than ``bool`` so type checkers narrow
+    ``NotGivenOr[T]`` to ``T`` inside the guarded branch. As a plain ``bool`` every
+    ``if is_given(x): x.isoformat()`` was an error under strict mode — the value was still
+    ``T | NotGiven`` as far as the checker knew — which pushed call sites into redundant
+    ``is not None`` guards or casts. Narrowing at the source fixes all of them at once, and
+    SDK users get the same benefit in their own editors.
+    """
     return not isinstance(value, NotGiven)

@@ -26,8 +26,8 @@ subscription = await client.webhooks.create(
     name="My Workflow Alerts",
     url="https://my-server.example.com/webhook",
     actions=[
-        WebhookAction.RUN_COMPLETED,
-        WebhookAction.RUN_FAILED,
+        WebhookAction.WORKFLOW_RUN_STARTED,
+        WebhookAction.WORKFLOW_RUN_COMPLETED,
     ],
     enabled=True,
     bearer_token="Bearer xyz...",  # optional: sent in Authorization header
@@ -60,7 +60,7 @@ page = await client.webhooks.list(
     size=20,
     search="alerts",  # optional: fuzzy filter on name/URL
     enabled=True,  # optional: filter by enabled state
-    action=WebhookAction.RUN_COMPLETED,  # optional: filter by action
+    action=WebhookAction.WORKFLOW_RUN_COMPLETED,  # optional: filter by action
 )
 
 async for webhook in page:
@@ -154,7 +154,7 @@ events_page = await client.webhooks.list_events(
     size=20,
     subscription_id="webhook_id_123",  # optional: filter by subscription
     workflow_id="workflow_456",  # optional: filter by workflow
-    action=WebhookAction.RUN_COMPLETED,  # optional: filter by action
+    action=WebhookAction.WORKFLOW_RUN_COMPLETED,  # optional: filter by action
     status="delivered",  # optional: "pending", "delivered", "failed"
 )
 
@@ -323,10 +323,16 @@ async def handle_run_failed(event: dict):
 
 ### Event types
 
-Common `WebhookAction` values:
-- `RUN_COMPLETED`: A workflow run finished (success or failure).
-- `RUN_FAILED`: A workflow run errored.
-- `WEBHOOK_DELIVERY_FAILED`: Webhook delivery failed after retries.
+The complete set of `WebhookAction` values — these are all of them, and they mirror the server's
+`WorkflowWebhookAction` exactly:
+
+- `WORKFLOW_CREATED` / `WORKFLOW_UPDATED` / `WORKFLOW_DELETED`: workflow lifecycle.
+- `WORKFLOW_RUN_STARTED`: a run began executing.
+- `WORKFLOW_RUN_COMPLETED`: a run reached a terminal status.
+
+There is **no separate "run failed" action**. A run that errors still emits
+`WORKFLOW_RUN_COMPLETED`; the outcome is carried in the payload's run status, so subscribe to that one
+action and branch on the status rather than looking for a failure event that never arrives.
 
 ### Delivery guarantees
 
@@ -358,7 +364,7 @@ client = WorkflowClient()
 subscription = client.webhooks.create(
     name="My Workflow Alerts",
     url="https://my-server.example.com/webhook",
-    actions=[WebhookAction.RUN_COMPLETED, WebhookAction.RUN_FAILED],
+    actions=[WebhookAction.WORKFLOW_RUN_STARTED, WebhookAction.WORKFLOW_RUN_COMPLETED],
 )
 
 page = client.webhooks.list(size=20)

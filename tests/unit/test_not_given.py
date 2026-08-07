@@ -4,8 +4,6 @@ Unit tests for the NOT_GIVEN sentinel.
 
 from __future__ import annotations
 
-import pytest
-
 from interactly._utils._typing import NOT_GIVEN, NotGiven, is_given
 
 

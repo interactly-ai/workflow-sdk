@@ -28,11 +28,11 @@ If ``interactly-configs`` is not installed, importing this module raises an
 from __future__ import annotations
 
 try:
-    from interactly_configs import (  # type: ignore[import]
-        ANTHROPICModel,
-        AZUREOPENAIModel,
+    from interactly_configs import (
         AnthropicLLMConfig,
+        ANTHROPICModel,
         AzureOpenAILLMConfig,
+        AZUREOPENAIModel,
         BaseEdgeRunInput,
         BaseEntityConfig,
         BaseLLMConfig,
@@ -45,8 +45,8 @@ try:
         BaseToolConfig,
         BodyContentTypeEnum,
         CompanionEdgeConfig,
-        ConditionConfig,
         ConditionalEdgeConfig,
+        ConditionConfig,
         CustomLLMConfig,
         DirectEdgeConfig,
         DynamicMessagesConfig,
@@ -54,11 +54,11 @@ try:
         EdgeType,
         EndConversationNodeConfig,
         ExternalAPIToolConfig,
-        GOOGLEModel,
         GlobalConditionEdgeEvaluationMethod,
         GlobalDefaultLLMConfig,
         GlobalNodeConfig,
         GoogleLLMConfig,
+        GOOGLEModel,
         HttpMethodEnum,
         HttpRequestNodeConfig,
         InbuiltFunctionToolConfig,
@@ -77,11 +77,11 @@ try:
         NodeLibraryConfig,
         NodeRunInput,
         NodeRunOutput,
-        NodeType,
         NodesRunInputs,
-        OPENAIModel,
+        NodeType,
         OktaAuthConfig,
         OpenAILLMConfig,
+        OPENAIModel,
         OperationMode,
         PromptConfig,
         ResponseFormatEnum,
@@ -211,7 +211,10 @@ __all__ = [
 ]
 
 try:
-    from interactly_configs import get_node_config_class
+    # Availability probe, not a re-export: the name is published via __all__ below only when the
+    # optional `interactly_configs` package exposes it. noqa because ruff sees an unused import.
+    from interactly_configs import get_node_config_class  # noqa: F401
+
     __all__.append("get_node_config_class")
 except ImportError:
     pass

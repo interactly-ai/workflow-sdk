@@ -58,6 +58,7 @@ class TestSerialiseConfigWithPydanticModels:
 
         try:
             from datetime import datetime
+
             from pydantic import BaseModel
 
             class _Timed(BaseModel):

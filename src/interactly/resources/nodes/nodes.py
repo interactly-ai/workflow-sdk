@@ -13,7 +13,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -37,8 +37,8 @@ class NodesResource(SyncAPIResource):
         Returns:
             A list of dicts with ``type``, ``primary_category``, ``secondary_category``.
         """
-        raw: Dict = self._client.get(f"{_PATH}/types", cast_to=dict)
-        return raw.get("node_types", [])
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/types", cast_to=dict)
+        return cast(List[Dict[str, Any]], raw.get("node_types", []))
 
     def schema(self, node_type: str) -> Dict[str, Any]:
         """
@@ -152,8 +152,8 @@ class AsyncNodesResource(AsyncAPIResource):
 
     async def types(self) -> List[Dict[str, Any]]:
         """Retrieve all available node types with their categories."""
-        raw: Dict = await self._client.get(f"{_PATH}/types", cast_to=dict)
-        return raw.get("node_types", [])
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/types", cast_to=dict)
+        return cast(List[Dict[str, Any]], raw.get("node_types", []))
 
     async def schema(self, node_type: str) -> Dict[str, Any]:
         """Retrieve the JSON Schema for a specific node type."""

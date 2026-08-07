@@ -6,18 +6,18 @@ from __future__ import annotations
 
 import json
 
+import httpx
 import pytest
 import respx
-import httpx
 
-from interactly import WorkflowClient, AsyncWorkflowClient, NotFoundError, Workflow
+from interactly import AsyncWorkflowClient, NotFoundError, Workflow, WorkflowClient
 from tests.conftest import (
     TEST_API_KEY,
     TEST_BASE_URL,
     TEST_TEAM_ID,
     TEST_USER_ID,
-    WORKFLOW_RESPONSE,
     WORKFLOW_LIST_RESPONSE,
+    WORKFLOW_RESPONSE,
 )
 
 

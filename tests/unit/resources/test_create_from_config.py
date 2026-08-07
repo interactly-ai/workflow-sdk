@@ -11,10 +11,8 @@ import respx
 from interactly import AsyncWorkflowClient, Workflow, WorkflowClient
 from interactly.configs import (
     DirectEdgeConfig,
-    LLMNodeRunInput,
-    NodesRunInputs,
-    OPENAIModel,
     OpenAILLMConfig,
+    OPENAIModel,
     SayLLMNodeConfig,
     SayStaticMessageNodeConfig,
     StaticMessagesConfig,

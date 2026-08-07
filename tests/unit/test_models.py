@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from interactly.types.runs.run import Run
 from interactly.types.runs.run_event import RunEvent
 from interactly.types.workflows.workflow import Workflow

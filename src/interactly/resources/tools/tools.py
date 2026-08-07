@@ -16,7 +16,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -41,8 +41,8 @@ class ToolsResource(SyncAPIResource):
         Returns:
             A list of tool type strings.
         """
-        raw: Dict = self._client.get(f"{_PATH}/types", cast_to=dict)
-        return raw.get("tool_types", [])
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/types", cast_to=dict)
+        return cast(List[str], raw.get("tool_types", []))
 
     def schema(self, tool_type: str) -> Dict[str, Any]:
         """
@@ -66,8 +66,8 @@ class ToolsResource(SyncAPIResource):
         Returns:
             A list of dicts with ``tool_id``, ``name``, ``signature``, ``args_schema``, ``category``.
         """
-        raw: Dict = self._client.get(f"{_PATH}/inbuilt", cast_to=dict)
-        return raw.get("inbuilt_tools", [])
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/inbuilt", cast_to=dict)
+        return cast(List[Dict[str, Any]], raw.get("inbuilt_tools", []))
 
     def configurable_inbuilt(self) -> List[Dict[str, Any]]:
         """
@@ -79,8 +79,8 @@ class ToolsResource(SyncAPIResource):
         Returns:
             A list of dicts with ``key``, ``title``, ``registry_tool_id``, ``config_schema``.
         """
-        raw: Dict = self._client.get(f"{_PATH}/configurable-inbuilt", cast_to=dict)
-        return raw.get("configurable_inbuilt_tools", [])
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/configurable-inbuilt", cast_to=dict)
+        return cast(List[Dict[str, Any]], raw.get("configurable_inbuilt_tools", []))
 
     def configurable_inbuilt_schema(self, key: str) -> Dict[str, Any]:
         """
@@ -226,8 +226,8 @@ class AsyncToolsResource(AsyncAPIResource):
 
     async def types(self) -> List[str]:
         """Retrieve all available tool type identifiers."""
-        raw: Dict = await self._client.get(f"{_PATH}/types", cast_to=dict)
-        return raw.get("tool_types", [])
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/types", cast_to=dict)
+        return cast(List[str], raw.get("tool_types", []))
 
     async def schema(self, tool_type: str) -> Dict[str, Any]:
         """Retrieve the JSON Schema for a specific tool type."""
@@ -235,13 +235,13 @@ class AsyncToolsResource(AsyncAPIResource):
 
     async def inbuilt(self) -> List[Dict[str, Any]]:
         """Retrieve all inbuilt tools from the registry."""
-        raw: Dict = await self._client.get(f"{_PATH}/inbuilt", cast_to=dict)
-        return raw.get("inbuilt_tools", [])
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/inbuilt", cast_to=dict)
+        return cast(List[Dict[str, Any]], raw.get("inbuilt_tools", []))
 
     async def configurable_inbuilt(self) -> List[Dict[str, Any]]:
         """List configurable inbuilt tools from the catalogue."""
-        raw: Dict = await self._client.get(f"{_PATH}/configurable-inbuilt", cast_to=dict)
-        return raw.get("configurable_inbuilt_tools", [])
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/configurable-inbuilt", cast_to=dict)
+        return cast(List[Dict[str, Any]], raw.get("configurable_inbuilt_tools", []))
 
     async def configurable_inbuilt_schema(self, key: str) -> Dict[str, Any]:
         """Retrieve the descriptor + config schema for a single configurable inbuilt tool."""

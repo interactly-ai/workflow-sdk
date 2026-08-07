@@ -11,20 +11,18 @@ These tests verify that the model_validator on each response model:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from interactly.types.edges.edge import Edge
 from interactly.types.llm_configs.llm_config import LLMConfig
-from interactly.types.nodes.node import Node
 from interactly.types.node_libraries.node_library import NodeLibrary
+from interactly.types.nodes.node import Node
 from interactly.types.runs.run import Run
 from interactly.types.super_nodes.super_node import SuperNodeDetail
 from interactly.types.tools.tool import Tool
 from interactly.types.workflows.workflow import WorkflowVersion
-
 
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #

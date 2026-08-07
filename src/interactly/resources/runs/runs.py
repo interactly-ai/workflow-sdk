@@ -20,20 +20,19 @@ Endpoints implemented:
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._streaming import AsyncStream, Stream
 from interactly._utils._serialise import serialise_config
 from interactly.types.runs.interactive_run import InteractiveRunResponse
-from interactly.types.runs.params import RunListParams
 from interactly.types.runs.run import Run, RunComment, RunEvaluationResult
 from interactly.types.runs.run_event import RunEvent
 from interactly.types.shared import WorkflowCommand
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
-    from interactly.configs import WorkflowRunInput  # type: ignore[import]
+    from interactly.configs import WorkflowRunInput
 
 __all__ = ["RunsResource", "AsyncRunsResource"]
 

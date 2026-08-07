@@ -19,7 +19,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -284,7 +284,7 @@ class SimulationsResource(SyncAPIResource):
         """
         params: Dict[str, Any] = {"page": page, "size": size}
         raw = self._client.get(f"{_RUNS_PATH}/{run_id}/executions/detailed", cast_to=dict, params=params)
-        return raw.get("individual_runs", [])
+        return cast(List[Dict[str, Any]], raw.get("individual_runs", []))
 
 
 class AsyncSimulationsResource(AsyncAPIResource):
@@ -418,4 +418,4 @@ class AsyncSimulationsResource(AsyncAPIResource):
         raw = await self._client.get(
             f"{_RUNS_PATH}/{run_id}/executions/detailed", cast_to=dict, params=params
         )
-        return raw.get("individual_runs", [])
+        return cast(List[Dict[str, Any]], raw.get("individual_runs", []))

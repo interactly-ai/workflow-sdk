@@ -7,7 +7,7 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Dict, List
+from typing import Any, Dict, List, cast
 
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 
@@ -29,8 +29,8 @@ class CategoriesResource(SyncAPIResource):
         Returns:
             A list of category name strings.
         """
-        raw: Dict = self._client.get(_PATH, cast_to=dict)
-        return raw.get("categories", [])
+        raw: Dict[str, Any] = self._client.get(_PATH, cast_to=dict)
+        return cast(List[str], raw.get("categories", []))
 
 
 class AsyncCategoriesResource(AsyncAPIResource):
@@ -38,5 +38,5 @@ class AsyncCategoriesResource(AsyncAPIResource):
 
     async def list(self) -> List[str]:
         """Retrieve all available workflow category names for the team."""
-        raw: Dict = await self._client.get(_PATH, cast_to=dict)
-        return raw.get("categories", [])
+        raw: Dict[str, Any] = await self._client.get(_PATH, cast_to=dict)
+        return cast(List[str], raw.get("categories", []))

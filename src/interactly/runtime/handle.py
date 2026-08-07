@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from typing import TYPE_CHECKING, AsyncIterator, Iterator, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Iterator, Optional
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
+    from interactly_configs import WorkflowConfigFullyHydrated
+    from interactly_configs.workflow_run import WorkflowRunInput
+
     from interactly._client import AsyncWorkflowClient, WorkflowClient
-    from interactly.runtime.events import BaseEvent  # type: ignore[import]
-    from interactly_configs import WorkflowConfigFullyHydrated  # type: ignore[import]
-    from interactly_configs.workflow_run import WorkflowRunInput  # type: ignore[import]
+    from interactly.runtime.events import BaseEvent
 
 __all__ = [
     "AsyncWorkflowHandle",
@@ -35,7 +36,7 @@ __all__ = [
 ]
 
 
-def _deep_merge(base: dict, override: dict) -> dict:
+def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
     """Recursively merge ``override`` on top of ``base`` without mutating either.
 
     ``override`` (caller/per-turn values) wins at the leaf level; ``base``
@@ -52,7 +53,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
-def _merge_dynamic_variables(run_input: "WorkflowRunInput", defaults: dict) -> "WorkflowRunInput":
+def _merge_dynamic_variables(run_input: "WorkflowRunInput", defaults: Dict[str, Any]) -> "WorkflowRunInput":
     """Return a copy of ``run_input`` with ``defaults`` merged underneath its own ``dynamic_variables``.
 
     The caller's values take precedence; missing keys are filled in from the
@@ -82,12 +83,12 @@ class WorkflowHandle:
         client: "WorkflowClient",
         workflow_id: str,
         config: "WorkflowConfigFullyHydrated",
-        dynamic_variables: Optional[dict] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._client = client
         self._workflow_id = workflow_id
         self._config = config
-        self._dynamic_variables: dict = copy.deepcopy(dynamic_variables) if dynamic_variables else {}
+        self._dynamic_variables: Dict[str, Any] = copy.deepcopy(dynamic_variables) if dynamic_variables else {}
         self._run_id: Optional[str] = None
 
     @property
@@ -136,12 +137,12 @@ class AsyncWorkflowHandle:
         client: "AsyncWorkflowClient",
         workflow_id: str,
         config: "WorkflowConfigFullyHydrated",
-        dynamic_variables: Optional[dict] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
     ) -> None:
         self._client = client
         self._workflow_id = workflow_id
         self._config = config
-        self._dynamic_variables: dict = copy.deepcopy(dynamic_variables) if dynamic_variables else {}
+        self._dynamic_variables: Dict[str, Any] = copy.deepcopy(dynamic_variables) if dynamic_variables else {}
         self._run_id: Optional[str] = None
         # Single-flight guard: a second turn must not begin until the first has
         # stored its ``run_id``, otherwise concurrent ``arun`` calls both read
@@ -192,7 +193,7 @@ def upload_and_get_handle(
     client: "WorkflowClient",
     config: "WorkflowConfigFullyHydrated",
     *,
-    dynamic_variables: Optional[dict] = None,
+    dynamic_variables: Optional[Dict[str, Any]] = None,
     name: Optional[str] = None,
     description: Optional[str] = None,
 ) -> WorkflowHandle:
@@ -211,7 +212,7 @@ async def aupload_and_get_handle(
     client: "AsyncWorkflowClient",
     config: "WorkflowConfigFullyHydrated",
     *,
-    dynamic_variables: Optional[dict] = None,
+    dynamic_variables: Optional[Dict[str, Any]] = None,
     name: Optional[str] = None,
     description: Optional[str] = None,
 ) -> AsyncWorkflowHandle:
@@ -252,7 +253,7 @@ class WorkflowRuntime(WorkflowHandle):
         config: "WorkflowConfigFullyHydrated",
         *,
         client: "WorkflowClient",
-        dynamic_variables: Optional[dict] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> "WorkflowRuntime":
@@ -291,7 +292,7 @@ class AsyncWorkflowRuntime(AsyncWorkflowHandle):
         config: "WorkflowConfigFullyHydrated",
         *,
         client: "AsyncWorkflowClient",
-        dynamic_variables: Optional[dict] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> "AsyncWorkflowRuntime":
@@ -321,7 +322,7 @@ class RuntimeAccessor:
         self,
         config: "WorkflowConfigFullyHydrated",
         *,
-        dynamic_variables: Optional[dict] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> "WorkflowRuntime":
@@ -352,7 +353,7 @@ class AsyncRuntimeAccessor:
         self,
         config: "WorkflowConfigFullyHydrated",
         *,
-        dynamic_variables: Optional[dict] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
         name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> "AsyncWorkflowRuntime":

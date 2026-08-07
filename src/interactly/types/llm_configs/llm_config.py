@@ -61,9 +61,8 @@ class LLMConfig(BaseAPIModel):
         if raw is None or not isinstance(raw, dict):
             return data
         try:
-            from pydantic import TypeAdapter
-
             from interactly_configs import LLMOrGroupConfig as _LLM
+            from pydantic import TypeAdapter
 
             data["config"] = TypeAdapter(_LLM).validate_python(raw)
         except Exception:

@@ -147,7 +147,16 @@ activemq-data/
 # SageMath parsed files
 *.sage.py
 
+# Generated sync reports. `make sync-check` regenerates these on demand, so they are output, not
+# source — checking them in would age into a misleading record of drift that no longer exists.
+docs/_sync/
+
 # Environments
+# `.env` holds a live INTERACTLY_API_KEY. It was previously tracked (commits a266b5d, af22255)
+# and is now untracked — see .env.example for the shape to copy.
+.env
+.env_dev
+.env_qa
 .envrc
 .venv
 env/
