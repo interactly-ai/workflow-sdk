@@ -298,10 +298,32 @@ class BaseLLMConfig(BaseModel):
     )
 
     @field_serializer("api_key")
-    def serialize_api_key(self, value: Optional[SecretStr]) -> Optional[str]:
+    def serialize_api_key(self, value: Union[SecretStr, str, None]) -> Optional[str]:
+        """Unmask ``api_key`` on the way out, whatever concrete type the subclass declared.
+
+        Pydantic applies an inherited field serializer to a field a subclass has REDECLARED, using the
+        subclass's type. ``BedrockLLMConfig`` narrows ``api_key`` to a plain ``str`` (a Bedrock bearer
+        token, alongside its other plain-string AWS credentials), so a serializer that assumed
+        ``SecretStr`` unconditionally raised on it:
+
+            PydanticSerializationError: Error calling function `serialize_api_key`:
+            AttributeError: 'str' object has no attribute 'get_secret_value'
+
+        That fired on any ``model_dump()`` / ``model_dump_json()`` of a Bedrock config that actually
+        had a key set — i.e. persisting one, returning one from the API, or checkpointing a run using
+        one. A config with no key serialized fine, which is why it was easy to miss.
+
+        Handled here rather than by overriding in the subclass so the base is correct for any future
+        subclass that narrows the field the same way, and handled here rather than by widening
+        ``BedrockLLMConfig.api_key`` to ``SecretStr`` because the Bedrock runtime passes the value
+        straight through to langchain as ``bedrock_api_key`` (``runtime/llm.py``), where a ``SecretStr``
+        is not what the client expects.
+        """
         if value is None:
             return None
-        return value.get_secret_value()
+        if isinstance(value, SecretStr):
+            return value.get_secret_value()  # Returns the unmasked value
+        return value
 
 
 class AzureOpenAILLMConfig(BaseLLMConfig):
@@ -545,26 +567,9 @@ class BedrockLLMConfig(BaseLLMConfig):
         title="AWS Secret Access Key",
     )
 
-    @field_serializer("api_key")
-    def serialize_api_key(self, value: Optional[str]) -> Optional[str]:  # type: ignore[override]
-        """Pass the Bedrock key through unchanged.
-
-        DELIBERATE DIVERGENCE FROM UPSTREAM, and the only one in this file that changes behaviour.
-        `BaseLLMConfig.api_key` is a `SecretStr` and its serializer calls `.get_secret_value()`, but
-        this subclass overrides `api_key` with a plain `str` (matching the server's field type).
-        Pydantic still applies the inherited serializer, so `model_dump()` on a Bedrock config that
-        actually has a key raises `PydanticSerializationError: 'str' object has no attribute
-        'get_secret_value'`. Verified against upstream's exact class structure — the defect is
-        inherited from the design, not from transcription.
-
-        Mirroring that faithfully would mean the SDK cannot serialize a valid Bedrock config, which
-        is its core job, so the mirror overrides the serializer instead. The stored shape is
-        unchanged; only the crash goes away.
-
-        No aws_* serializer is needed: those are plain `str` upstream too, and the base class
-        declares no serializer for them.
-        """
-        return value
+    # No serializer override here: `BaseLLMConfig.serialize_api_key` handles both `SecretStr` and
+    # plain `str`, matching upstream after interactly-ai@e2885fac1. No aws_* serializer is needed
+    # either -- those are plain `str` upstream too, and the base declares no serializer for them.
 
     model_config = ConfigDict(title="Bedrock")
 

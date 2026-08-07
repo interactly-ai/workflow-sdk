@@ -14,7 +14,7 @@ Two kinds of test live here:
 from __future__ import annotations
 
 import pytest
-from pydantic import TypeAdapter, ValidationError
+from pydantic import SecretStr, TypeAdapter, ValidationError
 
 import interactly_configs as ic
 from interactly_configs.events.event import (
@@ -265,6 +265,25 @@ class TestBedrock:
         assert dumped["api_key"] == "bearer-token"
         assert dumped["region"] == "us-west-2"
         assert dumped["aws_access_key_id"] == "AKIA"
+
+    def test_plain_str_api_key_serializes_via_the_inherited_serializer(self):
+        # Regression: `BaseLLMConfig.api_key` is a SecretStr and its serializer used to call
+        # `.get_secret_value()` unconditionally. Pydantic applies an inherited serializer to a field a
+        # subclass REDECLARED, so every dump of a Bedrock config that had a key raised
+        # PydanticSerializationError. Fixed at the base upstream (interactly-ai@e2885fac1) and
+        # mirrored here, so Bedrock now uses the base implementation rather than an override.
+        assert ic.BedrockLLMConfig.serialize_api_key is ic.BaseLLMConfig.serialize_api_key
+        assert "bearer-token" in ic.BedrockLLMConfig(api_key="bearer-token").model_dump_json()
+
+    @pytest.mark.parametrize(
+        "config_cls",
+        [ic.OpenAILLMConfig, ic.AzureOpenAILLMConfig, ic.GoogleLLMConfig, ic.AnthropicLLMConfig, ic.CustomLLMConfig],
+    )
+    def test_secretstr_providers_keep_their_behaviour(self, config_cls):
+        # The same serializer still unmasks on dump and still keeps SecretStr in memory, so keys stay
+        # masked in reprs and logs.
+        assert config_cls(api_key="provider-key").model_dump()["api_key"] == "provider-key"
+        assert isinstance(config_cls(api_key="provider-key").api_key, SecretStr)
 
     def test_discriminator_round_trips_through_the_union(self):
         adapter = TypeAdapter(ic.LLMConfigUnion)
