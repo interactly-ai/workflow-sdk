@@ -430,11 +430,7 @@ def estimate_annual_costs(monthly_premium: float, expected_medical_expenses: flo
         ],
     )
 
-    dynamic_variables = {
-        # Add any dynamic variables required for the workflow here
-    }
-
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
@@ -447,7 +443,11 @@ async def main():
     3. How multiple tools can work together in a single workflow
     4. The power of inline tools for business logic without pre-registration
     """
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow_config_full, dynamic_variables=dynamic_variables,

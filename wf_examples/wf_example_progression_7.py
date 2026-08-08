@@ -804,44 +804,19 @@ def build_assistant_workflow():
         ],
     )
 
-    dynamic_variables = {
-        # Clinic branding
-        "clinic_name": "HealthFirst Medical Center",
-        "clinic_address": "123 Wellness Way, Medical District",
-        "greeting_phrase": "Welcome! I'm here to help you schedule your appointment.",
-        # Appointment types
-        "appointment_types": ["New Patient Visit", "Routine Checkup/Physical", "Urgent Care", "Follow-up Visit"],
-        # Emergency
-        "emergency_number": "911",
-        # Scheduling slots (in real implementation, these would be dynamically fetched)
-        "urgent_care_time_slots": ["10:30 AM", "2:00 PM", "4:15 PM"],
-        "next_available_slots": ["Tomorrow at 9:00 AM", "Tomorrow at 2:30 PM", "Day after tomorrow at 11:00 AM"],
-        "routine_available_slots": [
-            "Next Monday 9:00 AM",
-            "Next Wednesday 2:00 PM",
-            "Next Friday 10:30 AM",
-            "Following Monday 3:00 PM",
-        ],
-        # Instructions
-        "urgent_arrival_instruction": "15 minutes early to complete check-in",
-        "standard_arrival_instruction": "10 minutes early for check-in",
-        "routine_recommendation": "at least 2-3 weeks in advance for better availability",
-        # Confirmation
-        "confirmation_method": "via email and text message",
-        "confirmation_closing": "We look forward to seeing you!",
-        # Farewell
-        "farewell_message": "Thank you for choosing HealthFirst Medical Center. Your appointment is confirmed. We look forward to caring for you. Have a wonderful day!",
-    }
 
     print(
         f"Built workflow config with {len(workflow_config_full.node_configs)} nodes and {len(workflow_config_full.edge_configs)} edges"
     )
-    print(f"\nDynamic variables: \n{json.dumps(dynamic_variables, indent=2)}\n")
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow_config_full, dynamic_variables=dynamic_variables,

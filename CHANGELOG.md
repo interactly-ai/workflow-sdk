@@ -7,6 +7,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- **Examples 11–23 crashed on launch.** `main()` passed a `dynamic_variables` that was never defined
+  in its scope, so `python wf_examples/wf_example_progression_11.py` raised `NameError` on the first
+  call it made. The notebook counterparts never caught it because they import the *builder* and drive
+  the run themselves, never calling `main()`.
+
+### Changed
+- **Every curriculum builder now returns the config alone.** Examples 1–10 returned
+  `(config, dynamic_variables)`, where the second element was either empty (1, 2, 8, 9) or a
+  byte-identical copy of `miscellaneous["default_dynamic_variables"]` (3–7, 10) — so it carried
+  nothing the config did not already hold. The integration test that had to accept both shapes now
+  requires the single one.
+
+### Testing
+- **The parity allow-lists are themselves audited.** Each entry suppresses a real difference for a
+  stated reason; nothing checked that the reason had not expired. `tests/unit/test_drift_guards.py`
+  now asserts every entry still corresponds to a live divergence, and that each carries a reason.
+  It immediately found a dead one: `BaseAPIModel` sat on `KNOWN_ONLY_MIRROR` while living in
+  `src/interactly/` — outside the tree the harness parses — so it suppressed nothing on either side.
+
+---
+
 ## [0.2.0] — 2026-08-08
 
 First release since the SDK was brought back in sync with the workflow service.

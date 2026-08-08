@@ -581,18 +581,15 @@ def build_assistant_workflow():
         ],
     )
 
-    dynamic_variables = {
-        "greeting_phrase": "Hello, Welcome to Cigna Healthcare",
-        "supported_intents": ["appointments", "insurance", "payment"],
-        "farewell_phrase_1": "Thank you for chatting with CignaCare Assistant. Have a great day!",
-        "farewell_phrase_2": "We appreciate your time. Goodbye!",
-    }
-    # print(json.dumps(dynamic_variables, indent=2))
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow_config_full, dynamic_variables=dynamic_variables,

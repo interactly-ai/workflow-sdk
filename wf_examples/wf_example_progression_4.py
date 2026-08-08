@@ -257,21 +257,15 @@ def build_assistant_workflow():
         ],
     )
 
-    dynamic_variables = {
-        "greeting_phrase": "Hello and welcome!",
-        "organization_name": "HealthFirst Medical Center",
-        "emergency_number": "911",
-        "high_urgency_response_time": "2 hours",
-        "medium_urgency_response_time": "24 hours",
-        "low_urgency_response_time": "48 hours",
-        "closing_message": "Your health is our priority, and we're here to help.",
-        "farewell_message": "Thank you for providing your information. We'll be in touch soon. Have a great day!",
-    }
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow_config_full, dynamic_variables=dynamic_variables,
