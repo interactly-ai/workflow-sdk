@@ -73,6 +73,25 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
 - `is_given()` returned `bool` rather than `TypeGuard[T]`, so narrowing never happened at any call
   site.
 
+#### Testing
+- **The drift harnesses are now tests, not just make targets.** `tests/unit/test_drift_guards.py`
+  runs the source-parity and symbol-reference checks (skipping cleanly when the monorepo or the
+  packages are absent); `tests/integration/test_schema_sync_guard.py` runs the live schema check.
+  Each also asserts it *compared something* — a harness that silently finds no input reports zero
+  differences too, which is how three of four quality gates were passing in Phase 0.
+- **`tests/integration/test_background_execution_e2e.py`** — end-to-end coverage against a live
+  server for companion threads, evaluate-while-waiting, bounded self-loops, no-op nodes, re-runs
+  (including `amend_token`), run feedback, and the hydrated-config round trip. Includes the four
+  graph-validation rejections, asserted rather than described, so a server-side relaxation surfaces
+  as a test failure instead of a workflow that silently never advances.
+- **`tests/integration/test_examples_upload.py`** — every one of the 25 curriculum examples still
+  builds a config the server accepts.
+- **`tests/unit/test_run_event_shapes.py`** and **`tests/unit/resources/test_phase6_wire_shapes.py`**
+  — pin the `RunEvent` contract (top-level extras rather than `data`, internal companion ids, the
+  three lifecycle events that diverge) and the tool export/import, `is_system` and run-feedback wire
+  shapes.
+- New make targets: `make test-integration` and `make test-configs`.
+
 #### Notebooks & examples
 - Four new notebooks: `18_reruns_and_replay`, `19_companion_threads`, `20_waiting_conditions`,
   `21_run_feedback`. All four execute end to end against a live server.
@@ -129,6 +148,7 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
 ### E2E validation tooling & fixes (dev server)
 - **`notebooks/_run_e2e.py`** — headless runner that executes every docs notebook against a live Interactly server and reports per-notebook PASS/FAIL. All 17 notebooks now pass end-to-end against dev.
 - **`wf_examples/_run_e2e.py`** — non-interactive driver that uploads each `wf_example_progression_*` config and drives canned turns (or `--upload-only`). All 23 example configs upload; 20/23 run full turns with real LLM output (the other 3 require external setup: multi-provider credentials, a published super-node sub-workflow, and workflow-run-fetch team context).
+  <br>_Correction (Phase 6): this script is not in the repository and never was. Its upload check now lives in `tests/integration/test_examples_upload.py`, where it runs as part of the suite; driving turns is covered by the notebook counterparts in `notebooks/wf_example_notebooks/`._
 - `tests/integration/test_runtime_e2e.py` now also covers **turn execution** (static + opt-in real-LLM), not just CRUD; its stale "execute returns 500" note was removed.
 
 Real SDK bugs the E2E runs surfaced and fixed (all confirmed against dev):
