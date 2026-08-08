@@ -140,3 +140,98 @@ class TestSymbolReferences:
             pytest.skip("interactly / interactly_configs not importable")
 
         assert scanned > 300, f"only {scanned} source units scanned — discovery is broken"
+
+
+# --------------------------------------------------------------------------------------------- #
+# The allow-lists themselves                                                                      #
+# --------------------------------------------------------------------------------------------- #
+
+
+class TestAllowListsAreStillEarningTheirPlace:
+    """Parity reads 0 partly *because* of the allow-lists. Nothing audited the allow-lists.
+
+    Every entry suppresses a real difference for a stated reason. When that reason expires — upstream
+    deletes the class, adopts the divergence, or renames the field — the entry keeps suppressing
+    something that is no longer there, and the 0 stops meaning what a reader assumes it means.
+
+    Found by exactly this check: `BaseAPIModel` sat on ``KNOWN_ONLY_MIRROR`` while living in
+    ``src/interactly/`` — outside the tree the harness parses — so it suppressed nothing on either
+    side and merely implied the mirror contained a class it did not.
+    """
+
+    @staticmethod
+    def _trees():
+        import config_parity as cp
+
+        root = cp.find_interactly_ai_root()
+        if root is None:
+            pytest.skip("interactly-ai checkout not found")
+        return cp, cp.extract_tree(cp.upstream_paths(root)), cp.extract_tree([cp.find_mirror_configs()])
+
+    def test_only_upstream_entries_are_still_only_upstream(self):
+        cp, upstream, mirror = self._trees()
+        for name in cp.KNOWN_ONLY_UPSTREAM:
+            assert name in upstream, (
+                f"KNOWN_ONLY_UPSTREAM['{name}'] no longer exists upstream — drop the entry"
+            )
+            assert name not in mirror, (
+                f"KNOWN_ONLY_UPSTREAM['{name}'] is now vendored — drop the entry so parity compares it"
+            )
+
+    def test_only_mirror_entries_are_still_only_in_the_mirror(self):
+        cp, upstream, mirror = self._trees()
+        for name in cp.KNOWN_ONLY_MIRROR:
+            assert name in mirror, (
+                f"KNOWN_ONLY_MIRROR['{name}'] is not in the parsed mirror. Either it was removed, or "
+                "it lives outside configs/src/interactly_configs — where this harness never looks, so "
+                "the entry suppresses nothing."
+            )
+            assert name not in upstream, (
+                f"KNOWN_ONLY_MIRROR['{name}'] now exists upstream too — drop the entry so parity "
+                "compares them"
+            )
+
+    def test_field_divergences_still_diverge(self):
+        cp, upstream, mirror = self._trees()
+        for key, reason in cp.KNOWN_FIELD_DIVERGENCES.items():
+            class_name, field_name = key.rsplit(".", 1)
+
+            assert class_name in mirror, f"KNOWN_FIELD_DIVERGENCES['{key}'] names a class the mirror lacks"
+            mirror_type = cp.resolve_fields(class_name, mirror).get(field_name)
+            assert mirror_type is not None, (
+                f"KNOWN_FIELD_DIVERGENCES['{key}'] names a field the mirror no longer declares"
+            )
+
+            upstream_type = (
+                cp.resolve_fields(class_name, upstream).get(field_name) if class_name in upstream else None
+            )
+            if upstream_type is None:
+                # Legitimate: upstream may inherit the field from a base this harness cannot parse —
+                # `WorkflowTemplateConfig.access_*` come from a Beanie mixin in `common/`. Absence
+                # upstream is not staleness, so there is nothing further to check.
+                continue
+
+            assert cp._normalise_type(upstream_type) != cp._normalise_type(mirror_type), (
+                f"KNOWN_FIELD_DIVERGENCES['{key}'] no longer diverges — both sides are now "
+                f"`{mirror_type}`. Drop the entry ({reason})."
+            )
+
+    def test_hoisted_nonmembers_are_still_declared_upstream(self):
+        """The hoist exists because `enum.nonmember` is 3.11+ and this package supports 3.10.
+
+        If upstream stops declaring one, the mirror is carrying a constant nothing corresponds to.
+        """
+        cp, upstream, _ = self._trees()
+        for key in sorted(cp.KNOWN_HOISTED_NONMEMBERS):
+            class_name, attribute = key.rsplit(".", 1)
+            assert class_name in upstream, f"KNOWN_HOISTED_NONMEMBERS['{key}'] names an unknown enum"
+            assert attribute in upstream[class_name].nonmembers, (
+                f"KNOWN_HOISTED_NONMEMBERS['{key}'] is no longer declared upstream — drop the entry"
+            )
+
+    def test_every_entry_carries_a_reason(self):
+        """A bare entry is indistinguishable from one added to make a failure go away."""
+        cp, _, _ = self._trees()
+        for mapping_name in ("KNOWN_ONLY_UPSTREAM", "KNOWN_ONLY_MIRROR", "KNOWN_FIELD_DIVERGENCES"):
+            for name, reason in getattr(cp, mapping_name).items():
+                assert reason and reason.strip(), f"{mapping_name}['{name}'] has no stated reason"

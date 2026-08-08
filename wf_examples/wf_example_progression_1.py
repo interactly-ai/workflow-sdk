@@ -175,14 +175,15 @@ def build_assistant_workflow():
         ],
     )
 
-    dynamic_variables = {
-        # Add any dynamic variables required for the workflow here.
-    }
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
 
     client: AsyncWorkflowClient = get_async_client()
     handle = await aupload_and_get_handle(

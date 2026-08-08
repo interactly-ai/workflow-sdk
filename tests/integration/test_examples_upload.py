@@ -78,16 +78,17 @@ async def test_example_config_is_accepted_by_the_server(module_name: str, _examp
         f"{module_name} has no build_assistant_workflow(); the curriculum convention is broken"
     )
 
-    built = module.build_assistant_workflow()
+    config = module.build_assistant_workflow()
 
-    # The curriculum is not uniform here: some builders return the config alone, others return
-    # ``(config, dynamic_variables)``. Accept both rather than churning a dozen files customers read
-    # — but insist on finding a config, so a builder that starts returning something else fails
-    # loudly instead of uploading nothing.
-    config = built[0] if isinstance(built, tuple) else built
+    # Every builder returns the config and nothing else. Examples 1-10 used to return
+    # ``(config, dynamic_variables)``, where the second element was either empty or a byte-identical
+    # copy of ``miscellaneous["default_dynamic_variables"]`` — so it carried nothing the config did
+    # not already hold. Uniformity is what lets a reader move between examples, and what lets this
+    # test say something simple.
     assert isinstance(config, WorkflowConfigFullyHydrated), (
-        f"{module_name}.build_assistant_workflow() returned {type(built).__name__}, "
-        "which does not contain a WorkflowConfigFullyHydrated"
+        f"{module_name}.build_assistant_workflow() returned {type(config).__name__}, not a "
+        "WorkflowConfigFullyHydrated. Every builder in the curriculum returns the config alone; put "
+        "dynamic variables in workflow_config.miscellaneous['default_dynamic_variables']."
     )
 
     name = f"SDK_E2E upload check — {module_name}"

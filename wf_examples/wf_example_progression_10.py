@@ -346,11 +346,7 @@ def build_assistant_workflow():
         ],
     )
 
-    dynamic_variables = {
-        "recipient_phone_number": "+1234567890",  # Placeholder - should be provided at runtime
-    }
-
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
@@ -364,7 +360,11 @@ async def main():
     4. Extracting a conversation summary
     5. Sending the summary via SMS to a dynamic phone number
     """
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow_config_full, dynamic_variables=dynamic_variables,

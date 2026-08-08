@@ -440,25 +440,16 @@ def build_assistant_workflow():
         ],
     )
 
-    dynamic_variables = {
-        "greeting_phrase": "Welcome to our Insurance Risk Assessment Portal!",
-        "company_name": "Premier Insurance Group",
-        "standard_quote_time": "24 hours",
-        "standard_approval_time": "3-5 business days",
-        "discount_program": "wellness",
-        "premium_approval_time": "48 hours",
-        "premium_contact_time": "4 business hours",
-        "elevated_contact_time": "48 hours",
-        "elevated_approval_time": "2-3 weeks",
-        "farewell_message": "Thank you for your interest in our insurance services. We look forward to serving you. Have a great day!",
-    }
     print(f"Built workflow config: \n\n{workflow_config_full.model_dump_json(indent=2)}\n\n")
-    print(f"Dynamic variables: \n\n{json.dumps(dynamic_variables, indent=2)}\n\n")
-    return workflow_config_full, dynamic_variables
+    return workflow_config_full
 
 
 async def main():
-    workflow_config_full, dynamic_variables = build_assistant_workflow()
+    workflow_config_full = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow_config_full.workflow_config.miscellaneous.get(
+        "default_dynamic_variables", {}
+    )
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow_config_full, dynamic_variables=dynamic_variables,

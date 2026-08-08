@@ -266,6 +266,8 @@ def build_assistant_workflow():
 async def run():
     """Minimal REPL demonstrating backchannel behavior."""
     workflow = build_assistant_workflow()
+    # The workflow seeds these on upload; read them back so each turn sends the same values.
+    dynamic_variables = workflow.workflow_config.miscellaneous.get("default_dynamic_variables", {})
     client: AsyncWorkflowClient = get_async_client()
     workflow_runtime = await aupload_and_get_handle(
         client, workflow, dynamic_variables=dynamic_variables,

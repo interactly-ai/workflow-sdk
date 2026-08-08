@@ -80,7 +80,6 @@ KNOWN_ONLY_UPSTREAM: Dict[str, str] = {
 }
 
 KNOWN_ONLY_MIRROR: Dict[str, str] = {
-    "BaseAPIModel": "SDK-only base model",
     # Upstream's WorkflowTemplateConfig inherits `AccessControlLevelModel` from
     # `common/models/access_level_model.py`, a Beanie document base that cannot be vendored. This is
     # the pure-Pydantic stand-in that supplies the same two fields.
