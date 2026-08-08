@@ -4,7 +4,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interactly"
-version = "0.1.0"
+# Read from src/interactly/_version.py — see [tool.hatch.version] below. Hardcoding it here as well
+# gave two sources of truth that could disagree, while `_version.py` claimed to be the only one.
+dynamic = ["version"]
 description = "Python SDK for the Interactly Workflow API"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,6 +48,9 @@ dev = [
     "pre-commit>=3.7",
     "types-requests",
 ]
+
+[tool.hatch.version]
+path = "src/interactly/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/interactly"]

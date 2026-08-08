@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "interactly-configs"
-version = "0.1.0"
+# Read from src/interactly_configs/_version.py — see [tool.hatch.version] below.
+dynamic = ["version"]
 description = "Pure-Pydantic typed config classes for authoring Interactly workflows."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -38,6 +39,9 @@ dev = [
 Homepage = "https://github.com/interactly/interactly-python"
 Documentation = "https://docs.interactly.io/sdk/configs"
 Repository = "https://github.com/interactly/interactly-configs"
+
+[tool.hatch.version]
+path = "src/interactly_configs/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/interactly_configs"]
