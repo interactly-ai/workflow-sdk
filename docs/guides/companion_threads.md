@@ -203,7 +203,7 @@ For one step at a time, `pump_companions()` is the primitive underneath.
 > `has_background_work` is the flag to poll on. `has_active_companions` is retained for backward
 > compatibility and is a strict subset — it misses parked threads with armed waiting-evaluations.
 
-> **⚠️ Needs a server build that includes `interactly-ai@1c41c4c10`.**
+> **⚠️ Needs a server build that includes `interactly-ai@6b09ada25`.**
 >
 > Before that fix the REST path did not run companions at all: `execute()` returned as soon as the
 > main thread parked, and the companion's first node emitted `start_node_run` and was then abandoned
@@ -282,7 +282,7 @@ if response.has_background_work:
 
 - **Fork upstream of the node that waits**, never on it. See the rule above.
 - **`end_workflow_iteration` is not "your turn."** Use `is_ready_for_input()`.
-- **REST runs need pumping**, and need a server build with `interactly-ai@1c41c4c10`. `stream()`
+- **REST runs need pumping**, and need a server build with `interactly-ai@6b09ada25`. `stream()`
   was never affected.
 - **`active_companion_thread_ids` holds internal ids** (`0_companion_labpoll`), not your `thread_id`.
 - **Event extras are top-level attributes**, not `event.data`.

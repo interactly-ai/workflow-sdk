@@ -177,7 +177,7 @@ for r in responses:
 ```
 
 See [Companion threads → driving a run](companion_threads.md#driving-a-run-with-companions), which
-also records the server-version caveat: pumping needs a build that includes `interactly-ai@1c41c4c10`.
+also records the server-version caveat: pumping needs a build that includes `interactly-ai@6b09ada25`.
 
 ---
 
@@ -208,7 +208,7 @@ client.runs.drive_background_work(workflow_id, run_id, interval_seconds=1.0)
   not when it parks.
 - **`ON_EVERY_BACKGROUND_TICK` without a debounce is refused.** Prefer `ON_NODE_COMPLETION`.
 - **A REST-driven run needs pumping** or the condition is never evaluated — and pumping needs a
-  server build with `interactly-ai@1c41c4c10`; see
+  server build with `interactly-ai@6b09ada25`; see
   [companion threads](companion_threads.md#over-rest--you-must-pump).
 - **The condition language is small**: `==`, `!=`, `<`, `<=`, `>`, `>=`, `AND`/`OR`/`NOT`, and
   `isPresent` / `isAbsent` / `isEmpty` / `isNonEmpty`. There is no `contains()`, and an unsupported
