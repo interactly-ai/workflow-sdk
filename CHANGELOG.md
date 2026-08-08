@@ -73,6 +73,28 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
 - `is_given()` returned `bool` rather than `TypeGuard[T]`, so narrowing never happened at any call
   site.
 
+#### Notebooks & examples
+- Four new notebooks: `18_reruns_and_replay`, `19_companion_threads`, `20_waiting_conditions`,
+  `21_run_feedback`. All four execute end to end against a live server.
+- Two new curriculum examples: `wf_example_progression_24` (companion thread polling in the
+  background, with an evaluate-while-waiting edge that interrupts the conversation when the result
+  lands) and `_25` (bounded retries branching on `[[self_loop_outcome]]`, with a no-op fan-in
+  junction). Each with its illustrated `.md`.
+- Existing notebooks updated for the new surface: `15` (background/self-loop events,
+  `thread_reference_id`, close codes 4006/4007), `16` (the no-op node, `SelfLoopConfig`,
+  edge-level configs and the four accessors), `07` (`is_system`), `04` (tool export/import).
+
+#### Known issues found while writing the above
+- **Companion threads do not run over the REST driver.** `execute()` returns as soon as the main
+  thread parks; the companion's first node emits `start_node_run` and is then never advanced.
+  `has_background_work` stays `False`, so `pump_companions()` / `drive_background_work()` have
+  nothing to do, and a later user turn does not resurrect the thread. Reproduced with a companion
+  as simple as a single no-op node. **Drive workflows with companion threads over `stream()`.**
+- **`Run.feedback_users` is empty on a fetched run**, even when the run carries ratings and
+  comments. Read the map off the write response instead.
+- `add_comment()` and `add_event_comment()` return a single `RunComment`, not the full
+  `RunFeedbackResponse` the newer feedback endpoints return.
+
 #### Docs
 - New guides: [re-runs](docs/guides/reruns.md), [companion threads](docs/guides/companion_threads.md),
   [evaluate while waiting](docs/guides/waiting_evaluation.md),

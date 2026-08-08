@@ -107,14 +107,20 @@ stored as a comment nobody can see. The cap is 5,000 characters
 await client.runs.delete_turn_comment(run_id, turn_index=2, comment_logical_id=comment_id)
 ```
 
-Run-level and event-level comments have their own methods:
+Run-level and event-level comments have their own methods. **These two predate the feedback
+response and return a single `RunComment`, not the full list** — check the return type rather than
+assuming:
 
 ```python
-await client.runs.add_comment(run_id, content="Reviewed — no action needed")
-await client.runs.add_event_comment(run_id, event_logical_id, content="This is the bad reply")
+comment = await client.runs.add_comment(run_id, content="Reviewed — no action needed")
+comment = await client.runs.add_event_comment(run_id, event_logical_id, content="This is the bad reply")
+comment.content            # RunComment, not RunFeedbackResponse
+
 await client.runs.delete_comment(run_id, comment_logical_id)
 await client.runs.delete_event_comment(run_id, event_logical_id, comment_logical_id)
 ```
+
+Only `set_turn_rating`, `set_event_rating` and `add_turn_comment` return a `RunFeedbackResponse`.
 
 ---
 
@@ -145,11 +151,16 @@ for rating in result.ratings:
 an access path to the user directory. Ids that no longer resolve are simply absent from the map, so
 look them up with `.get()` rather than `[]`.
 
-Fetching a run brings the same map:
+`Run.feedback_users` exists on the model, but:
+
+> **⚠️ Verified on dev, 2026-08-07:** `client.runs.get(...)` returns `feedback_users` **empty**
+> even when the run carries ratings and comments. It defaults to `{}`, so this fails silently
+> rather than raising. Resolve author names from the **write** response, or from your own
+> directory.
 
 ```python
 run = await client.runs.get(run_id)
-run.feedback_users
+run.feedback_users        # {} today — see above
 ```
 
 ---
@@ -221,6 +232,8 @@ client.runs.delete_turn_rating(run_id, 2)
 - **Re-rating replaces**; it does not append. There is no duplicate to clean up.
 - **Blank comments are refused**, and content is trimmed before storage.
 - **`feedback_users` can miss an id** if the user no longer resolves. Use `.get()`.
+- **`feedback_users` is empty on a fetched run** today — read it off the write response.
+- **`add_comment` / `add_event_comment` return a single `RunComment`**, not the full list.
 - **Turn index, not turn id.** `turn_index` is the 0-based position in `input_output_pairs`.
 - **Ratings are per user.** `result.ratings` is everyone's, not just yours — filter by `createdBy` if
   you want your own.

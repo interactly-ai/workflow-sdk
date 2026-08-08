@@ -68,6 +68,10 @@ Suggested order is top to bottom.
 | 15 | [websocket streaming events](15_websocket_streaming_events.ipynb) | Stream run events over the WebSocket API |
 | 16 | [nodes & edges](16_nodes_and_edges.ipynb) | The building blocks in depth: node & edge types |
 | 17 | [interactly configs](17_interactly_configs.ipynb) | The typed `configs` module: providers, nodes, edges, tools |
+| 18 | [re-runs & replay](18_reruns_and_replay.ipynb) | Replay a finished run from any turn; the six `client.reruns` endpoints |
+| 19 | [companion threads](19_companion_threads.ipynb) | Fork a background thread that keeps working while the caller talks |
+| 20 | [waiting conditions](20_waiting_conditions.ipynb) | Let an edge fire while its source node is parked — no user message |
+| 21 | [run feedback](21_run_feedback.ipynb) | Ratings and comments at run, turn, and event level |
 
 ### `wf_example_notebooks/`
 

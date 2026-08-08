@@ -55,8 +55,10 @@ Focused how-tos for each part of the API. Reach for these once you know the basi
 
 ## Other surfaces
 
-- [`../notebooks/`](../notebooks/) — runnable, interactive lessons (start at `00_index.ipynb`)
-- [`../wf_examples/`](../wf_examples/) — complete workflow-authoring examples, simple → complex
+- [`../notebooks/`](../notebooks/) — runnable, interactive lessons (start at `00_index.ipynb`).
+  Notebooks **18–21** cover re-runs, companion threads, waiting conditions and run feedback.
+- [`../wf_examples/`](../wf_examples/) — complete workflow-authoring examples, simple → complex.
+  Examples **24–25** are worked graphs for background execution and bounded retries.
 - [`../README.md`](../README.md) — the SDK's front door
 
 ---

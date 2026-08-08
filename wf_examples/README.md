@@ -83,6 +83,23 @@ _Everything, together, in one production-shaped agent._
 |---|---|---|---|
 | 23 | [Capstone: full member-services agent](./wf_example_progression_23.md) | Synthesise the whole curriculum into one production-shaped agent. | WorkerLLM + backchannel group, external API + KB tools, global escalation + reverse edge… |
 
+### Beyond the capstone: background execution
+
+_Work that happens while the caller is still talking, and retries that stop on a bound._
+
+These two come after the capstone rather than inside the arc: they are not more of the same graph,
+they change **when** things run.
+
+| Step | Example | Teaches | New concepts |
+|---|---|---|---|
+| 24 | [Companion threads + evaluate-while-waiting](./wf_example_progression_24.md) | Poll a lab system in the background and interrupt the conversation the moment the result lands. | CompanionThreadConfig, cross-thread `[[thread_<id>.var]]`, EvaluateWhileWaitingConfig, NoOp as a fork point |
+| 25 | [Bounded retries and self-loop outcomes](./wf_example_progression_25.md) | Retry a flaky check on a bound, then branch on *how* the loop ended. | SelfLoopConfig, `[[self_loop_outcome]]`, NoOp as a fan-in junction |
+
+> **Note on "companion".** Step 6 above uses `CompanionEdgeConfig` — an *edge type* pairing a Say
+> agent with a silent Worker agent inside one turn. Step 24 uses `CompanionThreadConfig` — a
+> *setting on a direct edge* that forks a genuinely concurrent background thread. Same word,
+> unrelated mechanisms.
+
 ---
 
 ### A note on the dev environment

@@ -51,7 +51,8 @@ will cut off mid-turn or race. Break on `is_ready_for_input()` for "the caller's
 `is_terminal()` for "the run is over".
 
 `workflow_ready_for_input` carries `active_companion_thread_ids` — what is still running in the
-background at that moment.
+background at that moment. Note these are **internal** ids: a companion configured as
+`thread_id="labpoll"` appears as `"0_companion_labpoll"`. Match on the suffix, not equality.
 
 ---
 
@@ -69,10 +70,13 @@ a server-side addition never breaks an older client.
 | `status` | `str \| None` | Run status after this event. |
 | `error` | `str \| None` | Error message for failure events. |
 | `global_node_logical_id` | `str \| None` | For `reverse_conditional_edge`: the global node returning control. |
-| `data` | `dict \| None` | Additional server payload. |
+| `data` | `dict \| None` | Legacy slot. **The server never populates it** — see below. |
 
 Because unknown fields are preserved, event-specific fields not listed above are still reachable — via
-attribute access or `model_extra`.
+attribute access or `model_extra`. That is where they actually arrive: **top-level, not under
+`data`**. `self_loop_exhausted` gives you `event.outcome` and `event.total_attempts`;
+`waiting_condition_matched` gives you `event.hydrated_condition_expression`. Reaching for
+`event.data` gets you `None` every time.
 
 ### Event catalog
 

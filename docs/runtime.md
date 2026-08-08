@@ -153,5 +153,5 @@ produce valid structured output.
 
 See [`wf_examples/wf_example_progression_1.py`](../wf_examples/wf_example_progression_1.py) for an
 end-to-end runnable example and [`wf_examples/README.md`](../wf_examples/README.md) for the full
-curriculum of 23 progression examples
+curriculum of 25 progression examples
 plus a 125-node telephone-triage workflow.

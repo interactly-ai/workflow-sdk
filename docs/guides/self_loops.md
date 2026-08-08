@@ -131,10 +131,13 @@ If a node might spin on CPU, bound it with `max_retries` as well.
 ```python
 async for event in stream:
     if event.type == "self_loop_exhausted":
-        print(f"gave up: {event.data}")
+        print(f"gave up on {event.outcome} after {event.total_attempts} attempts")
     if event.is_ready_for_input():
         break
 ```
+
+These fields are **top-level attributes**, not `event.data` — `RunEvent` is `extra="allow"`, and
+the server never populates `data`.
 
 ---
 
@@ -193,3 +196,4 @@ because it is a background thread nobody is waiting on it to notice.
 - **Add a `self_loop_outcome` edge**, or an exhausted loop looks like a stall.
 - **`expiry_time` cannot interrupt CPU-bound inline Python.** Add `max_retries` too.
 - **Never leave a companion loop unbounded** — nothing is waiting on it to notice.
+- **Read event extras off the event**, not `event.data` (`event.outcome`, `event.total_attempts`).
