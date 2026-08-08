@@ -203,17 +203,14 @@ For one step at a time, `pump_companions()` is the primitive underneath.
 > `has_background_work` is the flag to poll on. `has_active_companions` is retained for backward
 > compatibility and is a strict subset — it misses parked threads with armed waiting-evaluations.
 
-> **⚠️ Needs a server build that includes `interactly-ai@6b09ada25`.**
+> **Requires a server build that includes `interactly-ai@6b09ada25`** (live on dev since
+> 2026-08-08). Earlier builds did not run companions over REST at all: `execute()` returned as soon
+> as the main thread parked, and the companion's first node was abandoned mid-execution — no
+> `end_node_run`, `has_background_work` stuck at `False`, and nothing for `pump_companions()` to
+> advance.
 >
-> Before that fix the REST path did not run companions at all: `execute()` returned as soon as the
-> main thread parked, and the companion's first node emitted `start_node_run` and was then abandoned
-> — no `end_node_run`, `has_background_work` stuck at `False`, nothing for `pump_companions()` to
-> advance, and a later user turn did not resurrect it. The cause was the REST turn loop breaking out
-> of the runtime generator on the busy-wait event, which cancelled the drain loop mid-companion.
->
-> **Check `has_background_work` rather than assuming.** If it is `False` on a run you know has a
-> companion, you are talking to a server that predates the fix — drive that workflow over `stream()`,
-> which was never affected.
+> If `has_background_work` comes back `False` on a run you know forked a companion, you are talking
+> to an older server. `stream()` was never affected.
 
 **A pump can produce main-thread output.** If a waiting condition matches during the pump, the
 workflow advances and the response carries assistant messages — even though no user message was sent.
@@ -282,8 +279,8 @@ if response.has_background_work:
 
 - **Fork upstream of the node that waits**, never on it. See the rule above.
 - **`end_workflow_iteration` is not "your turn."** Use `is_ready_for_input()`.
-- **REST runs need pumping**, and need a server build with `interactly-ai@6b09ada25`. `stream()`
-  was never affected.
+- **REST runs need pumping**, on a build that includes `interactly-ai@6b09ada25`. `stream()` was
+  never affected.
 - **`active_companion_thread_ids` holds internal ids** (`0_companion_labpoll`), not your `thread_id`.
 - **Event extras are top-level attributes**, not `event.data`.
 - **An unnamed companion is unaddressable.** Set `thread_id` if anything needs to read its variables.

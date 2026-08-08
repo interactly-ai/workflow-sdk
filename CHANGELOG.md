@@ -86,7 +86,7 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
 
 #### Server-side issues found while writing the above
 - **Companion threads did not run over the REST driver** — fixed upstream in
-  `interactly-ai@6b09ada25`. `execute()` returned as soon as the main thread parked; the companion's
+  `interactly-ai@6b09ada25`, verified live on dev 2026-08-08. `execute()` returned as soon as the main thread parked; the companion's
   first node emitted `start_node_run` and was then abandoned, so `has_background_work` stayed
   `False` and `pump_companions()` / `drive_background_work()` had nothing to advance. The REST turn
   loop was breaking out of the runtime generator on the busy-wait event, cancelling the drain loop
