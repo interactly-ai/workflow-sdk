@@ -1,6 +1,6 @@
 # Example 23 — Capstone: full member-services agent
 
-> **Progressive curriculum · step 23 of 23.** Synthesise the whole curriculum into one production-shaped agent.
+> **Progressive curriculum · step 23 of 25 — the capstone.** Synthesise the whole curriculum into one production-shaped agent.
 
 **Concepts introduced here:** WorkerLLM + backchannel group, external API + KB tools, global escalation + reverse edge, conditional routing to a farewell terminal
 
@@ -88,4 +88,4 @@ pipenv run python wf_examples/wf_example_progression_23.py
 ```
 
 ---
-[← Example 22](./wf_example_progression_22.md) · [Curriculum index](./README.md) · 🎓 end of curriculum
+[← Example 22](./wf_example_progression_22.md) · [Curriculum index](./README.md) · [Example 24 →](./wf_example_progression_24.md)

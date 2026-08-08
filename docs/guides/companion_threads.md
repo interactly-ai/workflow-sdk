@@ -177,8 +177,7 @@ A loop that breaks on `end_workflow_iteration` will race or hang once companions
 
 ### Over REST — you must pump
 
-The REST driver does **not** advance background work on its own. Without pumping, a run with
-companions never progresses:
+The REST driver does **not** advance background work on its own. The intended shape is:
 
 ```python
 response = await client.runs.execute(workflow_id, command=WorkflowCommand.START)
@@ -203,6 +202,15 @@ For one step at a time, `pump_companions()` is the primitive underneath.
 
 > `has_background_work` is the flag to poll on. `has_active_companions` is retained for backward
 > compatibility and is a strict subset — it misses parked threads with armed waiting-evaluations.
+
+> **Requires a server build that includes `interactly-ai@6b09ada25`** (live on dev since
+> 2026-08-08). Earlier builds did not run companions over REST at all: `execute()` returned as soon
+> as the main thread parked, and the companion's first node was abandoned mid-execution — no
+> `end_node_run`, `has_background_work` stuck at `False`, and nothing for `pump_companions()` to
+> advance.
+>
+> If `has_background_work` comes back `False` on a run you know forked a companion, you are talking
+> to an older server. `stream()` was never affected.
 
 **A pump can produce main-thread output.** If a waiting condition matches during the pump, the
 workflow advances and the response carries assistant messages — even though no user message was sent.
@@ -230,6 +238,13 @@ Companion-specific event types:
 | `waiting_evaluation_boundary` | A parked thread's waiting-edges were evaluated. |
 | `workflow_ready_for_input` | Carries `active_companion_thread_ids` — what is still running. |
 
+`active_companion_thread_ids` holds **internal** ids: a companion configured as `thread_id="labpoll"`
+appears as `"0_companion_labpoll"`. Match on the suffix, not equality.
+
+Event-specific fields arrive as **top-level attributes**, not under `event.data` — `RunEvent` is
+`extra="allow"`, and `data` is never populated by the server. So `self_loop_exhausted` gives you
+`event.outcome` and `event.total_attempts` directly.
+
 ---
 
 ## Synchronous alternative
@@ -251,13 +266,23 @@ if response.has_background_work:
 - [Evaluate while waiting](waiting_evaluation.md) — letting a companion's result move the conversation
 - [Self-loops](self_loops.md) — making a companion poll repeatedly
 - [Nodes, edges & tools](nodes_edges_tools.md) — edge types and the NoOp node
+- [`wf_examples/wf_example_progression_24.md`](../../wf_examples/wf_example_progression_24.md) — a complete worked graph
+
+> **Not the same "companion" as `CompanionEdgeConfig`.** That is an *edge type* pairing a Say agent
+> with a silent Worker agent inside one turn (see
+> [example 6](../../wf_examples/wf_example_progression_6.md)). `CompanionThreadConfig` is a *setting
+> on a direct edge* that forks a genuinely concurrent background thread. Same word, unrelated
+> mechanisms.
 - [Streaming](../streaming.md) — the event protocol
 
 ## Gotchas
 
 - **Fork upstream of the node that waits**, never on it. See the rule above.
 - **`end_workflow_iteration` is not "your turn."** Use `is_ready_for_input()`.
-- **REST runs need pumping.** A run that appears frozen usually just is not being pumped.
+- **REST runs need pumping**, on a build that includes `interactly-ai@6b09ada25`. `stream()` was
+  never affected.
+- **`active_companion_thread_ids` holds internal ids** (`0_companion_labpoll`), not your `thread_id`.
+- **Event extras are top-level attributes**, not `event.data`.
 - **An unnamed companion is unaddressable.** Set `thread_id` if anything needs to read its variables.
 - **Companion sub-graphs cannot rejoin the main thread.** Communicate via variables instead.
 - **A companion that never terminates keeps the run alive.** Bound it with

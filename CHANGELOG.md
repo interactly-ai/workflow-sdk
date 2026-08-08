@@ -73,6 +73,30 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
 - `is_given()` returned `bool` rather than `TypeGuard[T]`, so narrowing never happened at any call
   site.
 
+#### Notebooks & examples
+- Four new notebooks: `18_reruns_and_replay`, `19_companion_threads`, `20_waiting_conditions`,
+  `21_run_feedback`. All four execute end to end against a live server.
+- Two new curriculum examples: `wf_example_progression_24` (companion thread polling in the
+  background, with an evaluate-while-waiting edge that interrupts the conversation when the result
+  lands) and `_25` (bounded retries branching on `[[self_loop_outcome]]`, with a no-op fan-in
+  junction). Each with its illustrated `.md`.
+- Existing notebooks updated for the new surface: `15` (background/self-loop events,
+  `thread_reference_id`, close codes 4006/4007), `16` (the no-op node, `SelfLoopConfig`,
+  edge-level configs and the four accessors), `07` (`is_system`), `04` (tool export/import).
+
+#### Server-side issues found while writing the above
+- **Companion threads did not run over the REST driver** — fixed upstream in
+  `interactly-ai@6b09ada25`, verified live on dev 2026-08-08. `execute()` returned as soon as the main thread parked; the companion's
+  first node emitted `start_node_run` and was then abandoned, so `has_background_work` stayed
+  `False` and `pump_companions()` / `drive_background_work()` had nothing to advance. The REST turn
+  loop was breaking out of the runtime generator on the busy-wait event, cancelling the drain loop
+  mid-companion. **Pumping requires a server build that includes that commit**; `stream()` was never
+  affected.
+- **`Run.feedback_users` is empty on a fetched run**, even when the run carries ratings and
+  comments. Read the map off the write response instead.
+- `add_comment()` and `add_event_comment()` return a single `RunComment`, not the full
+  `RunFeedbackResponse` the newer feedback endpoints return.
+
 #### Docs
 - New guides: [re-runs](docs/guides/reruns.md), [companion threads](docs/guides/companion_threads.md),
   [evaluate while waiting](docs/guides/waiting_evaluation.md),

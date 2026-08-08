@@ -176,7 +176,8 @@ for r in responses:
         print(event)   # may include assistant messages, with no user turn sent
 ```
 
-See [Companion threads → driving a run](companion_threads.md#driving-a-run-with-companions).
+See [Companion threads → driving a run](companion_threads.md#driving-a-run-with-companions), which
+also records the server-version caveat: pumping needs a build that includes `interactly-ai@6b09ada25`.
 
 ---
 
@@ -206,5 +207,12 @@ client.runs.drive_background_work(workflow_id, run_id, interval_seconds=1.0)
 - **Do not name an interactive node as a trigger.** Its completion is recorded only when it executes,
   not when it parks.
 - **`ON_EVERY_BACKGROUND_TICK` without a debounce is refused.** Prefer `ON_NODE_COMPLETION`.
-- **A REST-driven run needs pumping** or the condition is never evaluated.
+- **A REST-driven run needs pumping** or the condition is never evaluated — and pumping needs a
+  server build with `interactly-ai@6b09ada25`; see
+  [companion threads](companion_threads.md#over-rest--you-must-pump).
+- **The condition language is small**: `==`, `!=`, `<`, `<=`, `>`, `>=`, `AND`/`OR`/`NOT`, and
+  `isPresent` / `isAbsent` / `isEmpty` / `isNonEmpty`. There is no `contains()`, and an unsupported
+  call fails the **run**, not the save.
+- **Read the `hydrated_condition_expression`** off `waiting_condition_matched` when a condition is
+  not firing — it shows what the variables actually resolved to (`"3 >= 3"`).
 - **`max_transitions_per_wait` resets on each user message**, so it bounds one wait, not the run.

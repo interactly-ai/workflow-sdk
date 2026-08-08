@@ -562,6 +562,12 @@ Tools are attached to LLM nodes via the node's `tools_config`; there is no separ
 - **Standalone node/edge/tool IDs vs. workflow nodes**: A standalone node created via `nodes.create()` gets a `id`. When that node is added to a workflow, it is part of the graph's JSON config and referenced by its `logical_id`.
 - **Tool attachment**: Tools are attached to LLM nodes via the node's `tools_config`; the SDK does not enforce this at the node/tool API level.
 - **`no_op` is not `disabled`**: a disabled node emits nothing; a no-op node runs and emits events.
+- **The condition language is smaller than it looks**: `==`, `!=`, `<`, `<=`, `>`, `>=`,
+  `AND`/`OR`/`NOT`, and `isPresent` / `isAbsent` / `isEmpty` / `isNonEmpty`. No `contains()`, and an
+  unsupported call fails the **run**, not the save.
+- **Dotted access into a dict-valued runtime variable is not interpolated**: a prompt containing
+  `[[result.value]]` where `result` holds a dict comes through as that literal text. Have tools
+  return the field you need directly.
 - **Import refuses `inline_python` by default**: pass `confirm_executable=True` deliberately.
 - **Typed configs need the extra**: The typed classes require `pip install interactly[configs]`. Without it, use the dict form shown in each section.
 

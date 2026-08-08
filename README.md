@@ -15,7 +15,7 @@ dashboard, expressed as typed Python config objects and driven through a typed c
 
 | If you want to… | Go to |
 |---|---|
-| **Learn the SDK step by step** (recommended) | [`wf_examples/README.md`](wf_examples/README.md) — a 23-step **progressive curriculum**, each step with a workflow diagram and a runnable notebook |
+| **Learn the SDK step by step** (recommended) | [`wf_examples/README.md`](wf_examples/README.md) — a 25-step **progressive curriculum**, each step with a workflow diagram and a runnable notebook |
 | Understand what the SDK is and read a guided tour | [`docs/`](docs/) — start at [`docs/README.md`](docs/README.md) |
 | Run interactive, executable lessons | [`notebooks/`](notebooks/) — start at `00_index.ipynb` |
 | Look up a method signature | [`docs/api_async.md`](docs/api_async.md) (async) · [`docs/api_sync.md`](docs/api_sync.md) (sync) |
