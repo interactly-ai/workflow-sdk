@@ -7,7 +7,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
-## [Unreleased]
+## [0.2.0] — 2026-08-08
+
+First release since the SDK was brought back in sync with the workflow service.
 
 ### Workflow-service sync (2026-08)
 
@@ -72,6 +74,18 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
   "Source file found twice". Removing them surfaced 79 real type errors, all now fixed.
 - `is_given()` returned `bool` rather than `TypeGuard[T]`, so narrowing never happened at any call
   site.
+
+#### Packaging & self-containment
+- **`pyproject.toml` now reads the version from `_version.py`** in both packages
+  (`[tool.hatch.version]`). Each file previously hardcoded the number *alongside* `_version.py`,
+  which claimed to be the only source — two values free to disagree.
+- **`tests/unit/test_self_contained.py`** enforces the constraint the whole vendoring arrangement
+  rests on: no shipped module imports `common`, `agentic_workflow_framework`, `workflow_service`,
+  `beanie`, `bson` or `pymongo`; nothing imports the drift harnesses; `interactly_configs` is never
+  imported unguarded at module scope; and the wheels ship the package and nothing else.
+- Verified in a fresh venv outside the monorepo: the base install imports and builds a client with
+  **no** `interactly_configs` present, and the facades fail with installation instructions rather
+  than a bare `ModuleNotFoundError`.
 
 #### Testing
 - **The drift harnesses are now tests, not just make targets.** `tests/unit/test_drift_guards.py`
