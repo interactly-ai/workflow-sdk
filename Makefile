@@ -1,4 +1,4 @@
-.PHONY: install test lint format typecheck clean sync-check parity-check schema-check refs-check api-docs api-docs-check
+.PHONY: install test test-integration test-configs lint format typecheck clean sync-check parity-check schema-check refs-check api-docs api-docs-check
 
 VENV = .venv
 PYTHON = $(VENV)/bin/python
@@ -24,6 +24,17 @@ install:
 
 test:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" $(VENV)/bin/pytest tests/unit/ -v --tb=short
+
+# The vendored configs package has its own suite and its own settings root.
+test-configs:
+	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" $(VENV)/bin/pytest configs/tests/ -q
+
+# Everything that needs a live server: the e2e feature coverage, the example upload check, and the
+# schema guard. Requires INTERACTLY_* credentials; each test skips without them rather than failing,
+# so this stays runnable in a bare checkout.
+test-integration:
+	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
+		$(VENV)/bin/pytest tests/integration/ -m integration -q
 
 test-all:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" $(VENV)/bin/nox -s tests
