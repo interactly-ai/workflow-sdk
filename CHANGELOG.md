@@ -84,12 +84,14 @@ remains self-contained: no imports from `interactly-ai`, `common`, `beanie`, `bs
   `thread_reference_id`, close codes 4006/4007), `16` (the no-op node, `SelfLoopConfig`,
   edge-level configs and the four accessors), `07` (`is_system`), `04` (tool export/import).
 
-#### Known issues found while writing the above
-- **Companion threads do not run over the REST driver.** `execute()` returns as soon as the main
-  thread parks; the companion's first node emits `start_node_run` and is then never advanced.
-  `has_background_work` stays `False`, so `pump_companions()` / `drive_background_work()` have
-  nothing to do, and a later user turn does not resurrect the thread. Reproduced with a companion
-  as simple as a single no-op node. **Drive workflows with companion threads over `stream()`.**
+#### Server-side issues found while writing the above
+- **Companion threads did not run over the REST driver** — fixed upstream in
+  `interactly-ai@1c41c4c10`. `execute()` returned as soon as the main thread parked; the companion's
+  first node emitted `start_node_run` and was then abandoned, so `has_background_work` stayed
+  `False` and `pump_companions()` / `drive_background_work()` had nothing to advance. The REST turn
+  loop was breaking out of the runtime generator on the busy-wait event, cancelling the drain loop
+  mid-companion. **Pumping requires a server build that includes that commit**; `stream()` was never
+  affected.
 - **`Run.feedback_users` is empty on a fetched run**, even when the run carries ratings and
   comments. Read the map off the write response instead.
 - `add_comment()` and `add_event_comment()` return a single `RunComment`, not the full

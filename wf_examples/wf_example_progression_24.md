@@ -148,12 +148,10 @@ Examples 1–23 drive their runs through an `AsyncWorkflowHandle`, which goes ov
 polls `pump_companions()` until nothing is left, bounded by `max_iterations` so a long-running
 companion cannot block forever.
 
-> **⚠️ Verified on dev, 2026-08-07: the REST path does not currently run companions at all.**
-> `execute()` returns as soon as the main thread parks; the companion's first node emits
-> `start_node_run` and is never advanced. `has_background_work` stays `False`, so there is nothing
-> for `pump_companions()` to do, and a later user turn does not resurrect the thread. Reproduced
-> with a companion as simple as a single no-op node. `run_over_rest()` is kept because it is the
-> right shape for when this is fixed — **drive these workflows over `stream()` today.**
+> **⚠️ Needs a server build that includes `interactly-ai@1c41c4c10`.** Before that fix the REST turn
+> loop broke out of the runtime generator on the busy-wait event, cancelling the drain loop while the
+> companion was still mid-execution — so `has_background_work` came back `False` and there was nothing
+> to pump. `stream()` was never affected. Check the flag rather than assuming.
 
 ### `end_workflow_iteration` is no longer "your turn"
 

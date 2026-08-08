@@ -176,9 +176,8 @@ for r in responses:
         print(event)   # may include assistant messages, with no user turn sent
 ```
 
-See [Companion threads → driving a run](companion_threads.md#driving-a-run-with-companions) — which
-also records a caveat found on dev: the REST path does not currently advance companions at all, so
-drive these workflows over `stream()` for now.
+See [Companion threads → driving a run](companion_threads.md#driving-a-run-with-companions), which
+also records the server-version caveat: pumping needs a build that includes `interactly-ai@1c41c4c10`.
 
 ---
 
@@ -208,8 +207,9 @@ client.runs.drive_background_work(workflow_id, run_id, interval_seconds=1.0)
 - **Do not name an interactive node as a trigger.** Its completion is recorded only when it executes,
   not when it parks.
 - **`ON_EVERY_BACKGROUND_TICK` without a debounce is refused.** Prefer `ON_NODE_COMPLETION`.
-- **A REST-driven run needs pumping** or the condition is never evaluated — and see the REST caveat
-  in [companion threads](companion_threads.md#over-rest--you-must-pump).
+- **A REST-driven run needs pumping** or the condition is never evaluated — and pumping needs a
+  server build with `interactly-ai@1c41c4c10`; see
+  [companion threads](companion_threads.md#over-rest--you-must-pump).
 - **The condition language is small**: `==`, `!=`, `<`, `<=`, `>`, `>=`, `AND`/`OR`/`NOT`, and
   `isPresent` / `isAbsent` / `isEmpty` / `isNonEmpty`. There is no `contains()`, and an unsupported
   call fails the **run**, not the save.
