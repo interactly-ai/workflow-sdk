@@ -114,6 +114,17 @@ class BaseToolConfig(BaseModel):
         ),
         title="Ignore content received during LLM tool call specification",
     )
+    timeout_seconds: Optional[int] = Field(
+        default=None,
+        description=(
+            "Wall-clock ceiling in seconds for one invocation of this tool. Leave empty to use the "
+            "platform default. Raise it for a tool that is legitimately slow (a large EHR sync, say) "
+            "rather than letting it be cut off. Note: an inline-Python body that is CPU-bound with no "
+            "await points cannot be interrupted - the timeout frees the conversation to continue, but "
+            "the work carries on in the background."
+        ),
+        title="Tool Timeout (seconds)",
+    )
 
 
 class InbuiltFunctionToolConfig(BaseToolConfig):
