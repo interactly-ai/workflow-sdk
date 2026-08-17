@@ -116,8 +116,6 @@ class BaseToolConfig(BaseModel):
     )
     timeout_seconds: Optional[int] = Field(
         default=None,
-        ge=1,
-        le=300,
         description=(
             "Wall-clock ceiling in seconds for one invocation of this tool. Leave empty to use the "
             "platform default. Raise it for a tool that is legitimately slow (a large EHR sync, say) "
