@@ -325,6 +325,15 @@ def _extract_validators(node: ast.ClassDef) -> Set[str]:
     missing one is a concrete gap — `SelfLoopConfig`'s cross-field check and `CommentRequest`'s
     blank-rejection are contract, and silently dropping either would let the mirror build a config
     the server refuses.
+
+    **Known blind spot, measured rather than reasoned about.** A signature is `"{decorator}:{mode}"`,
+    and `resolve_validators` merges inherited ones into a `Set` — so a *second* `model_validator(mode=
+    "after")` on a class that already inherits one adds no new member, and dropping it from the mirror
+    reports nothing. Verified on 2026-08-20 against `InbuiltFunctionToolConfig._check_bindings_are_
+    declared_arguments`: with the mirror's copy deleted, `validators-missing` stayed at 0 and the total
+    did not move. Anything finer needs the validator's *name* in the signature, which would then flag
+    every deliberate rename as a difference — so this is a trade, not an oversight. Until it changes, a
+    same-mode validator added upstream has to be mirrored by hand and checked by eye.
     """
     found: Set[str] = set()
     for stmt in node.body:

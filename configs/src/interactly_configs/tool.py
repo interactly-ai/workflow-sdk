@@ -10,6 +10,30 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from interactly_configs.prompt import StaticMessagesConfig
 
+#: Which arguments a registered inbuilt tool declares, keyed by ``tool_id``.
+#:
+#: **Empty by default, and that is deliberate.** Upstream, this comes from an in-process registry of
+#: server-side Python functions; there is nothing to read it from here and the SDK is intentionally
+#: self-contained, so ``InbuiltFunctionToolConfig._check_bindings_are_declared_arguments`` skips and the
+#: server remains the authority for that rule. Register a mapping to opt in — a test harness that knows
+#: the signatures, or a future SDK that fetches them from the API.
+_INBUILT_ARGUMENT_PROVIDER: Dict[str, List[str]] = {}
+
+
+def register_inbuilt_arguments(arguments_by_tool_id: Dict[str, List[str]]) -> None:
+    """Teach this process which arguments each inbuilt tool accepts. Merges; does not replace."""
+    _INBUILT_ARGUMENT_PROVIDER.update(arguments_by_tool_id)
+
+
+def clear_inbuilt_arguments() -> None:
+    """Forget every registered signature. For tests that must assert the offline no-op."""
+    _INBUILT_ARGUMENT_PROVIDER.clear()
+
+
+def declared_arguments_for(tool_id: str) -> List[str]:
+    """The arguments ``tool_id`` accepts, or an empty list when this process does not know."""
+    return list(_INBUILT_ARGUMENT_PROVIDER.get(tool_id) or [])
+
 
 class ToolType(str, Enum):
     """Enumeration of tool types."""
@@ -464,6 +488,45 @@ class InbuiltFunctionToolConfig(BaseToolConfig):
         description="Tool-specific user configuration values. Schema is defined per configurable key.",
         title="Extra Configuration",
     )
+
+    @model_validator(mode="after")
+    def _check_bindings_are_declared_arguments(self) -> "InbuiltFunctionToolConfig":
+        """Reject a binding naming an argument the registered function does not accept.
+
+        **The server is the authority for this rule, and this mirror cannot be.** Upstream, the check
+        compares the binding against the registered function's Pydantic ``args_schema``, read from an
+        in-process registry of server-side Python functions. There is no registry here and there cannot
+        be one — the SDK is deliberately self-contained.
+
+        So this validator is a **documented no-op offline**: with no provider registered it skips, and a
+        config the server will reject with a 422 constructs happily here. That is a real capability the
+        mirror does not have, and it is the honest trade — the alternative is a second, drifting copy of
+        23 function signatures. It is kept structurally identical to its upstream twin so that the parity
+        harness sees a validator in both trees, and so a host that *does* have the argument names (a test
+        harness, or a future SDK that fetches them from the API) can supply them.
+
+        The rule it enforces when a provider is registered: LangChain validates an inbuilt tool's kwargs
+        against a Pydantic ``args_schema``, so ``extra="ignore"`` discards a binding naming an undeclared
+        argument — configured, resolved, logged as resolved, then dropped, with the workflow reading as
+        correct while the tool runs on a default.
+        """
+        if not self.variable_arguments or not self.tool_id:
+            return self
+
+        declared = declared_arguments_for(self.tool_id)
+        if not declared:
+            # No provider, or a tool this provider does not know. Skipping is the point; see above.
+            return self
+
+        offenders = sorted({binding.argument_name for binding in self.variable_arguments} - set(declared))
+        if offenders:
+            raise ValueError(
+                f"Inbuilt tool '{self.tool_id}': variable_arguments binds {offenders}, which the "
+                f"registered function does not accept (it accepts {sorted(declared)}). Those values would "
+                f"be validated away before the function saw them, so the binding would silently do "
+                f"nothing. Rename the binding, or bind one of the accepted arguments."
+            )
+        return self
 
     model_config = ConfigDict(title="Inbuilt Function Tool")
 
