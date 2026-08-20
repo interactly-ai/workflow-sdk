@@ -1,11 +1,12 @@
 """Tool configuration models."""
 
 import json
+import keyword
 from enum import Enum
-from typing import Annotated, Dict, List, Literal, Optional, Type, Union
+from typing import Annotated, Any, Dict, List, Literal, Optional, Type, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from interactly_configs.prompt import StaticMessagesConfig
 
@@ -39,6 +40,240 @@ class ToolType(str, Enum):
             cls.EXTERNAL_API: ExternalAPIToolConfig,
             cls.KNOWLEDGE_BASE: KnowledgeBaseToolConfig,
         }
+
+
+class ToolVariableSource(str, Enum):
+    """Which namespace a variable-bound tool argument is read from."""
+
+    AUTO = "auto"
+    RUNTIME = "runtime"
+    DYNAMIC = "dynamic"
+    LITERAL = "literal"
+
+    @classmethod
+    def list(cls) -> list["ToolVariableSource"]:
+        return [cls.AUTO, cls.RUNTIME, cls.DYNAMIC, cls.LITERAL]
+
+
+class ToolVariableArgument(BaseModel):
+    """One argument supplied to a tool by the workflow rather than by the model or the node author.
+
+    Resolved fresh at every invocation from the variable snapshot in effect at that moment, and passed
+    to the tool as a **native Python value**. That is the whole point of this model: the pre-existing
+    routes for getting a variable into a tool are string interpolation into ``tool_arguments`` (which
+    turns a dict into its ``repr()`` and an int into ``"41"``) and textual substitution into an inline
+    tool's ``code`` (which is code injection). Neither can carry a value with its type intact.
+
+    Bound arguments are hidden from the model's ``args_schema`` by default and override anything the
+    caller supplied, so a value the workflow owns cannot be invented or contradicted by generated JSON.
+    """
+
+    argument_name: str = Field(
+        description="The keyword argument name passed to the tool function.",
+        title="Argument Name",
+    )
+    source: ToolVariableSource = Field(
+        default=ToolVariableSource.AUTO,
+        description=(
+            "Which variable namespace to read from: 'runtime' for [[vars]], 'dynamic' for {{vars}}, "
+            "'auto' to try runtime first and then dynamic, or 'literal' to use literal_value verbatim."
+        ),
+        title="Source",
+    )
+    variable_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path to the value, e.g. 'patient_record', 'patient_record.dob', 'items[0].id', or a "
+            "node-qualified key such as 'Collect Insurance.dob'. Required unless source is 'literal'."
+        ),
+        title="Variable Path",
+    )
+    literal_value: Optional[Any] = Field(
+        default=None,
+        description="Used verbatim when source is 'literal'. Lets a tool argument be pinned to a constant.",
+        title="Literal Value",
+    )
+    default: Optional[Any] = Field(
+        default=None,
+        description="Value used when the variable is absent or holds None. Ignored when required is true.",
+        title="Default Value",
+    )
+    required: bool = Field(
+        default=False,
+        description=(
+            "When true, a missing variable fails the tool call with a named error instead of passing "
+            "the default. Use for arguments the tool genuinely cannot run without."
+        ),
+        title="Required",
+    )
+    expose_to_llm: bool = Field(
+        default=False,
+        description=(
+            "When false (the default) this argument is stripped from the args_schema the model sees, so "
+            "the model is never asked for it and cannot supply it. Set true only when the model should "
+            "be able to override the bound value."
+        ),
+        title="Expose To LLM",
+    )
+    override_provided_value: bool = Field(
+        default=True,
+        description=(
+            "When true the bound value replaces anything the caller (the model, or the node's "
+            "tool_arguments) supplied under the same name. When false the bound value acts as a "
+            "fallback used only if the caller omitted the argument."
+        ),
+        title="Override Provided Value",
+    )
+
+    @model_validator(mode="after")
+    def _check_binding_is_usable(self) -> "ToolVariableArgument":
+        if not self.argument_name.isidentifier() or keyword.iskeyword(self.argument_name):
+            raise ValueError(
+                f"variable_arguments: '{self.argument_name}' is not a usable argument name. It is passed "
+                f"as a keyword argument, so it must be a valid, non-reserved Python identifier."
+            )
+
+        if self.source != ToolVariableSource.LITERAL and not self.variable_path:
+            raise ValueError(
+                f"variable_arguments['{self.argument_name}']: variable_path is required unless source " f"is 'literal'."
+            )
+
+        # Hidden AND non-overriding means nothing can ever provide this argument: the model cannot see
+        # it, so it never supplies one, so the fallback never fires. Rejected rather than accepted as a
+        # no-op — a binding that is configured and can never apply is the failure mode this whole
+        # feature exists to remove.
+        if not self.expose_to_llm and not self.override_provided_value:
+            raise ValueError(
+                f"variable_arguments['{self.argument_name}']: expose_to_llm=False with "
+                f"override_provided_value=False can never apply — the argument is hidden from the model, "
+                f"so there is never a caller-supplied value for it to fall back behind. Set "
+                f"override_provided_value=True (workflow-owned) or expose_to_llm=True (model-owned with "
+                f"a workflow default)."
+            )
+        return self
+
+    model_config = ConfigDict(
+        title="Tool Variable Argument",
+    )
+
+
+class ToolResultVariableScope(str, Enum):
+    """Which variable store a mapped tool result is written to."""
+
+    THREAD = "thread"
+    WORKFLOW = "workflow"
+
+    @classmethod
+    def list(cls) -> list["ToolResultVariableScope"]:
+        return [cls.THREAD, cls.WORKFLOW]
+
+
+class ToolResultVariableMapping(BaseModel):
+    """Assigns part of a tool's return value to a named runtime variable.
+
+    Without this, a tool's return value lands under a single name and can only be read as
+    ``[[tool_result.score]]``. Mapping it lets a tool that returns a dict — which is nearly all of them —
+    populate several individually-named variables that downstream prompts and conditional edges can use
+    directly.
+    """
+
+    target_variable_name: str = Field(
+        description=(
+            "Runtime variable to write. Readable downstream as [[<name>]]. Must be a plain name: "
+            "letters, digits and underscores, not starting with a digit or an underscore."
+        ),
+        title="Target Variable Name",
+    )
+    result_path: Optional[str] = Field(
+        default=None,
+        description=(
+            "Path into the returned value, e.g. 'score', 'patient.dob' or 'rows[0].id'. "
+            "Leave empty to assign the whole return value."
+        ),
+        title="Result Path",
+    )
+    scope: ToolResultVariableScope = Field(
+        default=ToolResultVariableScope.THREAD,
+        description="Which variable store to write to. Only 'thread' is supported today.",
+        title="Scope",
+    )
+    default: Optional[Any] = Field(
+        default=None,
+        description="Value written when result_path is not present in the return value.",
+        title="Default Value",
+    )
+    required: bool = Field(
+        default=False,
+        description=(
+            "When true, a missing result_path marks the tool call as failed and records the reason in "
+            "<result_runtime_variable_name>_error, instead of writing the default."
+        ),
+        title="Required",
+    )
+
+    @field_validator("target_variable_name")
+    @classmethod
+    def _check_target_is_addressable(cls, value: str) -> str:
+        """Reject a target name that cannot be read back, or that trespasses on framework naming.
+
+        Two failure modes, neither of which raises on its own:
+
+        *Unaddressable.* A blank name, or one containing dots, brackets or spaces, is written into the
+        runtime-variable dict happily enough — ``ThreadState.update_runtime_variables`` merges whatever
+        it is given — but it cannot then be resolved unambiguously. Dots are the worst case rather than
+        merely untidy: ``update_runtime_variables`` already writes every variable a second and third time
+        as ``<node logical_id>.<var>`` and ``<node name>.<var>``, so a target literally named
+        ``patient.dob`` collides with that namespace and ``resolve_variable_path`` cannot tell which
+        reading was meant.
+
+        *Reserved.* A leading underscore is how the framework marks its own entries in the variable
+        stores (``_evaluated_dynamic_variables`` and friends). ``build_result_variable_updates`` already
+        refuses to write those on the ``expand_result_into_runtime_variables`` path, so permitting them
+        for explicit mappings was an inconsistency in this feature rather than merely a missing check.
+
+        The rule is deliberately the same one applied to ``ToolVariableArgument.argument_name``, and
+        deliberately the strict end of the defensible range: it can be relaxed later, whereas a loose
+        rule cannot be tightened without invalidating configs that were already saved.
+        """
+        if not value or not value.strip():
+            raise ValueError("result_variable_mappings: target_variable_name must not be blank.")
+        if value.startswith("_"):
+            raise ValueError(
+                f"result_variable_mappings: target_variable_name '{value}' starts with an underscore, "
+                f"which is reserved for the framework's own variables. Choose another name."
+            )
+        if not value.isidentifier():
+            raise ValueError(
+                f"result_variable_mappings: target_variable_name '{value}' is not a plain variable name. "
+                f"Use letters, digits and underscores only — a name containing dots, brackets or spaces "
+                f"collides with the '<node name>.<variable>' keys the runtime already writes and cannot "
+                f"be resolved unambiguously in [[...]]."
+            )
+        return value
+
+    @field_validator("scope")
+    @classmethod
+    def _reject_unsupported_scope(cls, value: ToolResultVariableScope) -> ToolResultVariableScope:
+        """Reject workflow scope until the read side exists.
+
+        ``WorkflowMemory.runtime_variables`` is not consulted by ``NodeRuntime.get_dynamic_runtime_variables``,
+        so a workflow-scoped write would be invisible to every ``[[var]]`` in the workflow — write-only,
+        and worse than not offering the option. Making it real needs a workflow-memory merge in that
+        method, which changes variable resolution for every node in every workflow and therefore belongs
+        to its own change. The enum value is kept so that turning it on later is the removal of this
+        validator rather than a config migration.
+        """
+        if value == ToolResultVariableScope.WORKFLOW:
+            raise ValueError(
+                "result_variable_mappings: scope='workflow' is not yet supported — a workflow-scoped "
+                "variable is currently not readable via [[var]] from any node. Use scope='thread' "
+                "(the default); a sibling thread can already read it as [[thread_<ref>.<var>]]."
+            )
+        return value
+
+    model_config = ConfigDict(
+        title="Tool Result Variable Mapping",
+    )
 
 
 class BaseToolConfig(BaseModel):
@@ -125,6 +360,87 @@ class BaseToolConfig(BaseModel):
         ),
         title="Tool Timeout (seconds)",
     )
+    variable_arguments: List[ToolVariableArgument] = Field(
+        default_factory=list,
+        description=(
+            "Arguments supplied to this tool from the workflow's runtime/dynamic variables, resolved at "
+            "invocation time and passed as native Python values. Use this instead of embedding "
+            "[[variables]] in an inline tool's source code: the value keeps its type, and it is passed "
+            "as an argument rather than spliced into the code."
+        ),
+        title="Variable Arguments",
+    )
+    result_variable_mappings: List[ToolResultVariableMapping] = Field(
+        default_factory=list,
+        description=(
+            "Assigns parts of this tool's return value to named runtime variables, so a tool that "
+            "returns a dict can populate several variables at once."
+        ),
+        title="Result Variable Mappings",
+    )
+    expand_result_into_runtime_variables: bool = Field(
+        default=False,
+        description=(
+            "When true and the tool returns a dict, every top-level key is also written as a runtime "
+            "variable of the same name. A convenience alternative to listing every mapping explicitly; "
+            "explicit result_variable_mappings win on a name collision."
+        ),
+        title="Expand Result Into Runtime Variables",
+    )
+
+    @model_validator(mode="after")
+    def _check_variable_bindings_are_unambiguous(self) -> "BaseToolConfig":
+        """Reject duplicate argument names and duplicate result targets.
+
+        Both are silent-loss bugs otherwise: two bindings for one argument mean whichever is applied
+        last wins by list order, and two mappings for one variable mean one of the tool's outputs is
+        overwritten before anything can read it. Neither is ever intentional, and neither raises on its
+        own.
+        """
+        seen_arguments = set()
+        for binding in self.variable_arguments:
+            if binding.argument_name in seen_arguments:
+                raise ValueError(
+                    f"variable_arguments declares '{binding.argument_name}' more than once. "
+                    f"Each argument may be bound at most once."
+                )
+            seen_arguments.add(binding.argument_name)
+
+        # The two derived keys a **tool node** writes alongside the result itself, and which conditional
+        # edges branch on. Reserved here so tool data cannot occupy them.
+        #
+        # Scope, stated precisely because an earlier version of this comment claimed both invocation paths
+        # write them and that is false: only the tool node does. The LLM tool-call path writes the result
+        # name and nothing derived from it — no success flag on success, on failure, or anywhere — so on
+        # that path a mapping to one of these names is just an ordinary variable with nothing to collide
+        # with. The tool node also derives them from *its own* result_runtime_variable_name, which is a
+        # different field from this one, so this check cannot see the name actually used there; a matching
+        # validator on ToolNodeConfig covers that half, and the node's write order covers the rest.
+        #
+        # The base name itself is deliberately NOT reserved: pointing it at a sub-path
+        # (result_path="data" -> target=the base name) is a legitimate way to make [[tool_result]] mean the
+        # payload rather than the envelope.
+        base_result_name = self.result_runtime_variable_name or "tool_result"
+        reserved_targets = {f"{base_result_name}_success", f"{base_result_name}_error"}
+
+        seen_targets = set()
+        for mapping in self.result_variable_mappings:
+            if mapping.target_variable_name in seen_targets:
+                raise ValueError(
+                    f"result_variable_mappings writes '{mapping.target_variable_name}' more than once. "
+                    f"Each target variable may be written at most once."
+                )
+            if mapping.target_variable_name in reserved_targets:
+                raise ValueError(
+                    f"result_variable_mappings writes '{mapping.target_variable_name}', which this tool "
+                    f"already writes as the outcome of the call (derived from "
+                    f"result_runtime_variable_name='{base_result_name}'). Mapping onto it would replace "
+                    f"the success flag or the error message with tool data, and conditional edges branch "
+                    f"on those. Choose another target name."
+                )
+            seen_targets.add(mapping.target_variable_name)
+
+        return self
 
 
 class InbuiltFunctionToolConfig(BaseToolConfig):
@@ -228,6 +544,24 @@ class ExternalAPIToolConfig(BaseToolConfig):
         title="API Request Body",
     )
 
+    @model_validator(mode="after")
+    def _reject_variable_arguments(self) -> "ExternalAPIToolConfig":
+        """External-API tools do not support variable-bound arguments yet.
+
+        Their arguments are substituted into the endpoint, headers and body with ``str.format``, so a
+        bound ``dict`` or ``list`` means something materially different here than it does as an argument
+        to a Python function. Supporting it properly needs its own design and its own tests. Until then
+        this raises rather than accepting a binding and ignoring it — a config that reads as working and
+        silently does nothing is the exact failure this feature was built to remove.
+        """
+        if self.variable_arguments:
+            raise ValueError(
+                "variable_arguments is not supported on external_api tools yet (their arguments are "
+                "formatted into the endpoint/headers/body rather than passed to a function). Pass the "
+                "value through the endpoint or body with a [[runtime]] / {{dynamic}} placeholder instead."
+            )
+        return self
+
     @field_validator("api_body", mode="before")
     @classmethod
     def parse_api_body(cls, v: dict | str | None) -> Optional[dict]:
@@ -274,6 +608,35 @@ class KnowledgeBaseToolConfig(BaseToolConfig):
         description="Name of the runtime variable to store the result from this tool call",
         title="Result Runtime Variable Name",
     )
+
+    @model_validator(mode="after")
+    def _check_bindings_reach_the_query(self) -> "KnowledgeBaseToolConfig":
+        """``query`` is the only bindable argument, because it is the only one that reaches anything.
+
+        ``KnowledgeBaseToolRuntime`` generates its own args_schema and its request builder sends exactly
+        two things — ``kwargs["query"]`` and ``target_knowledge_base_ids``. Every other keyword argument
+        is discarded by the runtime itself, schema or no schema. So binding ``query`` is genuinely useful
+        (a deterministic KB lookup driven by a runtime variable rather than by a model) and binding
+        anything else goes nowhere at all.
+
+        ``justification`` used to be permitted here and should not have been. It is a
+        reason-before-you-answer field that exists to make the *model* think before composing a query;
+        nothing consumes it. It is absent from the outbound payload, the KB service reads only
+        ``kb_ids``/``query``/``timeout_ms``, and repo-wide the only code that consumes a field by that name
+        belongs to the unrelated conditional-edge feature. Binding it was therefore accepted, resolved,
+        logged as resolved, and then dropped — the silently-inert config every validator in this feature
+        exists to reject. Leaving it in the schema for the model to fill in is still correct and unchanged.
+        """
+        allowed = {"query"}
+        offenders = sorted({b.argument_name for b in self.variable_arguments} - allowed)
+        if offenders:
+            raise ValueError(
+                f"variable_arguments on a knowledge_base tool can only bind 'query'; {offenders} would be "
+                f"discarded, because the knowledge base request carries only the query and the configured "
+                f"knowledge base IDs. ('justification' is filled in by the model to explain its query; "
+                f"nothing reads a bound value.)"
+            )
+        return self
 
     model_config = ConfigDict(title="Knowledge Base Tool")
 
