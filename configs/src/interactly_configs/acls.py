@@ -61,6 +61,14 @@ class UISpecialFieldTypes(str, Enum):
     WORKFLOW_SELECTION_WITH_ID = "workflow_selection_with_workflow_id"
     WORKFLOW_SELECTION_WITH_VERSION_NUMBER = "workflow_selection_with_version_number"
     SINGLE_FIELD_OBJECT = "single_field_object"
+    # A tool's variable_arguments / result_variable_mappings. Both are arrays of objects, which the
+    # generic renderer already handles — as one collapsed "Item N" accordion per row, with no summary and
+    # no cross-row validation. These two ask the dashboard for a row-per-binding table instead: the
+    # fields interact (variable_path is meaningless when source is literal), duplicate argument names
+    # silently shadow one another, and the whole point of the feature is that a misconfigured binding
+    # fails quietly.
+    VARIABLE_ARGUMENTS_EDITOR = "variable_arguments_editor"
+    RESULT_VARIABLE_MAPPINGS_EDITOR = "result_variable_mappings_editor"
 
 
 class AccessControlLevel(str, Enum):
