@@ -57,8 +57,10 @@ class TestOfflineItDefersRatherThanRejecting:
         # and give the author no way around it.
         assert _config("recipient").variable_arguments[0].argument_name == "recipient"
 
-    def test_the_provider_starts_empty(self):
-        assert declared_arguments_for(SMS_TOOL_ID) == []
+    def test_the_provider_reports_no_knowledge_rather_than_no_arguments(self):
+        """`None`, not `[]`. Collapsing the two was a real defect upstream: an empty list is a real
+        answer meaning "this tool accepts nothing", and every binding on such a tool is an offender."""
+        assert declared_arguments_for(SMS_TOOL_ID) is None
 
     def test_a_tool_the_provider_does_not_know_is_skipped(self):
         register_inbuilt_arguments({"some_other_tool": ["a", "b"]})
@@ -96,6 +98,34 @@ class TestWithSignaturesItMatchesTheServer:
 
         assert declared_arguments_for(SMS_TOOL_ID) == ["phone_number"]
         assert declared_arguments_for("another_tool") == ["x"]
+
+
+class TestAZeroArgumentToolAcceptsNothing:
+    """The distinction the mirror was missing, and which upstream's F2 fix drew.
+
+    A registered empty list says the function takes no arguments. That is the case where the check has
+    the most to say — every binding is invalid — and falsiness swallowed exactly it, so a binding on a
+    zero-argument tool was accepted by both trees.
+    """
+
+    def test_a_known_zero_argument_tool_rejects_every_binding(self):
+        register_inbuilt_arguments({"zero_argument_tool": []})
+
+        with pytest.raises(ValidationError) as excinfo:
+            _config("anything", tool_id="zero_argument_tool")
+
+        message = str(excinfo.value)
+        assert "anything" in message
+        # The accepted set is empty, and saying so is the whole message: there is nothing to bind.
+        assert "[]" in message
+
+    def test_it_is_distinguishable_from_an_unknown_tool(self):
+        register_inbuilt_arguments({"zero_argument_tool": []})
+
+        assert declared_arguments_for("zero_argument_tool") == []
+        assert declared_arguments_for("never_registered") is None
+        # And the unknown one still constructs, because the mirror has nothing to say about it.
+        assert _config("anything", tool_id="never_registered")
 
     def test_a_valid_config_survives_a_round_trip(self):
         """The read path: a validator here fires on load as well as construction."""

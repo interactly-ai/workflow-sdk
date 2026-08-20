@@ -17,6 +17,9 @@ from interactly_configs.prompt import StaticMessagesConfig
 #: self-contained, so ``InbuiltFunctionToolConfig._check_bindings_are_declared_arguments`` skips and the
 #: server remains the authority for that rule. Register a mapping to opt in — a test harness that knows
 #: the signatures, or a future SDK that fetches them from the API.
+#:
+#: A registered empty list means "this tool accepts no arguments", which is a real answer and not the
+#: same as absence. See :func:`declared_arguments_for`.
 _INBUILT_ARGUMENT_PROVIDER: Dict[str, List[str]] = {}
 
 
@@ -30,9 +33,17 @@ def clear_inbuilt_arguments() -> None:
     _INBUILT_ARGUMENT_PROVIDER.clear()
 
 
-def declared_arguments_for(tool_id: str) -> List[str]:
-    """The arguments ``tool_id`` accepts, or an empty list when this process does not know."""
-    return list(_INBUILT_ARGUMENT_PROVIDER.get(tool_id) or [])
+def declared_arguments_for(tool_id: str) -> Optional[List[str]]:
+    """The arguments ``tool_id`` accepts, or ``None`` when this process does not know.
+
+    **``None`` and ``[]`` are different answers, and collapsing them was a real defect upstream.**
+    ``None`` means "no information, defer to the server"; ``[]`` means "this tool accepts nothing", which
+    is the case where *every* binding is an offender and the check has the most to say. Membership in the
+    provider decides which: a registered tool answers with its list, however short.
+    """
+    if tool_id not in _INBUILT_ARGUMENT_PROVIDER:
+        return None
+    return list(_INBUILT_ARGUMENT_PROVIDER[tool_id] or [])
 
 
 class ToolType(str, Enum):
@@ -509,12 +520,19 @@ class InbuiltFunctionToolConfig(BaseToolConfig):
         against a Pydantic ``args_schema``, so ``extra="ignore"`` discards a binding naming an undeclared
         argument — configured, resolved, logged as resolved, then dropped, with the workflow reading as
         correct while the tool runs on a default.
+
+        One case upstream enforces that this cannot: a ``tool_id`` that is a saved-tool ObjectId, which
+        needs a database read to resolve. Upstream handles that at its node routes and reports it during
+        hydration; here it simply falls into the unknown-tool skip above.
         """
         if not self.variable_arguments or not self.tool_id:
             return self
 
         declared = declared_arguments_for(self.tool_id)
-        if not declared:
+        # Absent, not empty — mirroring the same distinction upstream draws between an *absent*
+        # ``args_schema`` and one declaring zero fields. `None` is "this process cannot say"; an empty
+        # list is "the function accepts nothing", and every binding on it is an offender.
+        if declared is None:
             # No provider, or a tool this provider does not know. Skipping is the point; see above.
             return self
 
