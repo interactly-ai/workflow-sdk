@@ -38,10 +38,12 @@ class ToolNodeConfig(BaseNodeConfig):
     result_runtime_variable_name: Optional[str] = Field(
         default="tool_result",
         description=(
-            "Name of the runtime variable to store the result of the tool execution. Leave this at the "
-            "default and a saved tool that names its own result variable will be used instead; set it "
-            "here to override the tool. The success flag and error message follow whichever name wins, "
-            "as <name>_success and <name>_error."
+            "Name of the runtime variable to store the result of the tool execution. Leaving this at "
+            "'tool_result' means inherit: if the attached tool names its own result variable, that name "
+            "is used. Any OTHER name set here overrides the tool. 'tool_result' cannot be used to "
+            "override a tool that names something else — it is indistinguishable from not having chosen. "
+            "The success flag and error message follow whichever name wins, as <name>_success and "
+            "<name>_error."
         ),
         title="Result Runtime Variable Name",
     )
@@ -70,8 +72,17 @@ class ToolNodeConfig(BaseNodeConfig):
         ``scoring_success`` — and a mapping onto that name passes tool-level validation. This class is the
         only object that sees both fields.
 
-        It raises rather than warns because the window is open: ``result_variable_mappings`` is unreleased,
-        so no stored config can contain one and nothing existing can be invalidated.
+        **It raises rather than warns, and the reason is not that the field is new.** It is not:
+        ``result_variable_mappings`` ships with a dashboard editor and the copilot writes it, so stored
+        configs do contain mappings. What makes raising safe is that this validator has been rejecting the
+        colliding shape since before the field was authorable anywhere, so no config that would trip it
+        can ever have been stored — the population it rejects is empty by construction, and it gates every
+        write into that population, so it cannot grow.
+
+        That matters more here than for a save-time check, because ``model_validator(mode="after")`` fires
+        on *parse*, which includes reading a stored node. A collision that had been stored would make the
+        workflow unloadable rather than merely unsavable. ``configs/tool.py`` keeps its equivalent raise on
+        the same reasoning.
 
         Three limits, stated so the partial coverage is not mistaken for the whole guarantee — the runtime
         write order is what actually guarantees it:
