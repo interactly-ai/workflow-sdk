@@ -229,7 +229,13 @@ class ToolResultVariableMapping(BaseModel):
     )
     scope: ToolResultVariableScope = Field(
         default=ToolResultVariableScope.THREAD,
-        description="Which variable store to write to. Only 'thread' is supported today.",
+        description=(
+            "Which variable store to write to. 'thread' (the default) writes to the conversation this "
+            "tool ran in, and is what almost every mapping wants. 'workflow' writes to the run's shared "
+            "memory, readable as [[<name>]] from every node in every thread — use it for something "
+            "established once and true for the whole run, such as a verified patient id. A thread-local "
+            "variable of the same name always wins where both exist."
+        ),
         title="Scope",
     )
     default: Optional[Any] = Field(
@@ -286,25 +292,16 @@ class ToolResultVariableMapping(BaseModel):
             )
         return value
 
-    @field_validator("scope")
-    @classmethod
-    def _reject_unsupported_scope(cls, value: ToolResultVariableScope) -> ToolResultVariableScope:
-        """Reject workflow scope until the read side exists.
-
-        ``WorkflowMemory.runtime_variables`` is not consulted by ``NodeRuntime.get_dynamic_runtime_variables``,
-        so a workflow-scoped write would be invisible to every ``[[var]]`` in the workflow — write-only,
-        and worse than not offering the option. Making it real needs a workflow-memory merge in that
-        method, which changes variable resolution for every node in every workflow and therefore belongs
-        to its own change. The enum value is kept so that turning it on later is the removal of this
-        validator rather than a config migration.
-        """
-        if value == ToolResultVariableScope.WORKFLOW:
-            raise ValueError(
-                "result_variable_mappings: scope='workflow' is not yet supported — a workflow-scoped "
-                "variable is currently not readable via [[var]] from any node. Use scope='thread' "
-                "(the default); a sibling thread can already read it as [[thread_<ref>.<var>]]."
-            )
-        return value
+    # ``_reject_unsupported_scope`` used to live here, refusing ``scope="workflow"`` because
+    # ``WorkflowMemory.runtime_variables`` was not consulted by ``NodeRuntime.get_dynamic_runtime_variables``
+    # — so the write existed but nothing could read it, which is worse than not offering the option. It was
+    # deleted rather than relaxed once that merge landed: the read side now exists, beneath the thread
+    # variables and skipping the framework's own underscore-prefixed keys. The enum value never changed,
+    # so turning this on was the removal of a validator rather than a config migration, exactly as it was
+    # designed to be.
+    #
+    # Mirrored because it is a *rejection*: leaving it here would make the SDK refuse a config the server
+    # now accepts, so an SDK user would be blocked from building something the dashboard offers.
 
     model_config = ConfigDict(
         title="Tool Result Variable Mapping",
