@@ -343,7 +343,13 @@ def run(client: httpx.Client) -> SchemaReport:
             continue
 
         try:
-            local = model.model_json_schema()
+            # `mode="serialization"` because that is what the server publishes — every schema route
+            # calls `model_json_schema(mode="serialization")`. The default is validation mode, and the
+            # two genuinely differ: a field declared `exclude=True` is present in the validation schema
+            # and absent from the serialization one. Comparing the modes reported such a field as
+            # "mirror has it, server does not" when both sides were in fact identical, which is a
+            # finding about this harness rather than about the mirror.
+            local = model.model_json_schema(mode="serialization")
         except Exception as exc:  # pragma: no cover - defensive
             report.errors.append((endpoint, f"could not build local schema: {exc}"))
             continue

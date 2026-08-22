@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from interactly_configs.auth import IntegrationAuthConfig
 from interactly_configs.prompt import StaticMessagesConfig
 
 #: Which arguments a registered inbuilt tool declares, keyed by ``tool_id``.
@@ -653,6 +654,12 @@ class ExternalAPIToolConfig(BaseToolConfig):
         default=None,
         description="The request body payload for the API call.",
         title="API Request Body",
+    )
+    integration_auth: Optional[IntegrationAuthConfig] = Field(
+        default=None,
+        description="Integration whose OAuth token is injected as the Authorization header on every "
+        "request. Ignored when api_headers already sets Authorization.",
+        title="Integration Auth",
     )
 
     @model_validator(mode="after")

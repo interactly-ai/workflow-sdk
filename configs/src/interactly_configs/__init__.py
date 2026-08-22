@@ -1,7 +1,7 @@
 """interactly-configs — pure-Pydantic data contracts for the Interactly workflow engine."""
 
 from interactly_configs._version import __version__
-from interactly_configs.auth import OktaAuthConfig
+from interactly_configs.auth import IntegrationAuthConfig, OktaAuthConfig
 from interactly_configs.base_defs import BaseEntityConfig
 from interactly_configs.comment import MAX_COMMENT_LENGTH, CommentConfig, CommentRequest
 from interactly_configs.condition import ConditionConfig
@@ -155,6 +155,7 @@ __all__ = [
     "resolve_reasoning_effort",
     "__version__",
     # auth
+    "IntegrationAuthConfig",
     "OktaAuthConfig",
     # base
     "BaseEntityConfig",

@@ -10,10 +10,19 @@ silently create an empty workflow.
 """
 
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny, TypeAdapter, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    SerializeAsAny,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+)
 
 from interactly_configs.acls import AccessControlLevel
 from interactly_configs.edge import EdgeConfig
@@ -296,6 +305,16 @@ class WorkflowConfigFullyHydrated(BaseModel):
     runtime_variables: dict = Field(
         default_factory=dict,
         description="Runtime variables that can be used across nodes and edges",
+    )
+    secret_variables: Dict[str, SecretStr] = Field(
+        default_factory=dict,
+        exclude=True,
+        repr=False,
+        description=(
+            "Credential-valued variables, carried apart from dynamic_variables so this config can be "
+            "serialized, logged and cached without emitting them. Copied onto the run input, which "
+            "documents the rule; see BaseRunInput.secret_variables."
+        ),
     )
 
     def is_keep_skipped_messages_enabled(self) -> bool:

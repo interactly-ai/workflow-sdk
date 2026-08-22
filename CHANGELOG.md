@@ -9,6 +9,42 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Added
+- **`secret_variables` on `BaseRunInput` and `WorkflowConfigFullyHydrated`.** Mirrors the server field
+  that carries credential-valued variables apart from `dynamic_variables`, with `exclude=True`,
+  `repr=False` and `SecretStr` values, so a run input can be serialised, logged and cached without
+  emitting them. The server populates it from team globals; because `exclude=True` also keeps it out of
+  a serialised request body, a value set client-side is dropped before the request is sent. It is
+  mirrored so this package's models are shaped like the server's, not because there is a reason to fill
+  it in. Adding it to the two base classes closed **22** parity differences — the field was being
+  reported once per `*RunInput` subclass.
+- **`IntegrationAuthConfig`**, and **`integration_auth` on `ExternalAPIToolConfig`** — the second of the
+  two fields the rename below introduced upstream.
+
+### Changed
+- **`OktaAuthConfig` → `IntegrationAuthConfig`, following a server-side rename** made
+  provider-agnostic (any integration exposing an OAuth2 client-credentials endpoint, not only Okta).
+  Both of upstream's back-compat affordances are mirrored exactly:
+  - `OktaAuthConfig` remains importable as an alias of the same class, so existing imports keep working.
+  - `CustomLLMConfig.okta_auth` became `integration_auth` **with**
+    `validation_alias=AliasChoices("integration_auth", "okta_auth")`, so the old keyword is still
+    accepted on construction and previously saved configs keep deserializing.
+
+  **One thing does change for readers, and it changes on the server too:** the attribute is now
+  `integration_auth`, so code doing `llm.okta_auth` raises `AttributeError`. Constructing with
+  `okta_auth=` is unaffected. Migration is a rename at the read site.
+
+### Removed
+- Nothing.
+
+### Testing
+- **Behaviour parity, not just structural parity.** `make parity-check` compares a validator as
+  `"{decorator}:{mode}"`, ignores module-level functions and does not compare `validation_alias` — so
+  three of this release's changes are invisible to it. They are covered instead by tests that assert the
+  behaviour directly: the old auth keyword still parsing onto the new attribute, the class alias being
+  the same object, and `secret_variables` staying out of `model_dump()` while remaining readable
+  in-process.
+
 ### Fixed
 - **Examples 11–23 crashed on launch.** `main()` passed a `dynamic_variables` that was never defined
   in its scope, so `python wf_examples/wf_example_progression_11.py` raised `NameError` on the first
