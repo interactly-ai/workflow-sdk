@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from interactly_configs.auth import IntegrationAuthConfig
 from interactly_configs.prompt import StaticMessagesConfig
 
 #: Which arguments a registered inbuilt tool declares, keyed by ``tool_id``.
@@ -568,8 +569,41 @@ class InlinePythonToolConfig(BaseToolConfig):
         ),
         title="Tool Code",
     )
+    allow_code_variable_substitution: bool = Field(
+        default=True,
+        description=(
+            "Whether {{dynamic}} and [[runtime]] placeholders inside 'code' are replaced with their "
+            "values before the code is compiled. Turning this off leaves the source exactly as written, "
+            "so any placeholder in it stays literal text. Prefer variable_arguments, which passes a "
+            "value in as a typed argument instead of pasting it into the source."
+        ),
+        title="Substitute Variables Into Code",
+    )
 
     model_config = ConfigDict(title="Inline Python Tool")
+
+
+def _format_placeholder_names(template: Any) -> set:
+    """Names used as ``{name}`` anywhere inside a string, dict or list request template.
+
+    Uses ``string.Formatter`` rather than a regex so it agrees exactly with the ``str.format`` call that
+    performs the substitution at request time — including that ``{{`` is an escaped brace and not a
+    placeholder, which is what keeps a ``{{dynamic}}`` variable from being mistaken for an argument.
+    """
+    import string
+
+    if isinstance(template, str):
+        try:
+            return {name.split(".")[0].split("[")[0] for _, name, _, _ in string.Formatter().parse(template) if name}
+        except ValueError:
+            # An unbalanced brace. The request-time format will raise on it too, with a better message
+            # than a validator could give.
+            return set()
+    if isinstance(template, dict):
+        return set().union(*(_format_placeholder_names(v) for v in template.values())) if template else set()
+    if isinstance(template, list):
+        return set().union(*(_format_placeholder_names(v) for v in template)) if template else set()
+    return set()
 
 
 class APIMethodType(str, Enum):
@@ -621,22 +655,44 @@ class ExternalAPIToolConfig(BaseToolConfig):
         description="The request body payload for the API call.",
         title="API Request Body",
     )
+    integration_auth: Optional[IntegrationAuthConfig] = Field(
+        default=None,
+        description="Integration whose OAuth token is injected as the Authorization header on every "
+        "request. Ignored when api_headers already sets Authorization.",
+        title="Integration Auth",
+    )
 
     @model_validator(mode="after")
-    def _reject_variable_arguments(self) -> "ExternalAPIToolConfig":
-        """External-API tools do not support variable-bound arguments yet.
+    def _reject_bindings_no_template_uses(self) -> "ExternalAPIToolConfig":
+        """Every bound argument must appear as ``{name}`` in the endpoint, a header or the body.
 
-        Their arguments are substituted into the endpoint, headers and body with ``str.format``, so a
-        bound ``dict`` or ``list`` means something materially different here than it does as an argument
-        to a Python function. Supporting it properly needs its own design and its own tests. Until then
-        this raises rather than accepting a binding and ignoring it — a config that reads as working and
-        silently does nothing is the exact failure this feature was built to remove.
+        An external-API tool has no function signature to bind against. Its arguments are placed into the
+        request by name, so an argument no template mentions is not "unused" the way a spare Python
+        keyword argument would be — it has nowhere to go, and the request goes out exactly as it would
+        with no binding at all. Rejecting it is the same principle applied everywhere else in this
+        feature: a config that reads as working and silently does nothing is the failure to prevent.
+
+        **Skipped for a tool attached by reference**, whose templates live on the saved tool and are not
+        readable from here.
+
+        The bound value's **type** is deliberately not checked, because a validator cannot know it: the
+        binding names a variable, and the value arrives at call time. That rule belongs to the
+        destination — only ``api_body`` can carry a dict or list, since a placeholder that is the entire
+        value is replaced by the object itself, while an endpoint or a header can only carry text.
         """
-        if self.variable_arguments:
+        if not self.variable_arguments:
+            return self
+        if self.tool_id and not (self.api_endpoint or self.api_headers or self.api_body):
+            return self
+
+        used = _format_placeholder_names(self.api_endpoint) | _format_placeholder_names(self.api_headers)
+        used |= _format_placeholder_names(self.api_body)
+        orphans = sorted(b.argument_name for b in self.variable_arguments if b.argument_name not in used)
+        if orphans:
             raise ValueError(
-                "variable_arguments is not supported on external_api tools yet (their arguments are "
-                "formatted into the endpoint/headers/body rather than passed to a function). Pass the "
-                "value through the endpoint or body with a [[runtime]] / {{dynamic}} placeholder instead."
+                f"variable_arguments {orphans} on external_api tool '{self.name}' are never used: no "
+                f"'{{name}}' placeholder for them appears in api_endpoint, api_headers or api_body. Add "
+                f"the placeholder where the value belongs, or drop the binding."
             )
         return self
 

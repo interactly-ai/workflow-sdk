@@ -32,6 +32,7 @@ from interactly_configs import (
     GoogleLLMConfig,
     InbuiltFunctionToolConfig,
     InlinePythonToolConfig,
+    IntegrationAuthConfig,
     KnowledgeBaseToolConfig,
     LLMConfig,
     LLMGroupConfig,
@@ -228,9 +229,25 @@ class TestLLMConfig:
         with pytest.raises(Exception):
             AzureOpenAILLMConfig(temperature=1.5)
 
-    def test_okta_auth_nested_in_custom_llm(self):
+    def test_okta_auth_keyword_is_still_accepted(self):
+        """The field was renamed to ``integration_auth`` upstream, provider-agnostically, and upstream
+        kept ``okta_auth`` as a *validation* alias so previously saved configs keep deserializing. The
+        mirror follows exactly: the old keyword is accepted on construction, and the value lands on the
+        new attribute. Reading ``.okta_auth`` no longer works — on the server either — which is why this
+        test asserts the shape of the migration rather than just that it parses.
+        """
         llm = CustomLLMConfig(okta_auth=OktaAuthConfig(integration_id="okta-123"))
-        assert llm.okta_auth.integration_id == "okta-123"
+        assert llm.integration_auth.integration_id == "okta-123"
+        assert not hasattr(llm, "okta_auth")
+
+    def test_the_canonical_keyword_works_too(self):
+        llm = CustomLLMConfig(integration_auth=IntegrationAuthConfig(integration_id="int-9"))
+        assert llm.integration_auth.integration_id == "int-9"
+
+    def test_the_old_class_name_is_the_same_class(self):
+        """``OktaAuthConfig`` stays importable as an alias, matching upstream, so existing imports do not
+        break even though the name the server leads with has changed."""
+        assert OktaAuthConfig is IntegrationAuthConfig
 
     def test_llm_group_config_instantiation(self):
         group = LLMGroupConfig(

@@ -4,9 +4,9 @@ from enum import Enum
 from typing import Annotated, Any, Dict, Literal, Optional, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_serializer
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, field_serializer
 
-from interactly_configs.auth import OktaAuthConfig
+from interactly_configs.auth import IntegrationAuthConfig
 
 
 class LLMProvider(str, Enum):
@@ -496,17 +496,21 @@ class CustomLLMConfig(BaseLLMConfig):
         ),
         title="Response Unwrap Key",
     )
-    okta_auth: Optional[OktaAuthConfig] = Field(
+    integration_auth: Optional[IntegrationAuthConfig] = Field(
         default=None,
         description=(
-            "Okta authentication configuration for bearer-token injection. "
+            "Integration-backed authentication configuration for bearer-token injection. "
+            "Point it at any integration that issues OAuth2 client-credentials tokens. "
             "When set, the runtime resolves credentials using the following chain: "
             "(1) explicit ``api_key`` on the request, "
             "(2) team-level ``custom_llm_api_key`` from vendor credentials, "
-            "(3) Okta bearer token fetched via this ``integration_id`` from vendor credentials. "
+            "(3) bearer token fetched via this ``integration_id`` from vendor credentials. "
             "Ignored when ``api_key`` or a bearer Authorization header is already resolved."
         ),
-        title="Okta Auth",
+        title="Integration Auth",
+        # "okta_auth" was the original field name; accepted so previously saved
+        # workflow configs keep deserializing.
+        validation_alias=AliasChoices("integration_auth", "okta_auth"),
     )
     use_responses_api: bool = Field(
         default=False,
@@ -514,7 +518,7 @@ class CustomLLMConfig(BaseLLMConfig):
         title="Use Responses API",
     )
 
-    model_config = ConfigDict(title="Custom LLM")
+    model_config = ConfigDict(title="Custom LLM", populate_by_name=True)
 
 
 class BedrockLLMConfig(BaseLLMConfig):
