@@ -125,8 +125,33 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   including group members' keys (paired by `logical_id`), at the cost of one extra GET. A key is never
   carried onto a config of a different provider type. `preserve_api_key=False` sends `config` exactly as
   given, which is how an admin deliberately removes a key.
-- **Run and simulation lists accept at most a 31-day `start`–`end` window**, server-side; a wider one is a
-  `BadRequestError` carrying the server's message. Results are now ordered by creation time.
+- **`runs.list()` accepts at most a 31-day `start`–`end` window**, server-side; a wider one is a
+  `BadRequestError` carrying the server's message. Results are now ordered by creation time. (The server
+  applies the same window to the simulations list, but `simulations.list()` takes no dates, so it cannot
+  be hit from the SDK.)
+
+### Docs
+- **The guides follow the October server**: the Vertex-served providers and the Anthropic and Google
+  backends, Gemini thinking levels, `preserve_api_key` and role-dependent key visibility (LLM configs);
+  how long a companion runs and `stop_with_main_thread` (companion threads); the lifted `max_retries` cap
+  (self-loops); `clone`, `result_as_media`, codebase functions, import `warnings` and inline-Python test
+  execution (nodes, edges and tools); lints, realtime compatibility and voice persona (workflows);
+  counter-workflow generation (simulations); the 31-day run window (monitoring runs); refusals and
+  hidden resources (error handling).
+- **Six documented claims that were false when run**, now corrected:
+  - `llm_configs.test()` / `test_inline()` examples used message role `"user"`, which the server rejects
+    with a 422. The roles are `human`, `ai` and `system`.
+  - "Reference a saved config in a node" used `llms_config={"named_llm_config_id": ...}`, which fails
+    validation and never referenced anything. The field is `attachable_llm_config_id`, and there is no
+    lookup by name.
+  - The configs guide named the union discriminators `edge_type` / `tool_type`, and its example failed.
+    The field is `type`.
+  - `workflows.dynamic_variables()` was documented as returning `{var_name: spec}`. It returns
+    `{"dynamic_variables": ..., "global_variables_resolved": ...}`.
+  - "Secrets are redacted — always": admins and super-admins are shown the stored key.
+  - A draft line in this update itself said the server rejects a Gemini thinking level the model does not
+    offer. A live call showed that it substitutes the nearest level instead.
+- `gpt-4` examples in the LLM-configs guide now use `gpt-5.4-mini`; OpenAI shuts `gpt-4` down on 2026-10-23.
 
 ### Removed
 - **`OPENAIModel.GPT_5_2_CHAT_LATEST`, `GPT_5_3_CHAT_LATEST`** and

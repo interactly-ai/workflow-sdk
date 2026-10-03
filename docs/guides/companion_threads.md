@@ -50,15 +50,47 @@ says. The fork only means anything when a node fans out.
 
 ### Reading the flags back
 
-Four helpers read the nested config defensively, so they are safe to call on any edge — including
+Five helpers read the nested config defensively, so they are safe to call on any edge — including
 edges stored before the feature existed:
 
 ```python
-ic.edge_is_companion(edge)              # True for a flagged direct edge
-ic.edge_companion_thread_id(edge)       # "labpoll", or None
-ic.edge_evaluates_while_waiting(edge)   # for conditional edges
-ic.edge_waiting_evaluation_config(edge) # the config, if enabled
+ic.edge_is_companion(edge)                       # True for a flagged direct edge
+ic.edge_companion_thread_id(edge)                # "labpoll", or None
+ic.edge_companion_stops_with_main_thread(edge)   # see "How long a companion runs"
+ic.edge_evaluates_while_waiting(edge)            # for conditional edges
+ic.edge_waiting_evaluation_config(edge)          # the config, if enabled
 ```
+
+---
+
+## How long a companion runs
+
+**By default a companion ends when the conversation does.** `stop_with_main_thread` defaults to `True`:
+as soon as every main (non-companion) thread has ended, the companion is stopped, instead of running out
+its self-loop budget. That is what you want for the polling case above, where a result after the goodbye
+has no one left to hear it.
+
+Set it to `False` for work that must **outlive** the conversation, such as a write-back to an EHR, or a
+result you want recorded even though it arrives after the caller hangs up:
+
+```python
+writeback = ic.DirectEdgeConfig(
+    source_node_logical_id=entry.logical_id,
+    destination_node_logical_id=poller.logical_id,
+    companion_thread_config=ic.CompanionThreadConfig(
+        is_companion_thread=True,
+        thread_id="writeback",
+        stop_with_main_thread=False,   # keep going after the goodbye
+    ),
+)
+```
+
+A companion that outlives the conversation still needs a bound, or it keeps the run alive: give its
+loop a `max_retries` or an `expiry_time` (see [Self-loops](self_loops.md)).
+
+> **Server support.** The behaviour lives on the server, and arrived upstream on 2026-10-01
+> (`interactly-ai@310a9a8ec`). A server built before that ignores the field, and every companion runs
+> out its own budget as it always did. As of 2026-10-02 the dev server is one of those.
 
 ---
 
@@ -285,5 +317,7 @@ if response.has_background_work:
 - **Event extras are top-level attributes**, not `event.data`.
 - **An unnamed companion is unaddressable.** Set `thread_id` if anything needs to read its variables.
 - **Companion sub-graphs cannot rejoin the main thread.** Communicate via variables instead.
-- **A companion that never terminates keeps the run alive.** Bound it with
-  [`SelfLoopConfig`](self_loops.md).
+- **A companion ends with the conversation by default.** Set `stop_with_main_thread=False` for work
+  that must finish after the goodbye, on a server that includes `interactly-ai@310a9a8ec`.
+- **A companion that outlives the conversation and never terminates keeps the run alive.** Bound it
+  with [`SelfLoopConfig`](self_loops.md).

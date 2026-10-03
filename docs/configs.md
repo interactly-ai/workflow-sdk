@@ -58,7 +58,18 @@ from interactly.configs import (
     ToolConfig,
     ToolType,
 
-    # LLM configs
+    # LLM configs (see the LLM configs guide for every provider)
+    OpenAILLMConfig,
+    AnthropicLLMConfig,
+    AnthropicBackend,
+    GoogleLLMConfig,
+    GoogleBackend,
+    GeminiThinkingLevel,
+    XAILLMConfig,
+    GemmaLLMConfig,
+    GLMLLMConfig,
+    DeepSeekLLMConfig,
+    NodeRealtimeOverrides,
     LLMGroupConfig,
     LLMOrGroupConfig,
     PromptConfig,
@@ -151,21 +162,28 @@ Fields that are upgraded automatically:
 
 ## Discriminated union types
 
-`EdgeConfig` and `ToolConfig` are Pydantic discriminated unions — the concrete subclass
-is selected based on the `edge_type` / `tool_type` field.  Use `pydantic.TypeAdapter` to
-validate them directly:
+`EdgeConfig`, `ToolConfig`, `LLMConfig` and `NodeConfig` are Pydantic discriminated unions: the concrete
+subclass is selected by the **`type`** field (`"direct"`, `"external_api"`, `"xai_llm"`, `"say_llm"`, …).
+Use `pydantic.TypeAdapter` to validate them directly:
 
 ```python
 from pydantic import TypeAdapter
-from interactly.configs import EdgeConfig, DirectEdgeConfig
+from interactly.configs import DirectEdgeConfig, EdgeConfig, LLMConfig, XAILLMConfig
 
 edge_cfg = TypeAdapter(EdgeConfig).validate_python({
-    "edge_type": "direct",
+    "type": "direct",
     "source_node_logical_id": "node-a",
     "destination_node_logical_id": "node-b",
 })
 assert isinstance(edge_cfg, DirectEdgeConfig)
+
+llm_cfg = TypeAdapter(LLMConfig).validate_python({"type": "xai_llm", "model": "grok-4.6"})
+assert isinstance(llm_cfg, XAILLMConfig)
 ```
+
+A `type` this version of the package does not know fails validation on its own. Inside a hydrated
+workflow, a node it cannot parse is kept as `UnknownNodeConfig` with its fields intact rather than
+failing the whole workflow, so upgrade `interactly[configs]` when the server adds providers or tools.
 
 ## Round-tripping a hydrated config
 

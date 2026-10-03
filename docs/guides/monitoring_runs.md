@@ -56,13 +56,17 @@ page = await client.runs.list(status="failed")
 ### Filtering by date range
 
 ```python
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
-now = datetime.utcnow()
+now = datetime.now(timezone.utc)
 week_ago = now - timedelta(days=7)
 
 page = await client.runs.list(start=week_ago, end=now)
 ```
+
+**The window is at most 31 days.** A wider `start`–`end` span, or an `end` before `start`, is refused
+with `BadRequestError` (`"Date range should be less than or equal to 31 days"`). To cover a longer
+period, list it in windows of 31 days or fewer. Results come newest-created first.
 
 ### Combining filters
 
@@ -331,7 +335,7 @@ print(f"Total: {total_tokens} tokens")
 |-----------|------|-------|
 | `workflow_id` | str | Filter to a specific workflow |
 | `status` | str | "started", "completed", "failed", etc. |
-| `start` | datetime | Start of date range (inclusive) |
+| `start` | datetime | Start of date range (inclusive); at most 31 days before `end` |
 | `end` | datetime | End of date range (inclusive) |
 | `page` | int | 1-indexed, default 1 |
 | `size` | int | Items per page, default 20 |
@@ -350,6 +354,7 @@ print(f"Total: {total_tokens} tokens")
 - **Event logical IDs**: Only accessible from within the run's event list (`pair.run_output.events[i].logical_id`), not queryable separately.
 - **Evaluation results are sparse**: Not all runs have evaluation results; only workflows with evaluation nodes produce them.
 - **Large runs**: If a run has thousands of event pairs, loading it in memory may be slow. Consider filtering by date or paginating the listing.
+- **Date windows are capped at 31 days**: a wider `start`–`end` span raises `BadRequestError`; list a long period in slices.
 
 ---
 

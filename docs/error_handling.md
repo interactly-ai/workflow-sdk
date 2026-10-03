@@ -140,6 +140,32 @@ The rules behind these are documented in
 
 ---
 
+## Refusals (403) and hidden resources (404)
+
+Some resources are restricted by role. A refused write arrives as `PermissionDeniedError`; servers before
+October 2026 reported several of these as a 500, so if you were catching `InternalServerError` around
+them, catch `PermissionDeniedError` instead. Codebase-function tools are the main case: every route that
+creates, updates, executes, imports or lists one requires an Interactly super-admin.
+
+```python
+from interactly import PermissionDeniedError
+
+try:
+    await client.tools.codebase_functions()
+except PermissionDeniedError:
+    ...   # staff-only
+```
+
+Reading a restricted resource you are not allowed to see is a **`NotFoundError`, not a 403**. The server
+answers exactly as it would for an id that does not exist, so a refusal does not confirm that the
+resource is there. That applies to a codebase-function tool fetched by a non-staff role, and to copilot
+conversation runs.
+
+A date window wider than 31 days on `runs.list()` is a `BadRequestError` whose message says so:
+`"Date range should be less than or equal to 31 days"`.
+
+---
+
 ## Streaming Errors
 
 Most WebSocket closures simply end the stream. Two are the server rejecting your start frame, and each
