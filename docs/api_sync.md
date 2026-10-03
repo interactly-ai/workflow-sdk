@@ -23,18 +23,22 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | Method | Signature | Description |
 |---|---|---|
 | `clone` | `(workflow_id: 'str', *, name: 'Optional[str]' = None, description: 'Optional[str]' = None, clone_all_versions: 'bool' = True, version_numbers: 'Optional[List[int]]' = None, fallback_active_version: 'Optional[int]' = None) -> 'Workflow'` | Duplicate a workflow (deep copy of nodes, edges, and versions). |
+| `counter_workflow` | `(workflow_id: 'str') -> 'CounterWorkflowStatus'` | The simulated-caller workflow generated from this one, and the state of the newest generation. |
 | `create` | `(*, name: 'str', description: 'Optional[str]' = None, config: 'Optional[WorkflowConfigOrDict]' = None) -> 'Workflow'` | Create a new workflow. |
 | `create_from_config` | `(config: "'WorkflowConfigFullyHydrated'", *, name: 'Optional[str]' = None, description: 'Optional[str]' = None) -> 'Workflow'` | Upload a fully-hydrated typed workflow (config + nodes + edges) in one POST. |
 | `delete` | `(workflow_id: 'str') -> 'None'` | Permanently delete a workflow and all its versions. |
 | `dynamic_variables` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Return the dynamic variable definitions for a workflow. |
 | `export` | `(workflow_id: 'str', *, version_numbers: 'List[int]', active_version_number: 'int') -> 'Dict[str, Any]'` | Export a workflow as a portable bundle dict. |
 | `favorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Mark a workflow as a favorite for the requesting user (idempotent). |
+| `generate_counter_workflow` | `(workflow_id: 'str', *, num_cases: 'int' = 10, instructions: 'Optional[str]' = None, version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None, new_workflow: 'bool' = False, provider: 'Optional[str]' = None) -> 'CounterGenerationState'` | Start generating a counter workflow: simulated callers written from this workflow's config. |
 | `get` | `(workflow_id: 'str') -> 'Workflow'` | Retrieve a single workflow by ID. |
 | `get_fully_hydrated` | `(workflow_id: 'str') -> "'WorkflowConfigFullyHydrated'"` | Fetch a workflow as a typed ``WorkflowConfigFullyHydrated`` instance. |
 | `global_node_config_schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for GlobalNodeConfig (used for Super Node routing). |
 | `handle` | `(workflow_id: 'str', *, dynamic_variables: 'Optional[Dict[str, Any]]' = None) -> "'WorkflowHandle'"` | Construct a :class:`WorkflowHandle` pre-loaded with the hydrated config. |
 | `import_bundle` | `(bundle: 'Dict[str, Any]', *, versions_to_import: 'Optional[List[int]]' = None, active_version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None) -> 'Workflow'` | Import a previously exported workflow bundle. |
+| `lints` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'WorkflowLintReport'` | Every advisory lint for a stored workflow, run against the whole graph. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'SyncPage[Workflow]'` | List workflows for the authenticated team (paginated). |
+| `realtime_compatibility` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, model: 'Optional[str]' = None) -> 'RealtimeCompatibilityReport'` | Whether this workflow can run its voice calls on a realtime (speech-to-speech) model. |
 | `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for valid workflow configuration. |
 | `unfavorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Remove a workflow from the requesting user's favorites. |
 | `update` | `(workflow_id: 'str', *, name: 'NotGivenOr[str]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'Workflow'` | Partially update a workflow.  Only supplied fields are sent. |
@@ -90,6 +94,8 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 
 | Method | Signature | Description |
 |---|---|---|
+| `clone` | `(tool_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'Tool'` | Duplicate a saved tool within your team. |
+| `codebase_functions` | `() -> 'CodebaseFunctionCatalogue'` | List the codebase functions a ``CodebaseFunctionToolConfig`` can call. |
 | `configurable_inbuilt` | `() -> 'List[Dict[str, Any]]'` | List configurable inbuilt tools from the catalogue. |
 | `configurable_inbuilt_schema` | `(key: 'str') -> 'Dict[str, Any]'` | Retrieve the descriptor + config schema for a single configurable inbuilt tool. |
 | `create` | `(*, tool_config: 'ToolConfigOrDict') -> 'Tool'` | Create a new custom tool. |
@@ -98,6 +104,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `execute_inline` | `(*, tool_config: 'ToolConfigOrDict', args: 'Optional[Dict[str, Any]]' = None) -> 'ToolExecuteResult'` | Execute an inline (unsaved) tool config with the given argument values. |
 | `export` | `(tool_id: 'str') -> 'Dict[str, Any]'` | Export a tool as a portable bundle. |
 | `get` | `(tool_id: 'str') -> 'Tool'` | Retrieve a single tool by ID. |
+| `get_codebase_function` | `(function_id: 'str') -> 'CodebaseFunction'` | One codebase function's definition, including the argument schema derived from its signature. |
 | `import_bundle` | `(bundle: 'Dict[str, Any]', *, name_override: 'Optional[str]' = None, secret_overrides: 'Optional[Dict[str, Any]]' = None, clear_unresolved_refs: 'bool' = True, confirm_executable: 'bool' = False) -> 'Tool'` | Import a tool bundle produced by :meth:`export`. |
 | `inbuilt` | `() -> 'List[Dict[str, Any]]'` | Retrieve all inbuilt tools from the registry. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, tool_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Tool]'` | List tools. |
@@ -281,4 +288,4 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for a saved LLM config (``LLMOrGroupConfig``). |
 | `test` | `(llm_config_id: 'str', *, system_prompt: 'str', messages: 'Optional[List[Dict[str, Any]]]' = None, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN) -> 'LLMConfigTestResult'` | Exercise a saved LLM config against a system prompt + optional messages. |
 | `test_inline` | `(*, system_prompt: 'str', config: 'LLMConfigOrDict', messages: 'Optional[List[Dict[str, Any]]]' = None) -> 'LLMConfigTestResult'` | Exercise an unsaved (inline) LLM config before persisting it. |
-| `update` | `(llm_config_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN, is_default: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, override_default: 'bool' = False) -> 'LLMConfig'` | Update a saved LLM config; only supplied fields are sent. |
+| `update` | `(llm_config_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN, is_default: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, override_default: 'bool' = False, preserve_api_key: 'bool' = True) -> 'LLMConfig'` | Update a saved LLM config; only supplied fields are sent. |

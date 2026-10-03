@@ -5,9 +5,9 @@ Response model for workflow nodes.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from interactly._models import BaseAPIModel
 
@@ -25,6 +25,10 @@ class Node(BaseAPIModel):
     updated_by: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    #: Advisory authoring lints the server returned with this write. The write succeeded either way;
+    #: these are things worth fixing, such as a variable a tool needs that is never defined. Empty on
+    #: reads and on routes that do not lint.
+    warnings: List[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -36,7 +40,11 @@ class Node(BaseAPIModel):
         # already at top level (list rows / flat payloads pass through).
         inner = data.get("node")
         if isinstance(inner, dict) and "node_config" not in data and "id" not in data and "_id" not in data:
-            data = inner
+            # The envelope's other keys belong to the write, not the node; keep the ones that matter.
+            warnings = data.get("warnings")
+            data = dict(inner)
+            if warnings is not None and "warnings" not in data:
+                data["warnings"] = warnings
         # Map the server's ``_id`` onto the model's ``id`` field.
         if "_id" in data and "id" not in data:
             data["id"] = str(data["_id"])

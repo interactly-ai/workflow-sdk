@@ -1,3 +1,11 @@
+from interactly.types.workflows.analysis import (
+    CounterGenerationState,
+    CounterWorkflowStatus,
+    ExistingCounterWorkflow,
+    RealtimeCompatibilityFinding,
+    RealtimeCompatibilityReport,
+    WorkflowLintReport,
+)
 from interactly.types.workflows.params import (
     VersionConfigUpdateParams,
     VersionCreateParams,
@@ -18,6 +26,12 @@ __all__ = [
     "NodeDiff",
     "EdgeDiff",
     "FieldDiff",
+    "WorkflowLintReport",
+    "RealtimeCompatibilityReport",
+    "RealtimeCompatibilityFinding",
+    "CounterWorkflowStatus",
+    "CounterGenerationState",
+    "ExistingCounterWorkflow",
     "WorkflowCreateParams",
     "WorkflowUpdateParams",
     "WorkflowListParams",

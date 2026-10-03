@@ -80,6 +80,7 @@ from interactly.types.shared import RunStatus, WorkflowCommand, WorkflowStatus
 from interactly.types.simulations.simulation import Simulation, SimulationGroup, SimulationRun, SimulationStatus
 from interactly.types.super_nodes.super_node import SuperNodeDetail, SuperNodeSummary
 from interactly.types.templates.template import Template
+from interactly.types.tools.codebase_function import CodebaseFunction, CodebaseFunctionCatalogue
 from interactly.types.tools.execute_result import ToolExecuteResult
 from interactly.types.tools.params import ToolCreateParams, ToolListParams, ToolUpdateParams
 from interactly.types.tools.tool import Tool
@@ -90,6 +91,14 @@ from interactly.types.webhooks.webhook import (
     WebhookEvent,
     WebhookEventStatus,
     WebhookSubscription,
+)
+from interactly.types.workflows.analysis import (
+    CounterGenerationState,
+    CounterWorkflowStatus,
+    ExistingCounterWorkflow,
+    RealtimeCompatibilityFinding,
+    RealtimeCompatibilityReport,
+    WorkflowLintReport,
 )
 from interactly.types.workflows.params import (
     VersionConfigUpdateParams,
@@ -146,6 +155,12 @@ __all__ = [
     "Workflow",
     "WorkflowVersion",
     "VersionDiff",
+    "WorkflowLintReport",
+    "RealtimeCompatibilityReport",
+    "RealtimeCompatibilityFinding",
+    "CounterWorkflowStatus",
+    "CounterGenerationState",
+    "ExistingCounterWorkflow",
     "NodeDiff",
     "EdgeDiff",
     "FieldDiff",
@@ -205,6 +220,8 @@ __all__ = [
     # Tool types
     "Tool",
     "ToolExecuteResult",
+    "CodebaseFunction",
+    "CodebaseFunctionCatalogue",
     "ToolCreateParams",
     "ToolUpdateParams",
     "ToolListParams",

@@ -66,6 +66,27 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `WorkflowCopilotCommand.NEW_CHAT`; and `session_id` / `page_context` on `WorkflowCopilotInput`. These
   live in `interactly_configs.workflow_copilot` and, like the rest of that module, are not re-exported at
   the package top level.
+- **`tools.clone(tool_id, *, name=...)`**: duplicate a saved tool in your team, secrets included,
+  named `"<source> (Clone)"` unless a name is given. A plain inbuilt tool cannot be cloned
+  (`PermissionDeniedError`).
+- **`tools.codebase_functions()` and `tools.get_codebase_function(function_id)`**: the catalogue a
+  `CodebaseFunctionToolConfig` can name, as `CodebaseFunctionCatalogue` / `CodebaseFunction`.
+  **Interactly-staff only**: for any role below super-admin the server refuses, and these raise
+  `PermissionDeniedError`.
+- **`workflows.lints(workflow_id, *, version_number=None)`** → `WorkflowLintReport`: every advisory lint
+  for a stored workflow, graph-wide and after super-node expansion. The only way to catch a cross-thread
+  reference to a missing thread, or a waiting condition that could never fire, for a workflow built a
+  node at a time.
+- **`workflows.realtime_compatibility(workflow_id, *, version_number=None, model=None)`** →
+  `RealtimeCompatibilityReport`: whether the workflow can run on a realtime (speech-to-speech) model,
+  with typed `blockers`, `warnings` and `indeterminate` findings. Pass `model` to judge against the
+  realtime model the call would actually use.
+- **`workflows.counter_workflow(workflow_id)`** and **`workflows.generate_counter_workflow(...)`**: the
+  simulated-caller workflow generated from a workflow, and the state of its generation run. Generation
+  returns at once and runs on the server, making several LLM calls; poll `counter_workflow` for progress.
+- **`warnings` on `Tool`, `Node`, `Workflow` and `WorkflowVersion`**: the advisory lints the server
+  returns with a write, which the SDK used to discard while unwrapping the response. A tool imported with
+  a variable your team has not defined now says so, for example.
 
 ### Changed
 - **`OktaAuthConfig` → `IntegrationAuthConfig`, following a server-side rename** made
@@ -96,6 +117,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   than a factory, and `WorkflowConfig.llms_config` and the events' `llm_usage_info` declare instances, all
   as upstream does. Runtime behaviour is unchanged, since Pydantic copies a mutable default per instance.
   A tool's `logical_id` stays a factory on purpose, so no shared id is published.
+- **`llm_configs.update(..., config=...)` now keeps the stored API key by default.** With an admin or
+  super-admin token, the server deletes a saved config's key when an update's `config` has none, because
+  an admin is shown the key and could only have cleared it on purpose. A config built fresh in code has
+  none, so updates silently deleted provider keys. With `preserve_api_key=True` (the default), when
+  `config` leaves `api_key` unset, `update` reads the stored config first and carries its key across,
+  including group members' keys (paired by `logical_id`), at the cost of one extra GET. A key is never
+  carried onto a config of a different provider type. `preserve_api_key=False` sends `config` exactly as
+  given, which is how an admin deliberately removes a key.
+- **Run and simulation lists accept at most a 31-day `start`–`end` window**, server-side; a wider one is a
+  `BadRequestError` carrying the server's message. Results are now ordered by creation time.
 
 ### Removed
 - **`OPENAIModel.GPT_5_2_CHAT_LATEST`, `GPT_5_3_CHAT_LATEST`** and
@@ -121,6 +152,14 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **Live round trips for the new fields** (`tests/integration/test_tools_workflow_e2e.py`): a saved tool
   with `result_as_media`, a workflow with `voice_persona`, and a codebase-function tool node, each written
   to the server and read back intact. Plus `realtime_overrides` on an LLM node.
+- **The new HTTP surface is pinned at the wire and proven live.** `tests/unit/resources/test_http_surface.py`
+  asserts what each new method sends and parses, using response shapes captured from dev, plus the
+  403 / 404 / 409 / 400 mappings. `tests/integration/test_http_surface_e2e.py` runs clone, import
+  warnings, the codebase-function catalogue, lints, realtime compatibility and the counter-workflow
+  status against dev, and proves `preserve_api_key` both keeps a key and, opted out, removes it.
+- **Recorded out of scope:** the `/secure-notifications` routes, the copilot WebSocket and its proposal
+  routes (staff-only), `copilot_runs_only` on the run list (super-admin only), and internal routes
+  (`/chat/completions`, `/scheduler/...`, `/update_log_level`, `/medical-copilot`).
 - **Parity is zero, and the guard asserts it again.** `KNOWN_UPSTREAM_DEBT` is 0: the mirror has no
   structural difference from upstream source, and `make schema-check` reports no finding against dev.
 
