@@ -120,22 +120,22 @@ response = await client.runs.execute(
 
 ## Typed Execution (WorkflowRunInput)
 
-For multi-turn runs that inject per-thread node inputs (LLM messages, etc.), use `execute_with_input()` with a typed `WorkflowRunInput`:
+For turns that carry a user message to an LLM node, use `execute_with_input()` with a typed
+`WorkflowRunInput`. The message goes on the main thread, `"0"`, as an `LLMNodeRunInput`:
 
 ```python
 from interactly import AsyncWorkflowClient
-from interactly.configs import WorkflowRunInput
+from interactly.configs import LLMNodeRunInput, NodesRunInputs, WorkflowCommand, WorkflowRunInput
 
 async with AsyncWorkflowClient() as client:
-    # Create a typed run input
     run_input = WorkflowRunInput(
-        command="start",
+        command=WorkflowCommand.START,
         dynamic_variables={"name": "Alice"},
         thread_to_node_inputs={
-            "thread_0": {
-                "llm_node_1": {"messages": [{"role": "user", "content": "Hello"}]}
-            }
-        }
+            "0": NodesRunInputs(
+                node_run_inputs=[LLMNodeRunInput(messages=[{"type": "human", "content": "Hello"}])]
+            )
+        },
     )
 
     response = await client.runs.execute_with_input(
@@ -144,7 +144,10 @@ async with AsyncWorkflowClient() as client:
     )
 ```
 
-This is the transport layer used internally by `WorkflowHandle` and is exposed for advanced use cases.
+The thread key is `"0"` (the main thread), not `"thread_0"`, and each entry is a `NodesRunInputs`.
+A shape that does not match is dropped rather than rejected, so the run starts with no user message and
+nothing tells you why. Messages are plain dicts with `"type": "human"`; a LangChain `HumanMessage`
+works too, if you already depend on `langchain_core`.
 
 ---
 
@@ -176,33 +179,37 @@ async with AsyncWorkflowClient() as client:
 
 ### Run the handle
 
+Each `.arun()` is one turn. The first turn is `START`, and every later one is `DATA`, carrying the
+caller's next message:
+
 ```python
 from interactly import AsyncWorkflowClient
-from interactly.configs import WorkflowRunInput
+from interactly.configs import LLMNodeRunInput, NodesRunInputs, WorkflowCommand, WorkflowRunInput
+from interactly.runtime.events import AssistantResponseEvent
+
+
+def user_turn(text: str, command: WorkflowCommand = WorkflowCommand.DATA) -> WorkflowRunInput:
+    return WorkflowRunInput(
+        command=command,
+        thread_to_node_inputs={
+            "0": NodesRunInputs(node_run_inputs=[LLMNodeRunInput(messages=[{"type": "human", "content": text}])])
+        },
+    )
+
 
 async with AsyncWorkflowClient() as client:
     handle = await client.workflows.handle(workflow_id="wf_123")
-    
-    run_input = WorkflowRunInput(
-        command="start",
-        dynamic_variables={"user_message": "Hello"}
-    )
 
-    # Iterate over typed events
-    async for event in handle.arun(run_input):
-        print(f"Event: {event.type}")
+    async for event in handle.arun(user_turn("My name is Priya.", WorkflowCommand.START)):
+        if isinstance(event, AssistantResponseEvent) and event.content:
+            print("Assistant:", event.content)
 
-    # The handle now stores the run_id internally
+    # The handle now stores the run_id internally, so the next turn continues the same run.
     print(f"Run ID: {handle.run_id}")
 
-    # Next turn: dynamic_variables are merged with defaults
-    next_input = WorkflowRunInput(
-        command="continue",
-        dynamic_variables={"user_message": "How are you?"}
-    )
-
-    async for event in handle.arun(next_input):
-        print(f"Event: {event.type}")
+    async for event in handle.arun(user_turn("What is my name?")):
+        if isinstance(event, AssistantResponseEvent) and event.content:
+            print("Assistant:", event.content)   # "Your name is Priya."
 ```
 
 ### Reset the session
@@ -344,30 +351,24 @@ async with AsyncWorkflowClient() as client:
 
 ### Pattern 3: Multi-turn conversation with a handle
 
+Send each user message as its own `DATA` turn, after a `START`. Using `user_turn` from
+[Run the handle](#run-the-handle):
+
 ```python
 from interactly import AsyncWorkflowClient
-from interactly.configs import WorkflowRunInput
+from interactly.configs import WorkflowCommand
 
 async with AsyncWorkflowClient() as client:
     handle = await client.workflows.handle(workflow_id="wf_123")
 
-    messages = [
-        {"role": "user", "content": "Hello"},
-        {"role": "assistant", "content": "Hi there!"},
-        {"role": "user", "content": "What can you do?"},
-    ]
-
-    for msg in messages:
-        run_input = WorkflowRunInput(
-            command="continue",
-            dynamic_variables={"message": msg["content"]}
-        )
-        
-        events = []
-        async for event in handle.arun(run_input):
-            events.append(event)
+    for index, text in enumerate(["Hello", "What can you do?", "Thanks, bye."]):
+        command = WorkflowCommand.START if index == 0 else WorkflowCommand.DATA
+        async for event in handle.arun(user_turn(text, command)):
             print(event)
 ```
+
+Only the caller's side is sent: the assistant's replies come from the workflow, so there is nothing to
+send for them.
 
 ---
 
