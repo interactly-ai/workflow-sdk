@@ -36,7 +36,9 @@ dependencies = [
 
 [project.optional-dependencies]
 configs = [
-    "interactly-configs>=0.1.0",
+    # Kept equal to interactly_configs' own version: `interactly.configs` re-exports every public name of
+    # the configs package, so an older one is an ImportError at `import interactly.configs`.
+    "interactly-configs>=0.3.0",
 ]
 dev = [
     "pytest>=8.0",
