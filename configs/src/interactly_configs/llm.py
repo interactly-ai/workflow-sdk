@@ -51,9 +51,10 @@ class OPENAIModel(str, Enum):
     GPT_5_4_PRO = "gpt-5.4-pro"
     GPT_5_2_PRO = "gpt-5.2-pro"
 
-    # GPT 5.x Chat Optimized Models. These do not consume reasoning tokens by default (unlike the original GPT-5 series)
-    GPT_5_2_CHAT_LATEST = "gpt-5.2-chat-latest"
-    GPT_5_3_CHAT_LATEST = "gpt-5.3-chat-latest"
+    # REMOVED 2026-09-01: gpt-5.2-chat-latest and gpt-5.3-chat-latest return
+    # "404 Model not found" on every call (verified live), joining gpt-5-chat-latest and
+    # gpt-5.1-chat-latest, which were already retired. The whole "-chat-latest" alias family is
+    # gone, so no GPT-5 chat-optimized model is selectable any more.
 
     # GPT 4 Models
     GPT_4_1_NANO = "gpt-4.1-nano"
@@ -89,6 +90,21 @@ class GOOGLEModel(str, Enum):
     # every call, so leaving them selectable only produced runtime failures.
 
 
+class AnthropicBackend(str, Enum):
+    """Which endpoint serves an Anthropic model."""
+
+    # The same Claude models are reachable two ways, and the choice is an auth/billing decision
+    # rather than a model one. DIRECT calls api.anthropic.com with an Anthropic API key; VERTEX
+    # calls Google Vertex AI Model Garden with the platform's Google Cloud credentials and bills
+    # the Google Cloud project.
+    #
+    # DIRECT is the default, so a config that does not mention a backend keeps calling
+    # api.anthropic.com. Choosing VERTEX restricts the model to VERTEX_SUPPORTED_MODELS;
+    # anything else is rejected by the server rather than silently redirected.
+    DIRECT = "direct"
+    VERTEX = "vertex"
+
+
 class ANTHROPICModel(str, Enum):
     # Claude 5 models. These reject `temperature` and the legacy
     # thinking={"type": "enabled", "budget_tokens": N} shape -- see
@@ -104,8 +120,6 @@ class ANTHROPICModel(str, Enum):
     CLAUDE_OPUS_4_7 = "claude-opus-4-7"
     CLAUDE_OPUS_4_6 = "claude-opus-4-6"
     CLAUDE_OPUS_4_5_20251101 = "claude-opus-4-5-20251101"
-    # DEPRECATED: retires 2026-08-05.
-    CLAUDE_OPUS_4_1_20250805 = "claude-opus-4-1-20250805"
 
     CLAUDE_SONNET_4_6 = "claude-sonnet-4-6"
     CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929"
@@ -116,6 +130,11 @@ class ANTHROPICModel(str, Enum):
     CLAUDE_HAIKU_4_5_20251001 = "claude-haiku-4-5-20251001"
     # REMOVED 2026-07-30: claude-opus-4-20250514 and claude-sonnet-4-20250514 are
     # retired and return 404 on every call.
+    #
+    # REMOVED 2026-09-01: claude-opus-4-1-20250805 passed its 2026-08-05 retirement and now
+    # returns 404 from api.anthropic.com on every call (verified live). It is still served on
+    # Vertex AI, which retires on Google's own schedule, but a model that answers on only one
+    # backend is not worth keeping selectable.
 
 
 class BEDROCKModel(str, Enum):
@@ -176,6 +195,26 @@ ADAPTIVE_THINKING_MODELS = frozenset(
 
 #: Anthropic models whose thinking cannot be switched off: thinking={"type": "disabled"} returns 400.
 ALWAYS_THINKING_ANTHROPIC_MODELS = frozenset({ANTHROPICModel.CLAUDE_FABLE_5})
+
+#: Anthropic models callable through Google Vertex AI Model Garden, i.e. the ones an
+#: `AnthropicLLMConfig` may name while `backend` is `AnthropicBackend.VERTEX`. Live-verified against
+#: the platform's GCP project (region "global") on 2026-09-01. Deliberately absent:
+#: claude-haiku-4-5 (and its dated form) and claude-opus-4-5-20251101 return 404 in every id form;
+#: claude-fable-5 returns 403 until data sharing is enabled for publisher "anthropic".
+#:
+#: A model outside this set is still usable on the default DIRECT backend -- this constrains only
+#: the Vertex path, where the server rejects an unavailable model rather than silently redirecting.
+VERTEX_SUPPORTED_MODELS = frozenset(
+    {
+        ANTHROPICModel.CLAUDE_OPUS_5,
+        ANTHROPICModel.CLAUDE_SONNET_5,
+        ANTHROPICModel.CLAUDE_OPUS_4_8,
+        ANTHROPICModel.CLAUDE_OPUS_4_7,
+        ANTHROPICModel.CLAUDE_OPUS_4_6,
+        ANTHROPICModel.CLAUDE_SONNET_4_6,
+        ANTHROPICModel.CLAUDE_SONNET_4_5_20250929,
+    }
+)
 
 #: Google models whose thinking cannot be switched off. The Gemini API rejects
 #: thinkingConfig.thinkingBudget=0 on these. The two floating aliases are listed because they
@@ -440,6 +479,34 @@ class AnthropicLLMConfig(BaseLLMConfig):
             "Set to 0 to disable."
         ),
         title="Thinking Budget (tokens)",
+    )
+    backend: AnthropicBackend = Field(
+        default=AnthropicBackend.DIRECT,
+        description=(
+            "Where the Claude model is served from. 'direct' (the default) calls api.anthropic.com "
+            "with an Anthropic API key. 'vertex' calls Google Vertex AI Model Garden using the "
+            "platform's Google Cloud credentials -- no Anthropic key is needed, and the usage is "
+            "billed to the Google Cloud project rather than to Anthropic. The model choices are the "
+            "same either way, though a few models are not available on Vertex."
+        ),
+        title="Anthropic Backend",
+    )
+    vertex_project: Optional[str] = Field(
+        default=None,
+        description=(
+            "Google Cloud project that serves the model when the backend is 'vertex'. Leave blank "
+            "to use the platform default."
+        ),
+        title="Vertex Project ID",
+    )
+    vertex_location: Optional[str] = Field(
+        default=None,
+        description=(
+            "Vertex region used when the backend is 'vertex'. Leave blank for the platform default "
+            "('global'). The global endpoint is supported by every Anthropic model in Model Garden; "
+            "a pinned region restricts inference geography but is not offered for every model."
+        ),
+        title="Vertex Location",
     )
 
     model_config = ConfigDict(title="Anthropic")
