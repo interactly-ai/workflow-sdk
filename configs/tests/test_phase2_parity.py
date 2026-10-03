@@ -54,7 +54,6 @@ class TestSelfLoopConfig:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            {"enabled": True, "max_retries": 101},       # le=100
             {"enabled": True, "max_retries": -1},        # ge=0
             {"enabled": True, "expiry_time": 3601},      # le=3600
             {"enabled": True, "expiry_time": 0},         # ge=1
@@ -64,6 +63,10 @@ class TestSelfLoopConfig:
     def test_bounds_are_enforced(self, kwargs):
         with pytest.raises(ValidationError):
             ic.SelfLoopConfig(**kwargs)
+
+    def test_max_retries_has_no_upper_bound(self):
+        # Upstream lifted the old cap of 100; only `ge=0` remains.
+        assert ic.SelfLoopConfig(enabled=True, max_retries=1000).max_retries == 1000
 
     def test_attaches_to_any_node(self):
         node = ic.SayLLMNodeConfig(self_loop_config=ic.SelfLoopConfig(enabled=True, max_retries=2))

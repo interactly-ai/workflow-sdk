@@ -101,6 +101,15 @@ KNOWN_SERIALIZER_DROPPED_DEFAULTS: Dict[str, str] = {
 }
 
 #: `$defs` the server publishes that the mirror deliberately has no class for, as name -> reason.
+#: Fields the mirror carries because upstream SOURCE has them, but that the server under test has not
+#: deployed yet, as `Model.field` -> reason. Suppresses only "mirror has it, server does not" for that
+#: exact field. The mirror tracks source, so it can run ahead of a deploy; the integration guard fails as
+#: soon as an entry stops suppressing anything, which is the signal that the deploy landed and the entry
+#: should go.
+KNOWN_NOT_YET_DEPLOYED: Dict[str, str] = {
+    "CompanionThreadConfig.stop_with_main_thread": "upstream 310a9a8ec (2026-10-01); not on dev as of 2026-10-02",
+}
+
 KNOWN_SERVER_ONLY_DEFS: Dict[str, str] = {
     # LangChain message and tool-call types, embedded through `WorkflowRun`'s message history. The mirror
     # carries messages as plain dicts so `interactly_configs` has no runtime dependency on
@@ -433,6 +442,10 @@ def compare_model(
             SchemaFinding(endpoint, model_name, "missing-property", f"server has `{prop}`, mirror does not")
         )
     for prop in sorted(set(local_props) - set(served_props)):
+        if f"{model_name}.{prop}" in KNOWN_NOT_YET_DEPLOYED:
+            if allowances_used is not None:
+                allowances_used.add(f"KNOWN_NOT_YET_DEPLOYED:{model_name}.{prop}")
+            continue
         findings.append(
             SchemaFinding(endpoint, model_name, "extra-property", f"mirror has `{prop}`, server does not")
         )

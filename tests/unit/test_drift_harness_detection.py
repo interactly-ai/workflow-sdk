@@ -385,6 +385,17 @@ class TestPublishedDefaultsAreCompared:
         assert [f.detail.split(":")[0] for f in findings] == ["`other_id`"]
         assert used == {"KNOWN_SERIALIZER_DROPPED_DEFAULTS:workflow_id"}
 
+    def test_a_field_ahead_of_the_server_is_suppressed_only_when_listed(self, monkeypatch):
+        monkeypatch.setattr(ss, "KNOWN_NOT_YET_DEPLOYED", {"M.new_field": "fixture"})
+        served = _model({})
+        local = _model({"new_field": {}, "other_new_field": {}})
+        used: set = set()
+        findings = ss.compare_model("/v1/x", "M", served, local, used)
+        assert [(f.kind, f.detail) for f in findings] == [
+            ("extra-property", "mirror has `other_new_field`, server does not")
+        ]
+        assert used == {"KNOWN_NOT_YET_DEPLOYED:M.new_field"}
+
     def test_a_listed_field_with_a_different_real_default_is_still_reported(self):
         served = _model({"workflow_id": {"default": "abc"}})
         local = _model({"workflow_id": {"default": None}})
@@ -395,7 +406,7 @@ class TestToolTypesAreDiscoveredFromTheServer:
     def test_a_tool_type_the_mirror_lacks_is_unmapped_rather_than_skipped(self, monkeypatch):
         # Arrange: the server lists a type the mirror has never heard of.
         responses = {
-            "/v1/tools/types": {"tool_types": ["external_api", "codebase_function"]},
+            "/v1/tools/types": {"tool_types": ["external_api", "a_tool_type_from_the_future"]},
             "/v1/nodes/types": {"node_types": []},
             "/v1/edges/types": {"edge_types": []},
         }
@@ -406,5 +417,5 @@ class TestToolTypesAreDiscoveredFromTheServer:
         tools = {endpoint: name for endpoint, name, _ in work if endpoint.startswith("/v1/tools/")}
         assert tools == {
             "/v1/tools/schema/external_api": "ExternalAPIToolConfig",
-            "/v1/tools/schema/codebase_function": "",
+            "/v1/tools/schema/a_tool_type_from_the_future": "",
         }

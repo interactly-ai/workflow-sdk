@@ -89,6 +89,15 @@ class CompanionThreadConfig(BaseModel):
         ),
         title="Thread ID",
     )
+    stop_with_main_thread: bool = Field(
+        default=True,
+        description=(
+            "When True, this companion is ended as soon as every main (non-companion) thread has ended, "
+            "instead of running out its self-loop budget. Set False for work that must outlive the "
+            "conversation, such as a write-back or a result that arrives after the goodbye."
+        ),
+        title="Stop With Main Thread",
+    )
 
     model_config = ConfigDict(title="Companion Thread")
 
@@ -243,6 +252,12 @@ def edge_companion_thread_id(edge: Any) -> Optional[str]:
     """Author-chosen companion ``thread_id`` for a direct edge, or None if unset / not a companion edge."""
     cfg = getattr(edge, "companion_thread_config", None)
     return cfg.thread_id if cfg else None
+
+
+def edge_companion_stops_with_main_thread(edge: Any) -> bool:
+    """True when a companion direct edge's companion is to end once all main threads have ended."""
+    cfg = getattr(edge, "companion_thread_config", None)
+    return bool(cfg and cfg.is_companion_thread and cfg.stop_with_main_thread)
 
 
 def edge_evaluates_while_waiting(edge: Any) -> bool:

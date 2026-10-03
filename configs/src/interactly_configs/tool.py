@@ -47,6 +47,33 @@ def declared_arguments_for(tool_id: str) -> Optional[List[str]]:
     return list(_INBUILT_ARGUMENT_PROVIDER[tool_id] or [])
 
 
+#: Which arguments a registered codebase function declares, keyed by ``function_id``. The same
+#: arrangement, for the same reason, as the inbuilt provider above: upstream reads a server-side function
+#: registry this package cannot see, so it is empty by default and the check it feeds is a documented
+#: no-op until a host registers signatures.
+_CODEBASE_FUNCTION_ARGUMENT_PROVIDER: Dict[str, List[str]] = {}
+
+
+def register_codebase_function_arguments(arguments_by_function_id: Dict[str, List[str]]) -> None:
+    """Teach this process which arguments each codebase function accepts. Merges; does not replace."""
+    _CODEBASE_FUNCTION_ARGUMENT_PROVIDER.update(arguments_by_function_id)
+
+
+def clear_codebase_function_arguments() -> None:
+    """Forget every registered codebase-function signature. For tests that must assert the offline no-op."""
+    _CODEBASE_FUNCTION_ARGUMENT_PROVIDER.clear()
+
+
+def declared_codebase_function_arguments_for(function_id: str) -> Optional[List[str]]:
+    """The arguments ``function_id`` accepts, or ``None`` when this process does not know.
+
+    ``None`` and ``[]`` differ exactly as they do in :func:`declared_arguments_for`.
+    """
+    if function_id not in _CODEBASE_FUNCTION_ARGUMENT_PROVIDER:
+        return None
+    return list(_CODEBASE_FUNCTION_ARGUMENT_PROVIDER[function_id] or [])
+
+
 class ToolType(str, Enum):
     """Enumeration of tool types."""
 
@@ -54,10 +81,17 @@ class ToolType(str, Enum):
     INLINE_PYTHON = "inline_python"
     EXTERNAL_API = "external_api"
     KNOWLEDGE_BASE = "knowledge_base"
+    CODEBASE_FUNCTION = "codebase_function"
 
     @classmethod
     def list(cls) -> List["ToolType"]:
-        return [cls.INBUILT_FUNCTION, cls.INLINE_PYTHON, cls.EXTERNAL_API, cls.KNOWLEDGE_BASE]
+        return [
+            cls.INBUILT_FUNCTION,
+            cls.INLINE_PYTHON,
+            cls.EXTERNAL_API,
+            cls.KNOWLEDGE_BASE,
+            cls.CODEBASE_FUNCTION,
+        ]
 
     @classmethod
     def is_valid(cls, value: str) -> bool:
@@ -75,6 +109,7 @@ class ToolType(str, Enum):
             cls.INLINE_PYTHON: InlinePythonToolConfig,
             cls.EXTERNAL_API: ExternalAPIToolConfig,
             cls.KNOWLEDGE_BASE: KnowledgeBaseToolConfig,
+            cls.CODEBASE_FUNCTION: CodebaseFunctionToolConfig,
         }
 
 
@@ -312,6 +347,11 @@ class ToolResultVariableMapping(BaseModel):
 class BaseToolConfig(BaseModel):
     """Base configuration for a tool."""
 
+    # `default_factory`, and it must stay that way. Pydantic v2 omits a factory's result from the JSON
+    # Schema, which for the list fields below is exactly wrong — but here it is the point. A literal default
+    # would freeze one uuid4() into the published schema, and every client that seeds a form from it would
+    # send back the *same* logical_id, making distinct tools indistinguishable to every by-reference
+    # resolver. The identity has to be minted per instance.
     logical_id: Optional[str] = Field(
         default_factory=lambda: "tool_" + str(uuid4()),
         description="Unique identifier for the tool",
@@ -393,8 +433,12 @@ class BaseToolConfig(BaseModel):
         ),
         title="Tool Timeout (seconds)",
     )
+    # `default=[]` rather than `default_factory=list`: Pydantic v2 deep-copies a mutable default per
+    # instance, so the two are identical at runtime, but only the literal reaches the JSON Schema. A client
+    # that seeds a form from that schema leaves a field with no advertised default undefined rather than
+    # empty. `api_headers` below is spelled the same way.
     variable_arguments: List[ToolVariableArgument] = Field(
-        default_factory=list,
+        default=[],
         description=(
             "Arguments supplied to this tool from the workflow's runtime/dynamic variables, resolved at "
             "invocation time and passed as native Python values. Use this instead of embedding "
@@ -404,7 +448,7 @@ class BaseToolConfig(BaseModel):
         title="Variable Arguments",
     )
     result_variable_mappings: List[ToolResultVariableMapping] = Field(
-        default_factory=list,
+        default=[],  # literal, not a factory — see `variable_arguments`
         description=(
             "Assigns parts of this tool's return value to named runtime variables, so a tool that "
             "returns a dict can populate several variables at once."
@@ -547,6 +591,77 @@ class InbuiltFunctionToolConfig(BaseToolConfig):
     model_config = ConfigDict(title="Inbuilt Function Tool")
 
 
+class CodebaseFunctionToolConfig(BaseToolConfig):
+    """Configuration for calling a function that already exists in the platform's codebase.
+
+    **Interactly-staff only.** The server refuses to create, update, execute or list one of these for
+    any role below super-admin, and hides the type from them. It is mirrored because a customer can still
+    *read* a workflow that staff configured with one, and without this class that workflow would not parse.
+
+    The function is named by ``function_id`` and registered server-side; its signature, argument schema
+    and description are derived from the function itself, so ``signature`` and ``args_schema`` here are
+    optional *overrides*.
+
+    **``tool_id`` means a saved tool document, not a registry key.** That is the opposite of
+    ``InbuiltFunctionToolConfig``, where the two are the same field. Keeping the function's identity
+    (``function_id``) apart from the document's (``tool_id``) is what lets a team save per-team
+    configuration for a function without the two ids being confused for one another.
+    """
+
+    type: Literal["codebase_function"] = Field(
+        default=ToolType.CODEBASE_FUNCTION.value,
+        description="Type of the tool. Must be 'codebase_function'",
+        title="Tool Type",
+    )
+    function_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "The registered function to call, named either by its stable id "
+            "(e.g. 'scheduling.next_available_slot') or by its location "
+            "('package.module:function'). The function must carry the @workflow_function decorator."
+        ),
+        title="Function",
+    )
+    extra_config: Optional[dict] = Field(
+        default=None,
+        description=(
+            "Author-supplied settings for this function, read at call time from the tool extra-config "
+            "context variable. The accepted shape is declared by the function's registration."
+        ),
+        title="Extra Configuration",
+    )
+
+    @model_validator(mode="after")
+    def _check_bindings_are_declared_arguments(self) -> "CodebaseFunctionToolConfig":
+        """Reject a binding naming an argument the registered function does not accept.
+
+        The same rule as ``InbuiltFunctionToolConfig``'s validator, and the same arrangement: upstream
+        reads the function's argument schema from a server-side registry, which this package cannot see,
+        so the check is a **documented no-op** unless a host has registered signatures with
+        :func:`register_codebase_function_arguments`. Upstream skips silently for a function it cannot
+        resolve as well, so an unregistered process here behaves exactly like a server that has not loaded
+        the catalogue.
+        """
+        if not self.variable_arguments or not self.function_id:
+            return self
+
+        declared = declared_codebase_function_arguments_for(self.function_id)
+        if declared is None:
+            return self
+
+        offenders = sorted({binding.argument_name for binding in self.variable_arguments} - set(declared))
+        if offenders:
+            raise ValueError(
+                f"Codebase function '{self.function_id}': variable_arguments binds {offenders}, which the "
+                f"registered function does not accept (it accepts {sorted(declared)}). Those values would "
+                f"be validated away before the function saw them, so the binding would silently do "
+                f"nothing. Rename the binding, or bind one of the accepted arguments."
+            )
+        return self
+
+    model_config = ConfigDict(title="Codebase Function Tool")
+
+
 class InlinePythonToolConfig(BaseToolConfig):
     """Configuration for an inline Python tool.
 
@@ -646,7 +761,7 @@ class ExternalAPIToolConfig(BaseToolConfig):
         title="API Method",
     )
     api_headers: Dict[str, str] = Field(
-        default_factory=dict,
+        default={},
         description="HTTP headers to include with the API request",
         title="API Headers",
     )
@@ -661,6 +776,36 @@ class ExternalAPIToolConfig(BaseToolConfig):
         "request. Ignored when api_headers already sets Authorization.",
         title="Integration Auth",
     )
+    result_as_media: bool = Field(
+        default=False,
+        description="Return the response body as media, a recording or an image, instead of parsing it. On a "
+        "tool node the bytes are held for the run and the result variable gets a media:// handle. An LLM node "
+        "whose prompt names that variable (for example [[recording]]) is sent the media with its request.",
+        title="Result Is Media",
+    )
+
+    @model_validator(mode="after")
+    def _reject_result_readers_on_media(self) -> "ExternalAPIToolConfig":
+        """A media result is a ``media://`` handle, so there are no fields for a mapping to read.
+
+        Rejected rather than ignored: a mapping that silently writes ``None`` - or fails the node when it
+        is required - reads as a broken tool rather than as a config that cannot mean anything.
+        """
+        if not self.result_as_media:
+            return self
+        unreadable = [
+            name
+            for name, configured in (
+                ("result_variable_mappings", bool(self.result_variable_mappings)),
+                ("expand_result_into_runtime_variables", self.expand_result_into_runtime_variables),
+            )
+            if configured
+        ]
+        if unreadable:
+            raise ValueError(
+                f"result_as_media returns a media:// handle, which {' and '.join(unreadable)} cannot read."
+            )
+        return self
 
     @model_validator(mode="after")
     def _reject_bindings_no_template_uses(self) -> "ExternalAPIToolConfig":
@@ -720,7 +865,7 @@ class KnowledgeBaseToolConfig(BaseToolConfig):
         title="Tool Type",
     )
     target_knowledge_base_ids: List[str] = Field(
-        default_factory=list,
+        default=[],  # literal, not a factory — see `BaseToolConfig.variable_arguments`
         description="The IDs of the knowledge bases to query",
         title="Target Knowledge Base IDs",
     )
@@ -797,7 +942,11 @@ class MCPServerConfig(BaseModel):
 
 
 ToolConfig = Annotated[
-    InlinePythonToolConfig | InbuiltFunctionToolConfig | ExternalAPIToolConfig | KnowledgeBaseToolConfig,
+    InlinePythonToolConfig
+    | InbuiltFunctionToolConfig
+    | ExternalAPIToolConfig
+    | KnowledgeBaseToolConfig
+    | CodebaseFunctionToolConfig,
     Field(discriminator="type"),
 ]
 

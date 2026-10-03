@@ -139,7 +139,6 @@ class SelfLoopConfig(BaseModel):
     max_retries: Optional[int] = Field(
         default=None,
         ge=0,
-        le=100,
         description=(
             "Maximum number of re-executions after the first attempt (total attempts = "
             "max_retries + 1). Leave empty for no bound by count."

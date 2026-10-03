@@ -11,7 +11,12 @@ class WorkflowCopilotStatus(str, Enum):
 
 class WorkflowCopilotCommand(str, Enum):
     DATA = "data"
+    #: Close the socket and leave the conversation where it is. The stored session survives, so the
+    #: next connection resumes it.
     STOP = "stop"
+    #: End the conversation for good: the server deletes the stored session so nothing can resume it,
+    #: then closes with code 4041. Distinct from STOP, which only hangs up.
+    FINISH = "finish"
 
 class WorkflowCopilotOutputType(str, Enum):
     TEXT = "text"
