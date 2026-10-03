@@ -20,8 +20,11 @@ class PromptConfig(BaseModel):
 class StaticMessagesConfig(BaseModel):
     """A list of pre-configured messages — one is selected and emitted."""
 
+    # `default=[]`, not `default_factory=list`: identical at runtime (Pydantic v2 deep-copies a mutable
+    # default per instance), but only the literal is published in the JSON Schema. See
+    # `BaseToolConfig.variable_arguments`.
     static_messages: List[str] = Field(
-        default_factory=list,
+        default=[],
         description="List of pre-configured messages from which one will be emitted",
         title="Static Messages",
     )

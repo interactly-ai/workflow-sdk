@@ -17,6 +17,7 @@ from interactly_configs.edge import (
     EdgeType,
     EvaluateWhileWaitingConfig,
     WaitingEvaluationTriggerMode,
+    edge_companion_stops_with_main_thread,
     edge_companion_thread_id,
     edge_evaluates_while_waiting,
     edge_is_companion,
@@ -133,6 +134,7 @@ from interactly_configs.super_node_interface import (
 from interactly_configs.tool import (
     APIMethodType,
     BaseToolConfig,
+    CodebaseFunctionToolConfig,
     ExternalAPIToolConfig,
     InbuiltFunctionToolConfig,
     InlinePythonToolConfig,
@@ -142,7 +144,7 @@ from interactly_configs.tool import (
     ToolsConfig,
     ToolType,
 )
-from interactly_configs.workflow import WorkflowConfig, WorkflowConfigFullyHydrated
+from interactly_configs.workflow import VOICE_PERSONA_MAX_LENGTH, WorkflowConfig, WorkflowConfigFullyHydrated
 from interactly_configs.workflow_template import WorkflowTemplateConfig
 
 # Resolve the forward reference ``WorkflowConfigFullyHydrated`` declared in
@@ -164,6 +166,9 @@ from interactly_configs.workflow_run import (
 )
 
 __all__ = [
+    "CodebaseFunctionToolConfig",
+    "edge_companion_stops_with_main_thread",
+    "VOICE_PERSONA_MAX_LENGTH",
     "ADAPTIVE_THINKING_MODELS",
     "ALWAYS_THINKING_ANTHROPIC_MODELS",
     "ALWAYS_THINKING_GOOGLE_MODELS",

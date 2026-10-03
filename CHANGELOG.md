@@ -39,6 +39,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   `VISION_BEDROCK_MODELS`. Upstream keeps these inside the enums as `enum.nonmember`; that is 3.11+, so
   the mirror hoists them, qualifying a name with its provider where it would otherwise be ambiguous.
 - **`CustomLLMConfig.supports_audio_input`**, off by default.
+- **`CodebaseFunctionToolConfig`** and `ToolType.CODEBASE_FUNCTION`: a tool that calls a function
+  registered in the platform's codebase, named by `function_id`. **Staff-only**: the server refuses to
+  create, update, execute or list one for any role below super-admin. It is mirrored so that a customer
+  reading a workflow staff configured with one can parse it. Note `tool_id` means a saved tool document
+  here, the opposite of `InbuiltFunctionToolConfig`. Its binding check mirrors the inbuilt one: a no-op
+  unless signatures are registered with `register_codebase_function_arguments`.
+- **`ExternalAPIToolConfig.result_as_media`**: return the response body as media (a recording or an
+  image) rather than parsing it. The result variable holds a `media://` handle, so combining it with
+  `result_variable_mappings` or `expand_result_into_runtime_variables` is rejected.
+- **`CompanionThreadConfig.stop_with_main_thread`** and `edge_companion_stops_with_main_thread()`. See
+  *Changed* for what the default means.
+- **`WorkflowConfig.voice_persona`** (at most `VOICE_PERSONA_MAX_LENGTH` = 600 characters): who the voice
+  of a GPT-Live call through this workflow is. **`WorkflowConfigFullyHydrated.generated_voice_persona`** and
+  `resolved_voice_persona()`, which prefers the hand-written one.
+- **`WorkflowCopilotCommand.FINISH`**: ends a copilot conversation for good, where `STOP` only hangs up.
+- **`interactly_configs.utils.extract_dynamic_variables(*configs)`**: the `{{variables}}` any set of
+  configs references, for callers holding something other than a whole workflow.
 
 ### Changed
 - **`OktaAuthConfig` → `IntegrationAuthConfig`, following a server-side rename** made
@@ -57,6 +74,18 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   from the mirror's copy, unnoticed until the parity harness began comparing the sets' contents.
 - **`BaseLLMConfig.api_key`'s description** now states the server's role rule: an admin is shown the
   stored key, and an admin who sends a config with the key cleared removes it.
+- **Companion threads now stop when the conversation does, by default.** `stop_with_main_thread`
+  defaults to `True`, following the server (upstream 2026-10-01): a fork companion ends as soon as every
+  main thread has ended, instead of running out its self-loop budget. A companion that must outlive the
+  conversation — a write-back, or a result that arrives after the goodbye — needs
+  `stop_with_main_thread=False`. The behaviour is the server's; a server that predates the change
+  ignores the field.
+- **`SelfLoopConfig.max_retries` has no upper bound.** The old `le=100` cap was lifted upstream.
+- **Defaults are published in the JSON Schema.** `variable_arguments`, `result_variable_mappings`,
+  `api_headers`, `target_knowledge_base_ids` and `static_messages` declare `default=[]` / `{}` rather
+  than a factory, and `WorkflowConfig.llms_config` and the events' `llm_usage_info` declare instances, all
+  as upstream does. Runtime behaviour is unchanged, since Pydantic copies a mutable default per instance.
+  A tool's `logical_id` stays a factory on purpose, so no shared id is published.
 
 ### Removed
 - **`OPENAIModel.GPT_5_2_CHAT_LATEST`, `GPT_5_3_CHAT_LATEST`** and
@@ -75,6 +104,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   imported from files it does not parse. `schema_sync` compares every nested `$defs` model, reports
   server classes the mirror lacks, discovers tool types from the server, and compares published defaults.
   Each check has a fixture test proving it fires.
+- **`schema_sync` can run ahead of a deploy.** `KNOWN_NOT_YET_DEPLOYED` lists fields the mirror carries
+  from upstream source that the server under test does not serve yet (today:
+  `CompanionThreadConfig.stop_with_main_thread`). The live guard fails once an entry stops suppressing
+  anything, which signals that the deploy has landed.
+- **Live round trips for the new fields** (`tests/integration/test_tools_workflow_e2e.py`): a saved tool
+  with `result_as_media`, a workflow with `voice_persona`, and a codebase-function tool node, each written
+  to the server and read back intact.
 
 ### Fixed
 - **A workflow using a new provider or model lost its node types.** A node on Grok, Gemma, GLM,
@@ -82,6 +118,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   validating such an `LLMConfig` on its own raised. An `AnthropicLLMConfig` with `backend="vertex"`
   parsed but silently dropped the backend, so reading a config and writing it back moved it to the
   direct API.
+- **A workflow with a codebase-function tool node lost that node's type**, hydrating it as
+  `UnknownNodeConfig`. And `result_as_media` parsed but was dropped, so reading an external-API tool and
+  writing it back turned a media result into a parsed one.
 - **Examples 11–23 crashed on launch.** `main()` passed a `dynamic_variables` that was never defined
   in its scope, so `python wf_examples/wf_example_progression_11.py` raised `NameError` on the first
   call it made. The notebook counterparts never caught it because they import the *builder* and drive

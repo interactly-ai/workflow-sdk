@@ -294,7 +294,7 @@ class UserMessagesEvent(NodeEvent):
 class BaseLLMNodeEvent(NodeEvent):
     type: Literal["llm"] = Field(default="llm")
     message: Optional[Any] = Field(default=None)
-    llm_usage_info: LLMUsageInfo = Field(default_factory=LLMUsageInfo)
+    llm_usage_info: LLMUsageInfo = Field(default=LLMUsageInfo())
 
 
 class WorkerLLMNodeEvent(BaseLLMNodeEvent):
@@ -480,7 +480,7 @@ class AssistantResponseEvent(NodeEvent):
     type: Literal["assistant_response"] = Field(default="assistant_response")
     content: Optional[str] = Field(default=None)
     response_metadata: dict = Field(default_factory=dict)
-    llm_usage_info: LLMUsageInfo = Field(default_factory=LLMUsageInfo)
+    llm_usage_info: LLMUsageInfo = Field(default=LLMUsageInfo())
 
 
 class WorkflowDebugLogEvent(BaseEvent):

@@ -402,8 +402,12 @@ class TestEnums:
         assert NodeCategory.SYSTEM == "System"
         assert NodeCategory.LLM == "LLM"
 
-    def test_tool_type_list_has_four_members(self):
-        assert len(ToolType.list()) == 4
+    def test_tool_type_list_has_five_members(self):
+        assert len(ToolType.list()) == 5
+
+    def test_tool_type_list_matches_the_enum(self):
+        # `list()` is hand-maintained upstream; a member missing from it is reported invalid by is_valid.
+        assert set(ToolType.list()) == set(ToolType)
 
     def test_tool_type_is_valid(self):
         assert ToolType.is_valid("external_api")

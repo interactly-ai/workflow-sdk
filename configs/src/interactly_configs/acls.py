@@ -44,6 +44,7 @@ class UISpecialFieldTypes(str, Enum):
     KNOWLEDGE_BASE_SELECTION = "knowledge_base_selection"
     LLM_CONFIG_SELECTION = "llm_config_selection"
     INBUILT_TOOL_SELECTION = "inbuilt_tool_selection"
+    CODEBASE_FUNCTION_SELECTION = "codebase_function_selection"
     INLINE_PYTHON_TOOL_SELECTION = "inline_python_tool_selection"
     EXTERNAL_API_TOOL_SELECTION = "external_api_tool_selection"
     KB_TOOL_SELECTION = "kb_tool_selection"

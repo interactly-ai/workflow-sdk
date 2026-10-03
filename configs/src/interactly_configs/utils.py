@@ -1,8 +1,30 @@
 import re
+from typing import Any, Dict, Optional
+
+from pydantic import BaseModel
 
 from interactly_configs.workflow import WorkflowConfig, WorkflowConfigFullyHydrated
 
 _WORKFLOW_SETTINGS_MISC_KEY_DYNAMIC_VARIABLES = "default_dynamic_variables"
+
+# Matches variables in double curly braces: {{name}}, {{user.name}}, {{items[0]}}.
+_DYNAMIC_VARIABLE_PATTERN = r"\{\{([^}]+)\}\}"
+
+
+def extract_dynamic_variables(*configs: Optional[BaseModel]) -> Dict[str, Any]:
+    """The dynamic variables referenced anywhere in the given configs, as an empty nested structure.
+
+    Any pydantic config will do — a workflow, a node, a single tool. Callers that hold something other
+    than a whole workflow (a saved tool, say) use this rather than re-implementing the scan.
+    """
+    dynamic_vars_set: set[str] = set()
+    for config in configs:
+        if config is None:
+            continue
+        matches = re.findall(_DYNAMIC_VARIABLE_PATTERN, config.model_dump_json())
+        dynamic_vars_set.update(var.strip() for var in matches)
+    return _build_dynamic_variables_structure(dynamic_vars_set)
+
 
 def derive_dynamic_variables(workflow_config: WorkflowConfig | WorkflowConfigFullyHydrated | None) -> dict:
     """
@@ -26,30 +48,9 @@ def derive_dynamic_variables(workflow_config: WorkflowConfig | WorkflowConfigFul
             f"Invalid workflow configuration type provided. Type: {type(workflow_config)} Value: {workflow_config}"
         )
 
-    dynamic_vars_set = set()
-
-    # Pattern to match variables in double curly braces
-    pattern = r"\{\{([^}]+)\}\}"
-
-    # Check workflow level configuration
-    workflow_json = workflow_full.workflow_config.model_dump_json()
-    matches = re.findall(pattern, workflow_json)
-    dynamic_vars_set.update(var.strip() for var in matches)
-
-    # Check node configurations
-    for node_config in workflow_full.node_configs:
-        node_json = node_config.model_dump_json()
-        matches = re.findall(pattern, node_json)
-        dynamic_vars_set.update(var.strip() for var in matches)
-
-    # Check edge configurations
-    for edge_config in workflow_full.edge_configs:
-        edge_json = edge_config.model_dump_json()
-        matches = re.findall(pattern, edge_json)
-        dynamic_vars_set.update(var.strip() for var in matches)
-
-    # Parse variable expressions and build nested structures
-    empty_dynamic_variables = _build_dynamic_variables_structure(dynamic_vars_set)
+    empty_dynamic_variables = extract_dynamic_variables(
+        workflow_full.workflow_config, *workflow_full.node_configs, *workflow_full.edge_configs
+    )
 
     if _WORKFLOW_SETTINGS_MISC_KEY_DYNAMIC_VARIABLES not in workflow_full.workflow_config.miscellaneous:
         return empty_dynamic_variables

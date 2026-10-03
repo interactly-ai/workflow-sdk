@@ -92,5 +92,7 @@ class TestLiveSchemaSync:
 
         expected = {f"KNOWN_SERIALIZER_DROPPED_DEFAULTS:{name}" for name in schema_sync.KNOWN_SERIALIZER_DROPPED_DEFAULTS}
         expected |= {f"KNOWN_SERVER_ONLY_DEFS:{name}" for name in schema_sync.KNOWN_SERVER_ONLY_DEFS}
+        # An entry here going unused means the server has deployed the field: drop the entry.
+        expected |= {f"KNOWN_NOT_YET_DEPLOYED:{key}" for key in schema_sync.KNOWN_NOT_YET_DEPLOYED}
         unused = sorted(expected - report.allowances_used)
         assert not unused, f"allow-list entries that suppressed nothing against this server: {unused}"

@@ -10,7 +10,7 @@ silently create an empty workflow.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from uuid import uuid4
 
 from pydantic import (
@@ -32,6 +32,11 @@ from interactly_configs.llm_group import LLMOrGroupConfig
 from interactly_configs.nodes import BaseNodeConfig
 from interactly_configs.prompt import PromptConfig
 from interactly_configs.tool import MCPServerConfig, ToolsConfig
+
+# A voice persona is a few sentences of identity, read by the voice on every turn it answers alone. The
+# server's generator asks for two to four sentences; this leaves room for a hand-written one without
+# letting a whole prompt be pasted where only an identity belongs.
+VOICE_PERSONA_MAX_LENGTH = 600
 
 
 class GlobalConditionEdgeEvaluationMethod(str, Enum):
@@ -116,6 +121,17 @@ class WorkflowConfig(BaseModel):
         description="Description of the workflow",
         title="Workflow Description",
     )
+    voice_persona: Optional[str] = Field(
+        default=None,
+        max_length=VOICE_PERSONA_MAX_LENGTH,
+        description=(
+            "Who is speaking on a GPT-Live voice call through this workflow, in two to four sentences "
+            "written as 'You are ...'. The voice half of a Live session answers most turns without "
+            "consulting any node's prompt, so this is how it knows who it is. Takes precedence over a "
+            "persona generated from the workflow's prompts and over the calling assistant's own."
+        ),
+        title="Voice Persona",
+    )
     category: Optional[str] = Field(
         default="User Created",
         description="Category of the workflow (e.g. 'User Created', 'System Examples', 'System Internal')",
@@ -126,7 +142,7 @@ class WorkflowConfig(BaseModel):
         description="ID of the named LLM Configuration to use. If provided, overrides inline configuration.",
     )
     llms_config: Optional[LLMOrGroupConfig] = Field(
-        default_factory=NoLLMConfig,
+        default=NoLLMConfig(),
         description=(
             "Global configuration for LLM based nodes. "
             "Used if no specific LLM configuration is provided for a node."
@@ -316,6 +332,29 @@ class WorkflowConfigFullyHydrated(BaseModel):
             "documents the rule; see BaseRunInput.secret_variables."
         ),
     )
+    generated_voice_persona: Optional[str] = Field(
+        default=None,
+        description=(
+            "A voice persona written from this version's own prompts when it was last saved, for a "
+            "workflow that has no hand-written voice_persona. Present only while the prompts it was "
+            "written from are unchanged, so a call never hears an identity from before an edit."
+        ),
+    )
+
+    def resolved_voice_persona(self) -> Tuple[Optional[str], Optional[str]]:
+        """Who the voice of a Live call through this workflow is, and where that came from.
+
+        The hand-written field wins over the generated one. Returns ``(None, None)`` when neither
+        exists, which leaves the choice to the server — it knows whether the calling assistant owns
+        this workflow, and so whether that assistant's own persona fits.
+        """
+        written = (self.workflow_config.voice_persona or "").strip() if self.workflow_config else ""
+        if written:
+            return written, "workflow"
+        generated = (self.generated_voice_persona or "").strip()
+        if generated:
+            return generated, "generated"
+        return None, None
 
     def is_keep_skipped_messages_enabled(self) -> bool:
         """Read the ``keep_skipped_messages_in_history`` miscellaneous flag; default False.
