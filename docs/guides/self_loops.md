@@ -70,7 +70,7 @@ construction rather than on the server or — worse — in production.
 
 | Field | Range | Meaning |
 |---|---|---|
-| `max_retries` | 0–100 | Re-executions **after** the first attempt. Total attempts = `max_retries + 1`. |
+| `max_retries` | ≥ 0, no upper bound | Re-executions **after** the first attempt. Total attempts = `max_retries + 1`. |
 | `expiry_time` | 1–3600 s | Wall-clock budget for the whole loop. |
 | `time_between_retries` | 0–300 s | Delay between the end of one execution and the start of the next. |
 

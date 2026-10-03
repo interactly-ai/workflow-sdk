@@ -172,6 +172,49 @@ print(f"Status: {run_group.status}")
 **Returns:**
 A `SimulationGroup` object with `id`, `status`, `simulation_id`, and metadata.
 
+## Generate a counter workflow
+
+A simulation pits your workflow against a **counter workflow**: a set of simulated callers. The server
+can write one for you from your workflow's own configuration:
+
+```python
+state = await client.workflows.generate_counter_workflow(
+    workflow_id,
+    num_cases=20,                 # 1-200 simulated callers
+    instructions="Include callers who refuse to give a date of birth.",
+    provider="gemini",            # or "claude"
+)
+print(state.status)               # "pending" — generation runs on the server
+```
+
+`generate_counter_workflow` **returns at once**. Generation runs in the background and makes several LLM
+calls, so poll for progress:
+
+```python
+import asyncio
+
+while True:
+    status = await client.workflows.counter_workflow(workflow_id)
+    generation = status.generation
+    print(generation.status, generation.num_cases_generated, "/", generation.num_cases_requested)
+    if generation.status in ("completed", "failed"):
+        break
+    await asyncio.sleep(5)
+
+if generation.status == "completed":
+    counter = status.counter_workflow
+    print(counter.workflow_id, counter.case_count)   # use as the simulation's counter workflow
+else:
+    print("failed:", generation.error)
+```
+
+`counter_workflow()` answers both questions in one call: is a generation running, and is there already
+a counter workflow to use rather than generating another. By default a regeneration is added to the
+existing counter workflow as a new version; pass `new_workflow=True` for a separate one.
+
+Two refusals to expect: a generation already running for the workflow is a `ConflictError`, and
+generating from a workflow that is itself a counter workflow is a `BadRequestError`.
+
 ## List simulation runs
 
 List all run groups (batches) for a specific simulation.
@@ -371,5 +414,7 @@ summary = client.simulations.evaluation_summary("simulation_id_123")
 - Deleting a simulation also deletes its run history. Use caution.
 - `list_detailed_executions()` returns a plain list (not paginated), sorted by run index.
 - Stopping a run group only prevents new executions from starting; already-running executions complete naturally.
+- `generate_counter_workflow()` returns before any case exists and spends LLM calls on the server; poll `counter_workflow()` rather than waiting on the call.
+- One generation per workflow at a time: a second start while one is running raises `ConflictError`.
 </content>
 </invoke>

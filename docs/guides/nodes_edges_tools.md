@@ -333,6 +333,7 @@ List all custom tool type identifiers.
 ```python
 tool_types = await client.tools.types()
 # Returns: ["inbuilt_function", "inline_python", "external_api", "knowledge_base"]
+# Interactly staff also see "codebase_function" — see "Codebase functions" below.
 ```
 
 ### Tool schema
@@ -403,7 +404,20 @@ tool = await client.tools.create(tool_config=tool_config)
 print(tool.id)
 ```
 
-Other members of the family include `InbuiltFunctionToolConfig`, `ExternalAPIToolConfig`, and `KnowledgeBaseToolConfig`.
+Other members of the family include `InbuiltFunctionToolConfig`, `ExternalAPIToolConfig`,
+`KnowledgeBaseToolConfig` and the staff-only `CodebaseFunctionToolConfig`.
+
+A write can come back with **advisory warnings**: things worth fixing that did not stop the save, such as
+a variable the tool needs that your team has not defined. They are on the returned object, and are empty
+on a plain read:
+
+```python
+tool = await client.tools.create(tool_config=tool_config)
+for warning in tool.warnings:
+    print("warning:", warning)
+```
+
+`Node`, `Workflow` and `WorkflowVersion` carry `warnings` the same way.
 
 **Dict form (also supported).** Without the `[configs]` extra, pass an equivalent dict:
 
@@ -464,6 +478,57 @@ updated_tool = await client.tools.update(
 )
 ```
 
+### Return a response as media
+
+An external-API tool can hand back the response body as media — a call recording, an image — instead of
+parsing it:
+
+```python
+from interactly.configs import ExternalAPIToolConfig
+
+recording = ExternalAPIToolConfig(
+    name="Fetch recording",
+    api_endpoint="https://example.com/recordings/{{call_id}}",
+    result_as_media=True,
+)
+```
+
+On a tool node, the bytes are held for the run and the result variable gets a `media://` handle. An LLM
+node whose prompt names that variable (for example `[[tool_result]]`) is sent the media with its request,
+so a model that takes audio or images can listen to or look at it. Because the result is a handle, there
+is nothing for `result_variable_mappings` or `expand_result_into_runtime_variables` to read, and setting
+either alongside `result_as_media` is rejected.
+
+### Clone a tool
+
+Duplicate a saved tool within your team:
+
+```python
+copy = await client.tools.clone(tool.id)                         # named "<source> (Clone)"
+renamed = await client.tools.clone(tool.id, name="Lookup v2")
+```
+
+Unlike export and import, a clone is verbatim, **secrets included**, because both copies live in the same
+team. A plain inbuilt tool cannot be cloned (`PermissionDeniedError`).
+
+### Test a tool
+
+Run a saved tool, or an unsaved config, with argument values:
+
+```python
+result = await client.tools.execute(tool.id, args={"member_id": "M123"})
+print(result.success, result.result, result.error)
+```
+
+**Inline Python is not executed by default.** Test execution of an `inline_python` config runs
+caller-authored code on the server, so environments refuse it unless they opt in. The call does not
+raise; it returns `success=False` with an explanatory `error`:
+
+```
+Inline Python tool execution is disabled in this environment. Use dry run to validate inputs, or enable
+ALLOW_INLINE_PYTHON_TOOL_TEST in a trusted environment.
+```
+
 ### Export & import a tool
 
 Move a tool between teams or environments:
@@ -488,6 +553,41 @@ Two things the server insists on, both worth knowing before the call fails:
 `clear_unresolved_refs` (default `True`) strips team-scoped references — knowledge-base ids and the
 like — that cannot resolve in the importing team, rather than importing a tool that silently points
 at another team's resources.
+
+Variable **values** never travel with a bundle, but their names do: `bundle["required_dynamic_variables"]`
+lists what the tool needs. An import into a team that has not defined one still succeeds, and says so in
+`warnings`:
+
+```python
+imported.warnings
+# ["This tool uses dynamic variable(s) this team has not defined: member_id. Add them as global
+#   variables (or supply them per run) or the tool will fail at call time with an unresolved-variable
+#   error."]
+```
+
+### Codebase functions (Interactly staff only)
+
+A `CodebaseFunctionToolConfig` calls a function that already exists in the platform's codebase, named by
+its `function_id`. Creating, updating, executing or listing one requires an Interactly super-admin; every
+other role gets `PermissionDeniedError`, and does not see the type in `tools.types()`. A customer can
+still **read** a workflow that uses one, so the config class is part of `interactly.configs`.
+
+```python
+catalogue = await client.tools.codebase_functions()
+for function in catalogue.codebase_functions:
+    print(function.id, function.side_effect, function.summary)
+
+detail = await client.tools.get_codebase_function("benefits.estimate_member_cost_share")
+detail.args_schema   # derived from the function's signature
+
+from interactly.configs import CodebaseFunctionToolConfig
+
+CodebaseFunctionToolConfig(name="Estimate cost", function_id="benefits.estimate_member_cost_share")
+```
+
+Note that `tool_id` means a **saved tool document** here, the opposite of `InbuiltFunctionToolConfig`,
+where `tool_id` names the function itself. An unknown id raises `NotFoundError`; its `body["reason"]`
+separates "no such function" from "its module could not be imported here".
 
 ### Delete a tool
 
@@ -569,6 +669,11 @@ Tools are attached to LLM nodes via the node's `tools_config`; there is no separ
   `[[result.value]]` where `result` holds a dict comes through as that literal text. Have tools
   return the field you need directly.
 - **Import refuses `inline_python` by default**: pass `confirm_executable=True` deliberately.
+- **Test execution of `inline_python` is off by default**: `execute_inline` returns `success=False` with
+  an explanatory error rather than raising.
+- **Read `warnings` after a write**: the server reports things like undefined variables there instead of
+  failing the save.
+- **`result_as_media` excludes result mappings**: the result is a `media://` handle with no fields to map.
 - **Typed configs need the extra**: The typed classes require `pip install interactly[configs]`. Without it, use the dict form shown in each section.
 
 ---

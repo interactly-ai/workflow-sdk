@@ -169,13 +169,60 @@ async with AsyncWorkflowClient() as client:
 
 ### Get dynamic variables for a workflow
 
-Returns variable placeholders used in the workflow (for template substitution).
+Returns the `{{variables}}` a caller must supply to run the workflow:
 
 ```python
 async with AsyncWorkflowClient() as client:
-    dyn_vars = await client.workflows.dynamic_variables(workflow_id="wf_123")
-    # Returns: {"var_name": {...spec...}, ...}
+    result = await client.workflows.dynamic_variables(workflow_id="wf_123")
+    result["dynamic_variables"]          # what a run must supply, e.g. {"member_id": "", "patient": {"id": ""}}
+    result["global_variables_resolved"]  # names your team's global variables already fill in
 ```
+
+Variables a team global already provides are listed under `global_variables_resolved` and **removed**
+from `dynamic_variables`, because the caller does not need to supply them. Only flat globals count: a
+global holds a string, so it cannot satisfy a nested reference like `{{patient.id}}`. Variables used by a
+tool attached by reference (its endpoint, headers or body live on the saved tool) are included.
+
+## Checking a workflow
+
+Two read-only questions you can ask about a stored workflow without running it. Both analyse the graph
+**after super-node expansion**, and fall back to the outer graph (saying so) if expansion fails.
+
+### Lints
+
+The advisory checks a fully-hydrated create runs, but graph-wide. That matters for a workflow built a
+node at a time: two of the checks can only be answered against the whole graph. Those two are a
+cross-thread reference to a companion that does not exist, and a waiting condition that could never fire.
+
+```python
+report = await client.workflows.lints("wf_123")              # the active version
+report = await client.workflows.lints("wf_123", version_number=2)
+for warning in report.warnings:
+    print(warning)
+```
+
+### Realtime compatibility
+
+Whether the workflow can run its voice calls on a realtime (speech-to-speech) model:
+
+```python
+report = await client.workflows.realtime_compatibility("wf_123", model="gpt-realtime")
+print(report.supported, report.summary)        # True  "Realtime-ready with 2 warning(s)."
+for finding in report.blockers + report.warnings + report.indeterminate:
+    print(finding.severity, finding.code, finding.description)
+```
+
+Pass the realtime `model` the call would use: the realtime protocols differ enough that a workflow can be
+ready on one model and not another. Without it, the findings describe what holds on either. A super node
+that could not be expanded is reported as `indeterminate` rather than assumed fine.
+
+### Voice persona
+
+For GPT-Live calls, `WorkflowConfig.voice_persona` says who is speaking, in two to four sentences
+written as "You are …" (at most 600 characters). The voice answers most turns without consulting any
+node's prompt, so this is how it knows who it is. Left empty, the server may generate one from the
+workflow's prompts when a version is saved; `WorkflowConfigFullyHydrated.resolved_voice_persona()` tells
+you which applies.
 
 ## Typed Config API
 
@@ -419,6 +466,8 @@ async with AsyncWorkflowClient() as client:
 - **Export format**: The bundle is a dict with keys `workflow_config`, `node_configs`, `edge_configs`, `versions`; do not modify it manually.
 - **Handles are single-flight**: Do not interleave `.arun()` calls on the same handle from different async contexts. Create a new handle for each concurrent session.
 - **NOT_GIVEN sentinel**: When updating, omit a field to leave it unchanged; pass `None` to explicitly set it to null.
+- **`dynamic_variables()` returns an envelope**: read `["dynamic_variables"]`; names a team global already fills are under `["global_variables_resolved"]` instead.
+- **Writes can carry `warnings`**: a created or imported workflow's `warnings` lists advisory lints that did not block the save. `lints()` runs the same checks on demand.
 
 ---
 
