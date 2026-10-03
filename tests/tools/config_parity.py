@@ -1,10 +1,11 @@
 """
 Source-parity harness: `interactly_configs` vs `agentic_workflow_framework/configs`.
 
-The vendored config package is a deliberate mirror of the server's config package (plan principle #2:
-"track upstream closely; duplication is fine"). Mirrors rot silently, so this compares the two trees
-structurally — classes, fields, field types, and enum values — and reports every difference that is not
-on the `KNOWN_DIVERGENCES` allow-list.
+The vendored config package is a deliberate mirror of the server's config package: it tracks upstream
+closely, and duplication is the accepted price of a client that installs without the monorepo. Mirrors
+rot silently, so this compares the two trees structurally — classes, fields, types, defaults,
+constraints, validators, enum values, enum capability data and discriminated-union membership — and
+reports every difference that is not on one of the `KNOWN_*` allow-lists below.
 
 Why AST rather than importing both packages: importing upstream would drag in `beanie`, `bson`,
 `pymongo` and `common.*`, which is exactly the dependency the SDK exists to avoid. Parsing keeps this
@@ -12,7 +13,7 @@ tool as self-contained as the package it guards.
 
 **Dev-only.** This is the one piece of the repo that knows where `interactly-ai` lives. It must stay
 under `tests/` and must never be imported by `interactly` or `interactly_configs`, or the
-self-containment guarantee (plan Phase 7) breaks.
+self-containment guarantee breaks (`tests/unit/test_self_contained.py` enforces it).
 
 Usage::
 
@@ -34,7 +35,7 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 # --------------------------------------------------------------------------------------------- #
 # Known, intentional divergences                                                                  #
@@ -68,6 +69,7 @@ TYPE_SUBSTITUTIONS: Dict[str, str] = {
 KNOWN_MODULE_MAPPING: Dict[str, str] = {
     "event.py": "events/event.py",
     "acls.py": "acls.py",
+    "gemini_models.py": "gemini_models.py",
 }
 
 #: Classes that legitimately exist on only one side, with the reason. Anything not listed is reported.
@@ -75,7 +77,7 @@ KNOWN_ONLY_UPSTREAM: Dict[str, str] = {
     # Server-runtime scaffolding, not wire contract: it holds a live WorkflowRuntime and pickled
     # checkpoint BYTES, neither of which a client can construct, send, or interpret. Vendoring it
     # would put an opaque `Optional[bytes]` blob in the public surface and imply the SDK can resume a
-    # runtime it has no way to run. Deliberately excluded (plan revision 4, risk 2).
+    # runtime it has no way to run, so it is deliberately excluded.
     "AgenticGraphHolder": "server-runtime scaffolding (live runtime + pickled checkpoint bytes)",
 }
 
@@ -95,13 +97,13 @@ KNOWN_ONLY_MIRROR: Dict[str, str] = {
 }
 
 #: Field-level divergences that are deliberate, as ``ClassName.field_name`` -> reason. Each one was
-#: adjudicated rather than assumed; see the Phase 2 notes in the update plan.
+#: adjudicated rather than assumed, and the reasoning is kept beside the entry.
 KNOWN_FIELD_DIVERGENCES: Dict[str, str] = {
     # Typing this as upstream's `List[NodeConfig]` makes the SDK REJECT any workflow containing a node
     # type it does not yet know -- verified empirically. For a client that necessarily lags the
-    # server, that is the normal case, and it is the exact failure this sync project exists to manage.
+    # server, that is the normal case, and it is the exact failure this harness exists to manage.
     #
-    # CORRECTION (Phase 3): the original note here claimed "SerializeAsAny keeps subclass fields on
+    # CORRECTION: an earlier note here claimed "SerializeAsAny keeps subclass fields on
     # the way out, so round-tripping is lossless either way". That was wrong. SerializeAsAny governs
     # SERIALIZATION, so it preserves subclass fields only for an object that already IS the subclass.
     # Validating a plain dict against the annotation coerced it straight to BaseNodeConfig and
@@ -121,19 +123,41 @@ KNOWN_FIELD_DIVERGENCES: Dict[str, str] = {
     "WorkflowTemplateConfig.access_list": "from the AccessControlLevelConfig stand-in",
 }
 
-#: Enum capability data that upstream declares inside an enum body via `enum.nonmember(...)`.
-#: `nonmember` is Python 3.11+, and this package supports 3.10, so the mirror hoists these to module
-#: scope in `llm.py` with the same names and values. Present, just not attached to the enum class.
-KNOWN_HOISTED_NONMEMBERS: Set[str] = {
-    "OPENAIModel.MODELS_WITHOUT_LOW_REASONING_EFFORT",
-    "OPENAIModel.LOW_REASONING_EFFORTS",
-    "OPENAIModel.MINIMUM_PRO_REASONING_EFFORT",
-    "ANTHROPICModel.ADAPTIVE_THINKING_MODELS",
-    "ANTHROPICModel.ALWAYS_THINKING_MODELS",
-    "ANTHROPICModel.DEFAULT_MAX_TOKENS",
-    "ANTHROPICModel.DEFAULT_ADAPTIVE_THINKING_MAX_TOKENS",
-    "GOOGLEModel.ALWAYS_THINKING_MODELS",
+#: Enum capability data that upstream declares inside an enum body via `enum.nonmember(...)`, mapped to
+#: the module-scope symbol that carries it in the mirror. `nonmember` is Python 3.11+, and this package
+#: supports 3.10, so the mirror hoists these out of the enum body. Where two enums declare the same
+#: attribute name, the hoisted symbol is qualified with the provider (`ALWAYS_THINKING_GOOGLE_MODELS`).
+#:
+#: A mapping rather than a set of names so the VALUES can be compared too. When this was a name-only
+#: set, an upstream model joining `GOOGLEModel.ALWAYS_THINKING_MODELS` left the hoisted copy stale with
+#: nothing reported — the entry suppressed the check for the attribute's existence and, by accident,
+#: for everything about its contents as well.
+KNOWN_HOISTED_NONMEMBERS: Dict[str, str] = {
+    "OPENAIModel.MODELS_WITHOUT_LOW_REASONING_EFFORT": "MODELS_WITHOUT_LOW_REASONING_EFFORT",
+    "OPENAIModel.LOW_REASONING_EFFORTS": "LOW_REASONING_EFFORTS",
+    "OPENAIModel.MINIMUM_PRO_REASONING_EFFORT": "MINIMUM_PRO_REASONING_EFFORT",
+    "ANTHROPICModel.ADAPTIVE_THINKING_MODELS": "ADAPTIVE_THINKING_MODELS",
+    "ANTHROPICModel.ALWAYS_THINKING_MODELS": "ALWAYS_THINKING_ANTHROPIC_MODELS",
+    "ANTHROPICModel.DEFAULT_MAX_TOKENS": "DEFAULT_MAX_TOKENS",
+    "ANTHROPICModel.DEFAULT_ADAPTIVE_THINKING_MAX_TOKENS": "DEFAULT_ADAPTIVE_THINKING_MAX_TOKENS",
+    "GOOGLEModel.ALWAYS_THINKING_MODELS": "ALWAYS_THINKING_GOOGLE_MODELS",
 }
+
+#: Classes that upstream's mirrored files import at module scope from a module this harness does NOT
+#: parse, as class name -> reason. Anything else imported that way is reported: a mirrored class whose
+#: field type lives outside `UPSTREAM_SOURCES` has a dependency the comparison cannot see, which is how
+#: `GeminiThinkingLevel` (in `common/configs/features/`) went unreported until that file was added below.
+KNOWN_UNMIRRORED_DEPENDENCIES: Dict[str, str] = {
+    # The Beanie document base of `WorkflowTemplateConfig`. Not vendorable; the mirror supplies its two
+    # fields through `AccessControlLevelConfig` instead (see KNOWN_ONLY_MIRROR).
+    "AccessControlLevelModel": "Beanie base class, replaced by the AccessControlLevelConfig stand-in",
+}
+
+#: Validators the mirror carries under a different method name, as `Class.upstream_name` ->
+#: `mirror_name`. A validator is compared by decorator, target, mode AND name: without the name, a second
+#: `model_validator(mode="after")` on a class that already has one is indistinguishable from the first,
+#: so dropping it from the mirror reports nothing. That happened twice before the name was included.
+KNOWN_VALIDATOR_RENAMES: Dict[str, str] = {}
 
 #: Class-name renames: mirror name -> upstream name. Reported as "reconciled" rather than as a gap.
 KNOWN_RENAMES: Dict[str, str] = {}
@@ -167,12 +191,14 @@ class ClassInfo:
     defaults: Dict[str, str] = field(default_factory=dict)
     #: field name -> {constraint kwarg: value}, e.g. {"ge": "0", "le": "100"}
     constraints: Dict[str, Dict[str, str]] = field(default_factory=dict)
-    #: validator signatures, e.g. "field_validator:content" / "model_validator:after"
+    #: validator signatures, e.g. "field_validator:content:_strip" / "model_validator:after:_check"
     validators: Set[str] = field(default_factory=set)
     #: enum member name -> literal value (only for Enum subclasses)
     enum_members: Dict[str, object] = field(default_factory=dict)
     #: names assigned via `nonmember(...)` — capability data, not selectable members
     nonmembers: Set[str] = field(default_factory=set)
+    #: nonmember name -> the expression inside `nonmember(...)`, evaluated at comparison time
+    nonmember_exprs: Dict[str, ast.expr] = field(default_factory=dict, repr=False, compare=False)
 
     @property
     def is_enum(self) -> bool:
@@ -240,6 +266,9 @@ def _extract_module(path: Path, module_name: str) -> Dict[str, ClassInfo]:
                         continue
                     if _is_nonmember_call(stmt.value):
                         info.nonmembers.add(target.id)
+                        call_args = stmt.value.args  # type: ignore[attr-defined]
+                        if call_args:
+                            info.nonmember_exprs[target.id] = call_args[0]
                         continue
                     try:
                         info.enum_members[target.id] = ast.literal_eval(stmt.value)
@@ -261,25 +290,21 @@ def _is_field_call(value: Optional[ast.expr]) -> Optional[ast.Call]:
 
 
 def _canonical_default(rendered: str) -> str:
-    """Collapse the ways of spelling the same default into one form.
+    """Normalise a default's spelling (whitespace, quote style) without merging distinct forms.
 
-    Pydantic v2 deep-copies a mutable default per instance, so `default=Thing()` and
-    `default_factory=Thing` produce identical behaviour — likewise `default={}` and
-    `default_factory=dict`. Reporting those as differences would bury the ones that actually change
-    what the server receives, like `BEDROCKModel.GLM_4_7_FLASH` vs `None`.
+    A literal default and a factory default are kept apart on purpose — `default=[]` and
+    `default_factory=list` stay different here. They behave identically at runtime, because Pydantic
+    v2 deep-copies a mutable default per instance, and this function used to treat them as one.
+    They do NOT publish identically: only the literal reaches the JSON Schema, and the dashboard and
+    any SDK user who seeds a form from that schema leave a field with no advertised default undefined
+    rather than empty. Upstream switched four fields from the factory to the literal for exactly that
+    reason, and the merge made all four invisible.
 
     Note this deliberately does NOT run `_normalise_type`: that applies house-style casing
     (`dict` -> `Dict`), which is right for annotations and wrong for values — it would turn the
     callable `dict` into the non-callable `Dict`.
     """
-    text = " ".join(rendered.split()).replace('"', "'")
-    equivalents = {"factory:dict": "{}", "factory:list": "[]", "factory:set": "set()", "factory:tuple": "()"}
-    if text in equivalents:
-        return equivalents[text]
-    # `factory:Thing` <-> `Thing()`
-    if text.startswith("factory:"):
-        return f"{text[len('factory:'):]}()"
-    return text
+    return " ".join(rendered.split()).replace('"', "'")
 
 
 def _extract_default(value: Optional[ast.expr]) -> str:
@@ -321,19 +346,19 @@ def _extract_constraints(value: Optional[ast.expr]) -> Dict[str, str]:
 def _extract_validators(node: ast.ClassDef) -> Set[str]:
     """Validator decorators on a class, as comparable signatures.
 
-    Compares *presence and target*, not body: a validator's logic is prose to an AST walk, but a
-    missing one is a concrete gap — `SelfLoopConfig`'s cross-field check and `CommentRequest`'s
+    Compares *presence, target and name*, not body: a validator's logic is prose to an AST walk, but
+    a missing one is a concrete gap — `SelfLoopConfig`'s cross-field check and `CommentRequest`'s
     blank-rejection are contract, and silently dropping either would let the mirror build a config
     the server refuses.
 
-    **Known blind spot, measured rather than reasoned about.** A signature is `"{decorator}:{mode}"`,
-    and `resolve_validators` merges inherited ones into a `Set` — so a *second* `model_validator(mode=
-    "after")` on a class that already inherits one adds no new member, and dropping it from the mirror
-    reports nothing. Verified on 2026-08-20 against `InbuiltFunctionToolConfig._check_bindings_are_
-    declared_arguments`: with the mirror's copy deleted, `validators-missing` stayed at 0 and the total
-    did not move. Anything finer needs the validator's *name* in the signature, which would then flag
-    every deliberate rename as a difference — so this is a trade, not an oversight. Until it changes, a
-    same-mode validator added upstream has to be mirrored by hand and checked by eye.
+    **Why the method name is part of the signature.** It used to be `"{decorator}:{mode}"` alone, and
+    `resolve_validators` merges inherited ones into a `Set` — so a *second* `model_validator(mode=
+    "after")` on a class that already had one added no new member, and dropping it from the mirror
+    reported nothing. That was measured, not guessed: with the mirror's copy of
+    `InbuiltFunctionToolConfig._check_bindings_are_declared_arguments` deleted, `validators-missing`
+    stayed at 0. It then let `ExternalAPIToolConfig._reject_result_readers_on_media` arrive upstream
+    unreported. The cost of the name is that a deliberate rename reads as a missing validator, which
+    is what `KNOWN_VALIDATOR_RENAMES` is for.
     """
     found: Set[str] = set()
     for stmt in node.body:
@@ -357,8 +382,13 @@ def _extract_validators(node: ast.ClassDef) -> Set[str]:
                     for kw in call.keywords
                     if kw.arg == "mode"
                 ]
-            found.add(f"{name}:{','.join(sorted(targets)) or '*'}")
+            found.add(f"{name}:{','.join(sorted(targets)) or '*'}:{stmt.name}")
     return found
+
+
+def validator_method_name(signature: str) -> str:
+    """The method name at the end of a validator signature."""
+    return signature.rsplit(":", 1)[-1]
 
 
 def _is_nonmember_call(value: ast.expr) -> bool:
@@ -450,6 +480,185 @@ def resolve_validators(name: str, index: Dict[str, ClassInfo]) -> Set[str]:
     return walk(name)
 
 
+def _module_files(roots: List[Path]) -> List[Path]:
+    files: List[Path] = []
+    for root in roots:
+        files.extend([root] if root.is_file() else sorted(root.rglob("*.py")))
+    return [path for path in files if "__pycache__" not in path.parts]
+
+
+def _parse(path: Path) -> Optional[ast.Module]:
+    try:
+        return ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError) as exc:  # pragma: no cover - defensive
+        print(f"  ! could not parse {path}: {exc}", file=sys.stderr)
+        return None
+
+
+def extract_module_constants(roots: List[Path]) -> Dict[str, ast.expr]:
+    """Module-scope `NAME = <expr>` assignments, as {name: expression}. First definition wins.
+
+    This is where the mirror keeps the enum capability data it hoists out of enum bodies.
+    """
+    constants: Dict[str, ast.expr] = {}
+    for path in _module_files(roots):
+        tree = _parse(path)
+        if tree is None:
+            continue
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Assign):
+                for target in stmt.targets:
+                    if isinstance(target, ast.Name):
+                        constants.setdefault(target.id, stmt.value)
+    return constants
+
+
+#: Rendered in place of a value the evaluator cannot reduce to literals. Never equal to a real value,
+#: so an unevaluable expression on either side is reported rather than silently passing.
+UNRESOLVED = "<unresolved: {}>"
+
+
+def evaluate_capability_value(expr: ast.expr, own_members: Dict[str, object], index: Dict[str, ClassInfo]) -> str:
+    """Reduce a capability-data expression to a canonical string for comparison.
+
+    Handles the shapes both sides actually use: literals, `frozenset({...})` / `set` / `tuple` / `list`
+    calls and displays, and references to enum members — bare (`GEMINI_3_6_FLASH`, inside the enum
+    body upstream) or qualified (`GOOGLEModel.GEMINI_3_6_FLASH`, at module scope in the mirror). Both
+    spellings resolve to the member's VALUE, so the two sides compare equal when they name the same
+    models. Collections render sorted, so declaration order is not a difference.
+    """
+
+    def value_of(node: ast.expr) -> object:
+        if isinstance(node, ast.Constant):
+            return node.value
+        if isinstance(node, ast.Name) and node.id in own_members:
+            return own_members[node.id]
+        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+            owner = index.get(node.value.id)
+            if owner is not None and node.attr in owner.enum_members:
+                return owner.enum_members[node.attr]
+        if isinstance(node, (ast.Set, ast.List, ast.Tuple)):
+            return frozenset(str(value_of(element)) for element in node.elts)
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in ("frozenset", "set", "tuple", "list")
+            and len(node.args) <= 1
+            and not node.keywords
+        ):
+            return value_of(node.args[0]) if node.args else frozenset()
+        raise ValueError(ast.unparse(node))
+
+    try:
+        value = value_of(expr)
+    except ValueError as exc:
+        return UNRESOLVED.format(exc)
+    if isinstance(value, frozenset):
+        return "{" + ", ".join(repr(item) for item in sorted(value)) + "}"
+    return repr(value)
+
+
+def _union_members(value: ast.expr) -> Optional[Set[str]]:
+    """Member names of a module-level union alias, or None when the expression is not a union.
+
+    Recognises `Union[A, B]`, PEP 604 `A | B`, and either wrapped in `Annotated[..., Field(...)]`. The
+    mirror spells its unions the PEP 604 way and upstream mostly does not, so both must reduce to the
+    same set. A single-member `Annotated[A, Field(discriminator=...)]` counts as a union too: upstream
+    declares one that way, ready to grow.
+    """
+    discriminated = False
+    if isinstance(value, ast.Subscript) and ast.unparse(value.value).endswith("Annotated"):
+        parts = value.slice.elts if isinstance(value.slice, ast.Tuple) else [value.slice]
+        discriminated = any("discriminator" in ast.unparse(part) for part in parts[1:])
+        value = parts[0]
+
+    members: Set[str] = set()
+    is_union = False
+
+    def visit(node: ast.expr) -> None:
+        nonlocal is_union
+        if isinstance(node, ast.Subscript) and ast.unparse(node.value) in ("Union", "typing.Union"):
+            is_union = True
+            for element in node.slice.elts if isinstance(node.slice, ast.Tuple) else [node.slice]:
+                visit(element)
+        elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+            is_union = True
+            visit(node.left)
+            visit(node.right)
+        elif isinstance(node, ast.Name):
+            members.add(node.id)
+        else:
+            members.add(_normalise_type(ast.unparse(node)))
+
+    visit(value)
+    return members if (is_union or discriminated) else None
+
+
+def extract_unions(roots: List[Path]) -> Dict[str, Set[str]]:
+    """Module-level union aliases (`ToolConfig`, `LLMConfigUnion`, `Event`, ...) as {name: member names}.
+
+    A class that exists on both sides but is missing from its discriminated union is unparseable on
+    the wire all the same — the union is what a payload is validated against. Class-level comparison
+    cannot see that, so membership is compared on its own.
+    """
+    unions: Dict[str, Set[str]] = {}
+    for path in _module_files(roots):
+        tree = _parse(path)
+        if tree is None:
+            continue
+        for stmt in tree.body:
+            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
+                members = _union_members(stmt.value)
+                if members is not None:
+                    unions.setdefault(stmt.targets[0].id, members)
+    return unions
+
+
+#: Top-level packages of the monorepo. An import from one of these is an internal dependency; anything
+#: else (`pydantic`, `beanie`, the standard library) is not this check's concern.
+INTERNAL_PACKAGES: Tuple[str, ...] = ("agentic_workflow_framework", "common", "workflow_service")
+
+
+def find_unmirrored_dependencies(
+    ai_root: Path, upstream_roots: List[Path], include_known: bool = False
+) -> List[Tuple[str, str, str]]:
+    """Classes that mirrored upstream files import, at module scope, from modules outside the sources.
+
+    Returns `(importing module, imported module, class name)` for each one not on
+    `KNOWN_UNMIRRORED_DEPENDENCIES` (or for every one, with `include_known`, which the allow-list's
+    staleness test uses). Only module-scope imports count: upstream defers some imports into function
+    bodies to break cycles, and those are runtime helpers, never field types. Only *classes* count too —
+    an imported logger or constant is not part of any config's shape.
+    """
+
+    def is_inside_sources(path: Path) -> bool:
+        return any(path == root or root in path.parents for root in upstream_roots)
+
+    found: List[Tuple[str, str, str]] = []
+    for path in _module_files(upstream_roots):
+        tree = _parse(path)
+        if tree is None:
+            continue
+        for stmt in tree.body:
+            if not (isinstance(stmt, ast.ImportFrom) and stmt.module and stmt.level == 0):
+                continue
+            if stmt.module.split(".")[0] not in INTERNAL_PACKAGES:
+                continue
+            module_path = ai_root / (stmt.module.replace(".", "/") + ".py")
+            if not module_path.exists():
+                module_path = ai_root / stmt.module.replace(".", "/") / "__init__.py"
+            if not module_path.exists() or is_inside_sources(module_path):
+                continue
+            imported_tree = _parse(module_path)
+            if imported_tree is None:
+                continue
+            defined_classes = {node.name for node in ast.walk(imported_tree) if isinstance(node, ast.ClassDef)}
+            for alias in stmt.names:
+                if alias.name in defined_classes and (include_known or alias.name not in KNOWN_UNMIRRORED_DEPENDENCIES):
+                    found.append((str(path.relative_to(ai_root)), stmt.module, alias.name))
+    return found
+
+
 # --------------------------------------------------------------------------------------------- #
 # Comparison                                                                                      #
 # --------------------------------------------------------------------------------------------- #
@@ -468,23 +677,41 @@ class ParityReport:
     missing_enum_values: List[Tuple[str, str]] = field(default_factory=list)  # (enum, value)
     extra_enum_values: List[Tuple[str, str]] = field(default_factory=list)
     missing_nonmembers: List[Tuple[str, str]] = field(default_factory=list)   # (enum, attr)
+    #: (enum, attr, upstream value, mirror value) for hoisted capability data whose contents differ
+    nonmember_value_mismatches: List[Tuple[str, str, str, str]] = field(default_factory=list)
+    missing_unions: List[str] = field(default_factory=list)                   # union alias names
+    extra_unions: List[str] = field(default_factory=list)
+    missing_union_members: List[Tuple[str, str]] = field(default_factory=list)  # (union, member)
+    extra_union_members: List[Tuple[str, str]] = field(default_factory=list)
+    #: (importing upstream module, imported module, class) — see find_unmirrored_dependencies
+    unmirrored_dependencies: List[Tuple[str, str, str]] = field(default_factory=list)
     placement: List[Tuple[str, str, str]] = field(default_factory=list)       # cls, up module, mirror
+
+    def counted_categories(self) -> List[Tuple[str, Sequence[object]]]:
+        """Every category that counts towards `total`, labelled, in report order."""
+        return [
+            ("classes missing", self.missing_classes),
+            ("classes extra", self.extra_classes),
+            ("fields missing", self.missing_fields),
+            ("fields extra", self.extra_fields),
+            ("type mismatches", self.type_mismatches),
+            ("default mismatches", self.default_mismatches),
+            ("constraint mismatches", self.constraint_mismatches),
+            ("validators missing", self.missing_validators),
+            ("enum values missing", self.missing_enum_values),
+            ("enum values extra", self.extra_enum_values),
+            ("nonmembers missing", self.missing_nonmembers),
+            ("nonmember value mismatches", self.nonmember_value_mismatches),
+            ("unions missing", self.missing_unions),
+            ("unions extra", self.extra_unions),
+            ("union members missing", self.missing_union_members),
+            ("union members extra", self.extra_union_members),
+            ("unmirrored dependencies", self.unmirrored_dependencies),
+        ]
 
     @property
     def total(self) -> int:
-        return (
-            len(self.missing_classes)
-            + len(self.extra_classes)
-            + len(self.missing_fields)
-            + len(self.extra_fields)
-            + len(self.type_mismatches)
-            + len(self.default_mismatches)
-            + len(self.constraint_mismatches)
-            + len(self.missing_validators)
-            + len(self.missing_enum_values)
-            + len(self.extra_enum_values)
-            + len(self.missing_nonmembers)
-        )
+        return sum(len(items) for _, items in self.counted_categories())
 
     @property
     def is_clean(self) -> bool:
@@ -497,7 +724,18 @@ def _render_rules(rules: Dict[str, str]) -> str:
     return ", ".join(f"{k}={v}" for k, v in sorted(rules.items())) or "(none)"
 
 
-def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> ParityReport:
+def compare(
+    upstream: Dict[str, ClassInfo],
+    mirror: Dict[str, ClassInfo],
+    mirror_constants: Dict[str, ast.expr],
+    upstream_unions: Dict[str, Set[str]],
+    mirror_unions: Dict[str, Set[str]],
+) -> ParityReport:
+    """Compare the two trees. Every input is required, so no comparison can be skipped by omission.
+
+    `mirror_constants` carries the mirror's hoisted enum capability data; the two union maps carry the
+    module-level discriminated unions. Use `build_report` to assemble all of them from disk.
+    """
     report = ParityReport()
 
     def ignored(class_name: str, field_name: str) -> bool:
@@ -558,8 +796,13 @@ def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> Par
                     (name, fname, _render_rules(up_rules), _render_rules(mir_rules))
                 )
 
-        for signature in sorted(resolve_validators(name, upstream) - resolve_validators(mirror_name, mirror)):
-            report.missing_validators.append((name, signature))
+        mirror_validators = resolve_validators(mirror_name, mirror)
+        for signature in sorted(resolve_validators(name, upstream)):
+            method = validator_method_name(signature)
+            renamed = KNOWN_VALIDATOR_RENAMES.get(f"{name}.{method}")
+            expected = signature if renamed is None else f"{signature[: -len(method)]}{renamed}"
+            if expected not in mirror_validators:
+                report.missing_validators.append((name, signature))
 
         if up_info.is_enum or mir_info.is_enum:
             up_values = {str(v) for v in up_info.enum_members.values()}
@@ -569,14 +812,40 @@ def compare(upstream: Dict[str, ClassInfo], mirror: Dict[str, ClassInfo]) -> Par
             for value in sorted(mir_values - up_values):
                 report.extra_enum_values.append((name, value))
             for attr in sorted(up_info.nonmembers - mir_info.nonmembers):
-                if f"{name}.{attr}" in KNOWN_HOISTED_NONMEMBERS:
-                    continue  # present at module scope in the mirror; see KNOWN_HOISTED_NONMEMBERS
-                report.missing_nonmembers.append((name, attr))
+                hoisted_as = KNOWN_HOISTED_NONMEMBERS.get(f"{name}.{attr}")
+                if hoisted_as is None:
+                    report.missing_nonmembers.append((name, attr))
+                    continue
+                # Hoisted: the attribute is accounted for, so compare what it holds.
+                up_expr = up_info.nonmember_exprs.get(attr)
+                up_value = (
+                    evaluate_capability_value(up_expr, up_info.enum_members, upstream)
+                    if up_expr is not None
+                    else UNRESOLVED.format("nonmember() with no argument")
+                )
+                mir_expr = mirror_constants.get(hoisted_as)
+                mir_value = (
+                    evaluate_capability_value(mir_expr, {}, mirror)
+                    if mir_expr is not None
+                    else f"<`{hoisted_as}` is not defined at module scope in the mirror>"
+                )
+                if up_value != mir_value:
+                    report.nonmember_value_mismatches.append((name, attr, up_value, mir_value))
 
     for name, mir_info in sorted(mirror.items()):
         upstream_name = KNOWN_RENAMES.get(name, name)
         if upstream_name not in upstream and name not in KNOWN_ONLY_MIRROR:
             report.extra_classes.append((name, mir_info.module))
+
+    for union_name in sorted(set(upstream_unions) - set(mirror_unions)):
+        report.missing_unions.append(union_name)
+    for union_name in sorted(set(mirror_unions) - set(upstream_unions)):
+        report.extra_unions.append(union_name)
+    for union_name in sorted(set(upstream_unions) & set(mirror_unions)):
+        up_members = set(upstream_unions[union_name])
+        mir_members = {KNOWN_RENAMES.get(m, m) for m in mirror_unions[union_name]}  # mirror -> upstream
+        report.missing_union_members.extend((union_name, m) for m in sorted(up_members - mir_members))
+        report.extra_union_members.extend((union_name, m) for m in sorted(mir_members - up_members))
 
     return report
 
@@ -593,6 +862,10 @@ UPSTREAM_SOURCES: Tuple[str, ...] = (
     "agentic_workflow_framework/configs",           # -> interactly_configs/*
     "agentic_workflow_framework/runtime/event.py",  # -> interactly_configs/events/event.py
     "common/models/acls.py",                        # -> interactly_configs/acls.py
+    # Only `GeminiThinkingLevel` is vendored from here: `GoogleLLMConfig.thinking_level` is typed with
+    # it. The rest of the file is server-side tuning tables (per-model budgets and level lists) that
+    # carry no config shape; they are module-level data, which this harness does not compare.
+    "common/configs/features/gemini_models.py",     # -> interactly_configs/gemini_models.py
 )
 
 
@@ -618,6 +891,21 @@ def upstream_paths(root: Path) -> List[Path]:
 def find_mirror_configs() -> Path:
     """`configs/src/interactly_configs`, relative to this file."""
     return Path(__file__).resolve().parents[2] / "configs" / "src" / "interactly_configs"
+
+
+def build_report(ai_root: Path, mirror_root: Optional[Path] = None) -> ParityReport:
+    """Assemble every input from disk and run the full comparison, dependency check included."""
+    upstream_roots = upstream_paths(ai_root)
+    mirror_roots = [mirror_root or find_mirror_configs()]
+    report = compare(
+        extract_tree(upstream_roots),
+        extract_tree(mirror_roots),
+        mirror_constants=extract_module_constants(mirror_roots),
+        upstream_unions=extract_unions(upstream_roots),
+        mirror_unions=extract_unions(mirror_roots),
+    )
+    report.unmirrored_dependencies = find_unmirrored_dependencies(ai_root, upstream_roots)
+    return report
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -711,6 +999,42 @@ def render_markdown(report: ParityReport, upstream_roots: List[Path], mirror_roo
         "|---|---|",
     )
     section(
+        "Hoisted enum capability data whose contents differ",
+        [f"| `{e}.{a}` | `{u}` | `{m}` |" for e, a, u, m in report.nonmember_value_mismatches],
+        "| Upstream attribute | Upstream value | Mirror value |",
+        "|---|---|---|",
+    )
+    section(
+        "Union aliases missing from the mirror",
+        [f"| `{u}` |" for u in report.missing_unions],
+        "| Union |",
+        "|---|",
+    )
+    section(
+        "Union aliases only in the mirror",
+        [f"| `{u}` |" for u in report.extra_unions],
+        "| Union |",
+        "|---|",
+    )
+    section(
+        "Union members missing from the mirror (payloads of these types fail to parse)",
+        [f"| `{u}` | `{m}` |" for u, m in report.missing_union_members],
+        "| Union | Member |",
+        "|---|---|",
+    )
+    section(
+        "Union members only in the mirror",
+        [f"| `{u}` | `{m}` |" for u, m in report.extra_union_members],
+        "| Union | Member |",
+        "|---|---|",
+    )
+    section(
+        "Classes imported from modules this harness does not parse",
+        [f"| `{c}` | `{mod}` | `{imp}` |" for imp, mod, c in report.unmirrored_dependencies],
+        "| Class | Defined in | Imported by |",
+        "|---|---|---|",
+    )
+    section(
         "Module placement differences (informational)",
         [f"| `{c}` | `{u}` | `{m}` |" for c, u, m in report.placement],
         "| Class | Upstream module | Mirror module |",
@@ -734,7 +1058,7 @@ def main() -> int:
 
     upstream_roots = upstream_paths(ai_root)
     mirror_root = find_mirror_configs()
-    report = compare(extract_tree(upstream_roots), extract_tree([mirror_root]))
+    report = build_report(ai_root, mirror_root)
     markdown = render_markdown(report, upstream_roots, mirror_root)
 
     if args.output:
@@ -750,7 +1074,11 @@ def main() -> int:
         f"constraint-mismatch={len(report.constraint_mismatches)} "
         f"validators-missing={len(report.missing_validators)} | "
         f"enum missing={len(report.missing_enum_values)} extra={len(report.extra_enum_values)} "
-        f"nonmember-missing={len(report.missing_nonmembers)} | "
+        f"nonmember-missing={len(report.missing_nonmembers)} "
+        f"nonmember-value={len(report.nonmember_value_mismatches)} | "
+        f"unions missing={len(report.missing_unions)} extra={len(report.extra_unions)} "
+        f"members missing={len(report.missing_union_members)} extra={len(report.extra_union_members)} | "
+        f"unmirrored-deps={len(report.unmirrored_dependencies)} | "
         f"placement={len(report.placement)}"
     )
     print(f"TOTAL DIFFERENCES: {report.total}")

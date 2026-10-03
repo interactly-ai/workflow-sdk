@@ -73,3 +73,24 @@ class TestLiveSchemaSync:
         assert len(report.compared) > 10, (
             f"only {len(report.compared)} schema(s) compared — the harness is not reaching the server"
         )
+
+    def test_nested_models_were_compared(self, report):
+        """Root-only comparison is how four LLM configs stayed invisible; prove the `$defs` walk ran."""
+        assert len(report.nested_compared) > 30, (
+            f"only {len(report.nested_compared)} nested model(s) compared — the `$defs` walk is not running"
+        )
+        assert "GoogleLLMConfig" in report.nested_compared, (
+            "GoogleLLMConfig is embedded in every LLM node schema and was not compared"
+        )
+
+    def test_every_allow_list_entry_suppressed_something(self, report):
+        """An allow-list entry whose reason has expired keeps the count low for nothing.
+
+        Checked here rather than offline because both lists describe what the *server* publishes.
+        """
+        import schema_sync
+
+        expected = {f"KNOWN_SERIALIZER_DROPPED_DEFAULTS:{name}" for name in schema_sync.KNOWN_SERIALIZER_DROPPED_DEFAULTS}
+        expected |= {f"KNOWN_SERVER_ONLY_DEFS:{name}" for name in schema_sync.KNOWN_SERVER_ONLY_DEFS}
+        unused = sorted(expected - report.allowances_used)
+        assert not unused, f"allow-list entries that suppressed nothing against this server: {unused}"

@@ -18,8 +18,6 @@ and be rejected by `POST /workflows` with a 422. The server is the authority.
 """
 
 import pytest
-from pydantic import ValidationError
-
 from interactly_configs.tool import (
     InbuiltFunctionToolConfig,
     ToolVariableArgument,
@@ -27,6 +25,7 @@ from interactly_configs.tool import (
     declared_arguments_for,
     register_inbuilt_arguments,
 )
+from pydantic import ValidationError
 
 SMS_TOOL_ID = "communication_send_sms_3f5b2c1e-4d3a-4e2b-9f7a-2c6e8f4b9a1d"
 

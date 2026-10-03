@@ -1,8 +1,8 @@
 """The drift harnesses, promoted from "a make target someone remembers to run" to real tests.
 
 This is the durable fix for the problem that started this whole effort: **the SDK drifted from the
-workflow service for three weeks and nobody noticed.** Three tools were built in Phase 1 to detect
-that, and they worked — but only when invoked by hand. A guard nobody runs is not a guard.
+workflow service for three weeks and nobody noticed.** Three tools were built to detect that, and they
+worked — but only when invoked by hand. A guard nobody runs is not a guard.
 
 Each test degrades to a skip rather than a failure when its input is unavailable, so the suite stays
 green offline, in CI without the monorepo, and without credentials:
@@ -48,19 +48,25 @@ class TestConfigParity:
         if root is None:
             pytest.skip("interactly-ai checkout not found (set INTERACTLY_AI_ROOT to point at it)")
 
-        upstream_roots = cp.upstream_paths(root)
-        if not upstream_roots:
+        if not cp.upstream_paths(root):
             pytest.skip(f"no upstream config sources under {root}")
+        return cp.build_report(root)
 
-        upstream = cp.extract_tree(upstream_roots)
-        mirror = cp.extract_tree([cp.find_mirror_configs()])
-        return cp.compare(upstream, mirror)
-
-    #: Differences that are known, attributed, and owned by the teams that introduced them:
+    #: Differences that are known and attributed, measured against upstream ``main`` at 07a14e7da
+    #: (2026-10-02). Read the markdown report for the per-item list; by owner:
     #:
-    #:   * 5 — ``NodeRealtimeOverrides`` and its four ``realtime_overrides`` fields (upstream 2026-08-09)
-    #:   * 8 — the copilot proposal models, two ``WorkflowCopilotInput`` fields and two enum members
-    #:         (upstream 2026-08-17)
+    #:   * 13 — the pre-existing debt: ``NodeRealtimeOverrides`` and four ``realtime_overrides`` fields
+    #:          (upstream 2026-08-09); the copilot proposal models, two ``WorkflowCopilotInput`` fields
+    #:          and two enum members (upstream 2026-08-17)
+    #:   * 45 — upstream changes between 2026-08-22 and 2026-10-02 that the mirror has not followed: the
+    #:          LLM catalogue (four Vertex providers, two backends, new and retired models, capability
+    #:          sets), the codebase-function tool type, ``result_as_media``, ``stop_with_main_thread``,
+    #:          ``voice_persona``, the copilot ``finish`` command, and ``SelfLoopConfig``'s lifted cap
+    #:   * 29 — gaps the hardened harness surfaced on its first run, all real: 20 literal-vs-factory
+    #:          defaults (12 of them the four upstream ``default=[]`` fields counted per subclass, plus
+    #:          ``api_headers``, ``llm_usage_info`` on seven events and ``WorkflowConfig.llms_config``),
+    #:          six discriminated-union members, ``ExternalAPIToolConfig``'s media validator, stale
+    #:          contents in ``ALWAYS_THINKING_GOOGLE_MODELS``, and ``GeminiThinkingLevel``
     #:
     #: Held as a **ratchet rather than an ignore**: the guard fails if the total moves in either
     #: direction. Up means new drift. Down means somebody closed a gap and left this number stale, which
@@ -71,7 +77,7 @@ class TestConfigParity:
     #: intentional would be a lie that never expires. Why not simply leave the guard red: it was red at
     #: 40 for weeks, and a red guard cannot tell you that a 41st difference just appeared. That is the
     #: failure this file was created to fix.
-    KNOWN_UPSTREAM_DEBT = 13
+    KNOWN_UPSTREAM_DEBT = 87
 
     def test_no_new_drift_against_upstream(self):
         report = self._report()
@@ -86,20 +92,7 @@ class TestConfigParity:
             # for that, and a 100-line assertion message helps nobody.
             summary = "\n".join(
                 f"  {label}: {len(items)}"
-                for label, items in (
-                    ("classes missing", report.missing_classes),
-                    ("classes extra", report.extra_classes),
-                    ("fields missing", report.missing_fields),
-                    ("fields extra", report.extra_fields),
-                    ("type mismatches", report.type_mismatches),
-                    ("default mismatches", report.default_mismatches),
-                    ("constraint mismatches", report.constraint_mismatches),
-                    ("validators missing", report.missing_validators),
-                    ("enum values missing", report.missing_enum_values),
-                    ("enum values extra", report.extra_enum_values),
-                    ("nonmembers missing", report.missing_nonmembers),
-                    ("placement", report.placement),
-                )
+                for label, items in [*report.counted_categories(), ("placement", report.placement)]
                 if items
             )
             pytest.fail(
@@ -111,8 +104,8 @@ class TestConfigParity:
     def test_the_harness_actually_compared_something(self):
         """A harness that silently finds nothing to compare reports zero differences too.
 
-        Phase 0 found three of four quality gates in exactly that state — passing because they were
-        checking nothing. This asserts the comparison had real input.
+        Three of four quality gates were once found in exactly that state — passing because they were
+        checking nothing. This asserts each comparison had real input.
         """
         import config_parity as cp
 
@@ -120,11 +113,29 @@ class TestConfigParity:
         if root is None:
             pytest.skip("interactly-ai checkout not found")
 
-        upstream = cp.extract_tree(cp.upstream_paths(root))
-        mirror = cp.extract_tree([cp.find_mirror_configs()])
+        upstream_roots = cp.upstream_paths(root)
+        mirror_roots = [cp.find_mirror_configs()]
+        upstream = cp.extract_tree(upstream_roots)
+        mirror = cp.extract_tree(mirror_roots)
 
         assert len(upstream) > 50, f"only {len(upstream)} upstream classes parsed — harness is broken"
         assert len(mirror) > 50, f"only {len(mirror)} mirror classes parsed — harness is broken"
+        assert len(upstream_roots) == len(cp.UPSTREAM_SOURCES), (
+            f"only {len(upstream_roots)} of {len(cp.UPSTREAM_SOURCES)} upstream sources exist — a moved "
+            "file would silently drop out of the comparison"
+        )
+
+        upstream_unions = cp.extract_unions(upstream_roots)
+        mirror_unions = cp.extract_unions(mirror_roots)
+        for name in ("LLMConfigUnion", "ToolConfig", "NodeConfig", "EdgeConfig", "Event"):
+            assert name in upstream_unions, f"union `{name}` not found upstream — union extraction is broken"
+            assert name in mirror_unions, f"union `{name}` not found in the mirror — union extraction is broken"
+
+        nonmember_exprs = sum(len(info.nonmember_exprs) for info in upstream.values())
+        assert nonmember_exprs >= len(cp.KNOWN_HOISTED_NONMEMBERS), (
+            "fewer upstream nonmember expressions captured than hoisted entries — value comparison is "
+            "checking nothing"
+        )
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -253,9 +264,53 @@ class TestAllowListsAreStillEarningTheirPlace:
                 f"KNOWN_HOISTED_NONMEMBERS['{key}'] is no longer declared upstream — drop the entry"
             )
 
+    def test_hoisted_nonmembers_point_at_a_real_mirror_symbol(self):
+        """The mapping's value is what the contents are compared against, so it has to exist.
+
+        A typo here would read as "contents differ" rather than "no such symbol", which sends the reader
+        looking at the wrong thing.
+        """
+        cp, _, _ = self._trees()
+        constants = cp.extract_module_constants([cp.find_mirror_configs()])
+        for key, symbol in sorted(cp.KNOWN_HOISTED_NONMEMBERS.items()):
+            assert symbol in constants, (
+                f"KNOWN_HOISTED_NONMEMBERS['{key}'] points at `{symbol}`, which the mirror does not define "
+                "at module scope"
+            )
+
+    def test_unmirrored_dependencies_are_still_imported(self):
+        cp, _, _ = self._trees()
+        root = cp.find_interactly_ai_root()
+        imported = {name for _, _, name in cp.find_unmirrored_dependencies(root, cp.upstream_paths(root), True)}
+        for name in cp.KNOWN_UNMIRRORED_DEPENDENCIES:
+            assert name in imported, (
+                f"KNOWN_UNMIRRORED_DEPENDENCIES['{name}'] is no longer imported from outside the parsed "
+                "sources — drop the entry"
+            )
+
+    def test_validator_renames_still_describe_a_rename(self):
+        """Each rename must name a validator upstream still has, and one the mirror carries renamed."""
+        cp, upstream, mirror = self._trees()
+        for key, mirror_method in cp.KNOWN_VALIDATOR_RENAMES.items():
+            class_name, upstream_method = key.rsplit(".", 1)
+            upstream_methods = {cp.validator_method_name(s) for s in cp.resolve_validators(class_name, upstream)}
+            mirror_methods = {cp.validator_method_name(s) for s in cp.resolve_validators(class_name, mirror)}
+            assert upstream_method in upstream_methods, (
+                f"KNOWN_VALIDATOR_RENAMES['{key}']: upstream no longer has `{upstream_method}` — drop the entry"
+            )
+            assert mirror_method in mirror_methods, (
+                f"KNOWN_VALIDATOR_RENAMES['{key}']: the mirror has no `{mirror_method}` — drop or fix the entry"
+            )
+            assert upstream_method != mirror_method, f"KNOWN_VALIDATOR_RENAMES['{key}'] renames to itself"
+
     def test_every_entry_carries_a_reason(self):
         """A bare entry is indistinguishable from one added to make a failure go away."""
         cp, _, _ = self._trees()
-        for mapping_name in ("KNOWN_ONLY_UPSTREAM", "KNOWN_ONLY_MIRROR", "KNOWN_FIELD_DIVERGENCES"):
+        for mapping_name in (
+            "KNOWN_ONLY_UPSTREAM",
+            "KNOWN_ONLY_MIRROR",
+            "KNOWN_FIELD_DIVERGENCES",
+            "KNOWN_UNMIRRORED_DEPENDENCIES",
+        ):
             for name, reason in getattr(cp, mapping_name).items():
                 assert reason and reason.strip(), f"{mapping_name}['{name}'] has no stated reason"
