@@ -463,7 +463,7 @@ async with AsyncWorkflowClient() as client:
 
 - **Cascading delete**: Deleting a workflow deletes all its versions and associated runs.
 - **Active version required**: A workflow must always have an active version. You cannot delete the only remaining version.
-- **Export format**: The bundle is a dict with keys `workflow_config`, `node_configs`, `edge_configs`, `versions`; do not modify it manually.
+- **Export format**: The bundle (`export_format` `"v2"`) is a dict with `versions`, `active_version_number`, `source_workflow_id`, `source_workflow_name`, `exported_at` and `warnings`. Each entry in `versions` holds a `version_number`, a `version_name` and a fully-hydrated `workflow_config` (with its own `node_configs` and `edge_configs`). Treat it as opaque and do not modify it by hand; read `warnings` for anything the export stripped or could not resolve.
 - **Handles are single-flight**: Do not interleave `.arun()` calls on the same handle from different async contexts. Create a new handle for each concurrent session.
 - **NOT_GIVEN sentinel**: When updating, omit a field to leave it unchanged; pass `None` to explicitly set it to null.
 - **`dynamic_variables()` returns an envelope**: read `["dynamic_variables"]`; names a team global already fills are under `["global_variables_resolved"]` instead.

@@ -9,7 +9,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
-Nothing yet.
+### Docs
+- **Three examples in the running-workflows guide never delivered the user's message.**
+  - "Typed Execution" used thread key `"thread_0"` and a plain dict for the node input. That constructs
+    without error but is dropped, so the run started with no message. The key is `"0"`, and the entry a
+    `NodesRunInputs` of `LLMNodeRunInput`s.
+  - "Run the handle" and "Pattern 3" used `command="continue"`, which is not a `WorkflowCommand` and
+    fails validation. They also passed the caller's text as a dynamic variable rather than as a message.
+  - All three now send `{"type": "human", "content": ...}` messages on thread `"0"`, with `START` then
+    `DATA`. Shown working live, with no `langchain_core` needed.
+- **The export-bundle gotcha** listed keys the bundle does not have. It now describes the real `v2`
+  bundle: `versions` entries each holding a fully-hydrated `workflow_config`, plus `warnings`.
+- **Checked, and correct as written:** rerun `message_appends` take role `"user"` / `"assistant"`.
+
+### Notebooks
+- **`10_llm_configs` no longer leaves the team without a default LLM config.** It creates its demo config
+  with `override_default=True`, which takes the default flag from the config that held it, and then
+  deletes the demo config. It now records the team's default first and restores it in Cleanup.
 
 ---
 
