@@ -153,6 +153,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
     offer. A live call showed that it substitutes the nearest level instead.
 - `gpt-4` examples in the LLM-configs guide now use `gpt-5.4-mini`; OpenAI shuts `gpt-4` down on 2026-10-23.
 
+### Notebooks and examples
+- **`10_llm_configs`**:
+  - Adds the Vertex-served providers and backends, each exercised with one real `test_inline` call:
+    Grok, Claude on Vertex, and Gemini 3.8 with a thinking level.
+  - Notes `preserve_api_key`.
+  - Corrects the saved-config reference. It used `named_llm_config_id`, which references nothing; its run
+    only succeeded because a default `OpenAILLMConfig` works on team credentials. It now uses
+    `attachable_llm_config_id`, and reads the workflow back to show the server resolving it before the
+    run.
+- **`04_tools_and_inbuilt`**:
+  - Its execution cells passed while executing nothing: inline-Python test execution is off by default,
+    so both calls returned `success=False`. Execution is now shown with an inbuilt function, which runs
+    everywhere, and the inline-Python calls report plainly when an environment refuses them.
+  - Adds `tools.clone`, variables travelling by name (`required_dynamic_variables` and the import
+    `warnings`), and `result_as_media`.
+- **`19_companion_threads`** and **example 24**: how long a companion runs, and why the lab poller leaves
+  `stop_with_main_thread` at its default.
+
 ### Removed
 - **`OPENAIModel.GPT_5_2_CHAT_LATEST`, `GPT_5_3_CHAT_LATEST`** and
   **`ANTHROPICModel.CLAUDE_OPUS_4_1_20250805`.** Removed server-side; each returns 404 on every call.
@@ -189,6 +207,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   structural difference from upstream source, and `make schema-check` reports no finding against dev.
 
 ### Fixed
+- **`tools.update()` with a typed config overwrote fields it was not asked to change.** It sent the whole
+  config, every unset field included as its default. The server merges a tool update onto the stored
+  config, so an update setting only `description` or `code` wiped the tool's `name`, `signature` and
+  `args_schema`, and replaced its `logical_id` with a freshly minted one, silently changing its identity.
+  It now sends only the fields set on the config, as `nodes.update()` always has; a dict is still sent as
+  given. Found by reading notebook 04's output, where a clone came back named `"tool (Clone)"`.
 - **A workflow using a new provider or model lost its node types.** A node on Grok, Gemma, GLM,
   DeepSeek, or Gemini 3.7/3.8 hydrated as `UnknownNodeConfig`, with every typed field gone, and
   validating such an `LLMConfig` on its own raised. An `AnthropicLLMConfig` with `backend="vertex"`

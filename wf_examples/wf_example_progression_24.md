@@ -97,6 +97,15 @@ condition here impossible to write. The main thread is always `thread_0`.
 [[thread_0.customer_name]]        # the companion reading the main thread
 ```
 
+### The poller stops when the conversation does
+
+`CompanionThreadConfig.stop_with_main_thread` defaults to `True`: once every main thread has ended, the
+companion is stopped rather than running out its self-loop budget. This example leaves it at the default
+on purpose — a lab result that lands after the goodbye has no one left to hear it. A companion doing work
+that must finish regardless, such as writing the outcome back to the EHR, would set it to `False` (and
+still needs a bound). The behaviour is the server's, from `interactly-ai@310a9a8ec`; an older server
+ignores the field. See the [companion threads guide](../docs/guides/companion_threads.md#how-long-a-companion-runs).
+
 ### Keep tool results flat if you want to read them back
 
 The poll tool returns a **plain integer**, not a dict. That is deliberate: dotted access into a

@@ -110,7 +110,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, tool_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Tool]'` | List tools. |
 | `schema` | `(tool_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific tool type. |
 | `types` | `() -> 'List[str]'` | Retrieve all available tool type identifiers. |
-| `update` | `(tool_id: 'str', *, tool_config: 'NotGivenOr[Optional[ToolConfigOrDict]]' = NOT_GIVEN) -> 'Tool'` | Update a tool's config. |
+| `update` | `(tool_id: 'str', *, tool_config: 'NotGivenOr[Optional[ToolConfigOrDict]]' = NOT_GIVEN) -> 'Tool'` | Update a tool's config: only the fields you set are sent. |
 
 ## Runs
 

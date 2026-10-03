@@ -164,7 +164,10 @@ class ToolsResource(SyncAPIResource):
         tool_config: NotGivenOr[Optional[ToolConfigOrDict]] = NOT_GIVEN,
     ) -> Tool:
         """
-        Update a tool's config.
+        Update a tool's config: only the fields you set are sent.
+
+        The server merges the request onto the stored config, so a field left out keeps its stored value.
+        A typed config sends only the fields you set when constructing it; a dict is sent as given.
 
         Args:
             tool_id:     ObjectId of the tool.
@@ -177,7 +180,11 @@ class ToolsResource(SyncAPIResource):
 
         body: Dict[str, Any] = {}
         if is_given(tool_config) and tool_config is not None:
-            body = serialise_config(tool_config)
+            # Only the fields the caller set. A full dump would send every unset field as its default —
+            # null name, null signature, null args_schema — and the server's merge would write them over
+            # the stored ones; it would also send a freshly minted `logical_id`, quietly giving the tool a
+            # new identity. Same reasoning as `nodes.update`.
+            body = serialise_config(tool_config, exclude_unset=True)
         return self._client.patch(f"{_PATH}/{tool_id}", body=body, cast_to=Tool)
 
     def export(self, tool_id: str) -> Dict[str, Any]:
@@ -366,12 +373,12 @@ class AsyncToolsResource(AsyncAPIResource):
         *,
         tool_config: NotGivenOr[Optional[ToolConfigOrDict]] = NOT_GIVEN,
     ) -> Tool:
-        """Update a tool's config."""
+        """Update a tool's config: only the fields you set are sent. See the sync counterpart."""
         from interactly._types import is_given
 
         body: Dict[str, Any] = {}
         if is_given(tool_config) and tool_config is not None:
-            body = serialise_config(tool_config)
+            body = serialise_config(tool_config, exclude_unset=True)  # see the sync method
         return await self._client.patch(f"{_PATH}/{tool_id}", body=body, cast_to=Tool)
 
     async def export(self, tool_id: str) -> Dict[str, Any]:

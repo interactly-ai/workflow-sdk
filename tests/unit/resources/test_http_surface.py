@@ -243,6 +243,63 @@ class TestToolResponsesCarryWarnings:
             client.tools.update("t1", tool_config={"type": "codebase_function", "function_id": "f"})
 
 
+class TestToolUpdateSendsOnlyWhatWasSet:
+    """The server merges a tool PATCH onto the stored config, so every key sent overwrites."""
+
+    @respx.mock
+    def test_a_typed_config_sends_only_its_set_fields(self, client):
+        from interactly.configs import InlinePythonToolConfig
+
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/tools/t1").mock(side_effect=_recorder(calls, {"tool": _TOOL_DOC}))
+
+        client.tools.update("t1", tool_config=InlinePythonToolConfig(description="New", code="def f(): ..."))
+
+        assert calls[0]["body"] == {"description": "New", "code": "def f(): ..."}
+
+    @respx.mock
+    def test_the_tool_identity_and_unset_fields_are_never_sent(self, client):
+        from interactly.configs import InlinePythonToolConfig
+
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/tools/t1").mock(side_effect=_recorder(calls, {"tool": _TOOL_DOC}))
+
+        client.tools.update("t1", tool_config=InlinePythonToolConfig(code="def f(): ..."))
+
+        assert not {"logical_id", "name", "signature", "args_schema"} & calls[0]["body"].keys()
+
+    @respx.mock
+    def test_an_explicit_none_is_sent(self, client):
+        from interactly.configs import InlinePythonToolConfig
+
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/tools/t1").mock(side_effect=_recorder(calls, {"tool": _TOOL_DOC}))
+
+        client.tools.update("t1", tool_config=InlinePythonToolConfig(description=None))
+
+        assert calls[0]["body"] == {"description": None}
+
+    @respx.mock
+    def test_a_dict_is_sent_as_given(self, client):
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/tools/t1").mock(side_effect=_recorder(calls, {"tool": _TOOL_DOC}))
+
+        client.tools.update("t1", tool_config={"type": "inline_python", "name": None})
+
+        assert calls[0]["body"] == {"type": "inline_python", "name": None}
+
+    @respx.mock
+    async def test_async(self, aclient):
+        from interactly.configs import InlinePythonToolConfig
+
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/tools/t1").mock(side_effect=_recorder(calls, {"tool": _TOOL_DOC}))
+
+        await aclient.tools.update("t1", tool_config=InlinePythonToolConfig(code="def f(): ..."))
+
+        assert calls[0]["body"] == {"code": "def f(): ..."}
+
+
 # --------------------------------------------------------------------------------------------- #
 # Nodes and workflows: warnings                                                                   #
 # --------------------------------------------------------------------------------------------- #
