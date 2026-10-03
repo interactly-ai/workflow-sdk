@@ -12,7 +12,13 @@ dashboard renders its forms from), so the comparison is exact rather than inferr
 **What is deliberately ignored.** The mirror strips every dashboard-only annotation — the field
 visibility levels, collapse hints and UI ordering carried in `json_schema_extra` — along with `title`
 and `description`, which are prose. Comparing those would bury the real signal. What is compared:
-property names, required-ness, types, and enum value sets.
+property names, required-ness, published defaults, and enum value sets — for the endpoint's own model
+AND for every model nested in its `$defs`.
+
+**Why nested models matter.** An LLM node's schema embeds every LLM config class in `$defs`. When only
+the root model's properties were compared, a whole provider family (`XAILLMConfig` and three siblings)
+and new fields on existing ones (`GoogleLLMConfig.backend`) were live on the server and reported
+nowhere. Each `$defs` model is compared once, however many schemas embed it.
 
 Uses plain `httpx` rather than the SDK's own client: the point is to check the SDK's models against
 the server, so routing the comparison through the SDK's deserialisation would hide exactly the class
@@ -33,6 +39,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -44,11 +51,12 @@ import httpx
 # What to compare                                                                                 #
 # --------------------------------------------------------------------------------------------- #
 
-#: JSON Schema keys that carry prose or dashboard-only presentation, never data contract.
+#: JSON Schema keys that carry prose or dashboard-only presentation, never data contract. `default` is
+#: NOT among them: the dashboard seeds its forms from it, and a field with no published default is left
+#: undefined rather than empty, so a missing or different default changes what a client sends.
 IGNORED_SCHEMA_KEYS: Set[str] = {
     "title",
     "description",
-    "default",
     "examples",
     "$comment",
     "readOnly",
@@ -74,13 +82,74 @@ IGNORED_UI_KEYS: Set[str] = {
 }
 
 
+#: Fields whose default the SERVER's schema omits because of a serializer the mirror does not need, as
+#: field name -> reason. Suppresses only the exact shape "server publishes no default, mirror publishes
+#: `null`"; any other default difference on these fields is still reported.
+#:
+#: Pydantic leaves a field's default out of a serialization-mode schema when a `field_serializer`
+#: applies to it, since the serializer may turn the default into anything. Upstream puts
+#: `@field_serializer(..., when_used="json")` on every `PydanticObjectId` field to stringify it; the
+#: mirror types those fields as `str` (the forced self-containment substitution) and has nothing to
+#: serialize, so its schema keeps `default: null`. Verified by building both shapes side by side.
+KNOWN_SERIALIZER_DROPPED_DEFAULTS: Dict[str, str] = {
+    "workflow_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
+    "workflow_run_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
+    "source_workflow_run_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
+    "evaluator_workflow_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
+    "evaluation_workflow_run_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
+    "access_list": "upstream stringifies List[PydanticObjectId] with a field_serializer; mirror field is List[str]",
+}
+
+#: `$defs` the server publishes that the mirror deliberately has no class for, as name -> reason.
+KNOWN_SERVER_ONLY_DEFS: Dict[str, str] = {
+    # LangChain message and tool-call types, embedded through `WorkflowRun`'s message history. The mirror
+    # carries messages as plain dicts so `interactly_configs` has no runtime dependency on
+    # `langchain_core` -- the same reason config_parity maps `AnyMessage` to `Any`.
+    **{
+        name: "LangChain type; the mirror carries messages as plain dicts (no langchain_core dependency)"
+        for name in (
+            "AIMessage",
+            "AIMessageChunk",
+            "ChatMessage",
+            "ChatMessageChunk",
+            "FunctionMessage",
+            "FunctionMessageChunk",
+            "HumanMessage",
+            "HumanMessageChunk",
+            "InputTokenDetails",
+            "InvalidToolCall",
+            "OutputTokenDetails",
+            "SystemMessage",
+            "SystemMessageChunk",
+            "ToolCall",
+            "ToolCallChunk",
+            "ToolMessage",
+            "ToolMessageChunk",
+            "UsageMetadata",
+        )
+    },
+}
+
+#: How the server's package paths map onto the mirror's, for `$defs` names Pydantic module-qualifies
+#: (`agentic_workflow_framework__configs__workflow__GlobalConditionEdgeEvaluationMethod`) because two
+#: classes share a name. Most specific prefix first.
+MODULE_PREFIX_MAPPING: Tuple[Tuple[str, str], ...] = (
+    ("agentic_workflow_framework.runtime.event", "interactly_configs.events.event"),
+    ("agentic_workflow_framework.configs", "interactly_configs"),
+    ("common.models.acls", "interactly_configs.acls"),
+    ("common.configs.features.gemini_models", "interactly_configs.gemini_models"),
+)
+
+
 @dataclass
 class SchemaFinding:
     """One difference between a served schema and its local counterpart."""
 
     endpoint: str
     model: str
-    kind: str  # missing-property | extra-property | enum-missing | enum-extra | required-mismatch
+    #: missing-property | extra-property | required-mismatch | default-mismatch | enum-missing |
+    #: enum-extra | model-missing | enum-class-missing
+    kind: str
     detail: str
 
 
@@ -88,6 +157,10 @@ class SchemaFinding:
 class SchemaReport:
     findings: List[SchemaFinding] = field(default_factory=list)
     compared: List[Tuple[str, str]] = field(default_factory=list)   # (endpoint, model)
+    nested_compared: List[str] = field(default_factory=list)        # `$defs` model names compared
+    #: allow-list entries that actually suppressed something this run, as "<list name>:<key>". The live
+    #: guard checks every entry appears here, so an entry whose reason has expired is reported.
+    allowances_used: Set[str] = field(default_factory=set)
     unmapped: List[str] = field(default_factory=list)               # endpoints with no local model
     errors: List[Tuple[str, str]] = field(default_factory=list)     # (endpoint, message)
 
@@ -162,14 +235,15 @@ def resolve_local_models(client: httpx.Client) -> List[Tuple[str, str, Any]]:
         name = edge_type.get("type") if isinstance(edge_type, dict) else edge_type
         add(f"/v1/edges/schema/{name}", edge_models.get(name, ""))
 
-    tool_models = {
-        "inline_python": "InlinePythonToolConfig",
-        "external_api": "ExternalAPIToolConfig",
-        "knowledge_base": "KnowledgeBaseToolConfig",
-        "inbuilt_function": "InbuiltFunctionToolConfig",
-    }
-    for tool_type, model_name in tool_models.items():
-        add(f"/v1/tools/schema/{tool_type}", model_name)
+    # Discovered from the server like node types, not hard-coded: a fixed list of four never compared
+    # `codebase_function` once the server grew it. The type list is role-filtered server-side, so a
+    # credential below super-admin sees fewer types — what it cannot see, it cannot compare.
+    local_tool_models = {kind.value: cls for kind, cls in ic.ToolType.get_type_to_config_map().items()}
+    tool_types = (get_json(client, "/v1/tools/types") or {}).get("tool_types", [])
+    for tool_type in tool_types:
+        tool_model = local_tool_models.get(tool_type)
+        endpoint = f"/v1/tools/schema/{tool_type}"
+        work.append((endpoint, tool_model.__name__, tool_model) if tool_model is not None else (endpoint, "", None))
 
     add("/v1/workflows/schema", "WorkflowConfig")
     # `/v1/workflow-runs/schema` serves four models in one envelope; `#key` selects which.
@@ -248,7 +322,109 @@ def _enum_values(schema: Dict[str, Any]) -> Dict[str, Set[str]]:
     return out
 
 
-def compare_schema(endpoint: str, model_name: str, served: Dict[str, Any], local: Dict[str, Any]) -> List[SchemaFinding]:
+#: Marker for "this property publishes no default", distinct from a published default of `null`.
+_NO_DEFAULT = object()
+
+#: An id minted per process, such as `llm_b23a17fe-...`: a model-instance default (`llms_config`'s
+#: `WorkflowDefaultLLMConfig()`) carries a `logical_id` generated when the class was defined, so the two
+#: sides publish different uuids for what is the same default.
+_GENERATED_ID = re.compile(r"^([A-Za-z_]*_)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+def _normalise_generated_ids(value: Any) -> Any:
+    """Replace every minted uuid inside a default with a placeholder that keeps its prefix."""
+    if isinstance(value, str):
+        match = _GENERATED_ID.match(value)
+        return f"{match.group(1) or ''}<uuid>" if match else value
+    if isinstance(value, list):
+        return [_normalise_generated_ids(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _normalise_generated_ids(item) for key, item in value.items()}
+    return value
+
+
+def _render_default(value: Any) -> str:
+    return "(none)" if value is _NO_DEFAULT else f"`{json.dumps(value, sort_keys=True)}`"
+
+
+_MIRROR_CLASSES: Optional[Dict[str, Any]] = None
+
+
+def mirror_classes() -> Dict[str, Any]:
+    """Every pydantic model and Enum defined anywhere in `interactly_configs`, keyed by plain name and by
+    `module.Name`. Built once.
+
+    Needed because a model's schema embeds only the classes its *own* annotations reach. The mirror
+    types `WorkflowConfigFullyHydrated.node_configs` loosely on purpose (see config_parity's
+    KNOWN_FIELD_DIVERGENCES), so the super-node schema does not embed the Google Docs or Athena configs
+    the server's does — yet the mirror has every one of those classes, and they must be compared.
+    """
+    global _MIRROR_CLASSES
+    if _MIRROR_CLASSES is not None:
+        return _MIRROR_CLASSES
+
+    import enum
+    import importlib
+    import inspect
+    import pkgutil
+
+    import interactly_configs
+    from pydantic import BaseModel
+
+    found: Dict[str, Any] = {}
+    modules = [interactly_configs] + [
+        importlib.import_module(info.name)
+        for info in pkgutil.walk_packages(interactly_configs.__path__, prefix="interactly_configs.")
+    ]
+    for module in modules:
+        for name, obj in vars(module).items():
+            if not inspect.isclass(obj) or obj.__module__ != module.__name__:
+                continue
+            if issubclass(obj, BaseModel) or (issubclass(obj, enum.Enum) and obj is not enum.Enum):
+                found.setdefault(name, obj)
+                found[f"{module.__name__}.{name}"] = obj
+    _MIRROR_CLASSES = found
+    return found
+
+
+def _mirror_class_for_def(def_name: str) -> Optional[Any]:
+    """The mirror class for a served `$defs` name, following Pydantic's module-qualified names."""
+    classes = mirror_classes()
+    if "__" not in def_name:
+        return classes.get(def_name)
+    *module_parts, class_name = def_name.split("__")
+    server_module = ".".join(module_parts)
+    for server_prefix, mirror_prefix in MODULE_PREFIX_MAPPING:
+        if server_module == server_prefix or server_module.startswith(server_prefix + "."):
+            mirror_module = mirror_prefix + server_module[len(server_prefix):]
+            return classes.get(f"{mirror_module}.{class_name}")
+    return None
+
+
+def _local_definition(def_name: str, local_defs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The mirror's schema for a served `$defs` entry: from the local schema if it embeds one, else
+    generated from the mirror class of that name."""
+    embedded = local_defs.get(def_name)
+    if isinstance(embedded, dict):
+        return embedded
+    cls = _mirror_class_for_def(def_name)
+    if cls is None:
+        return None
+    import enum
+
+    if issubclass(cls, enum.Enum):
+        return {"enum": [member.value for member in cls]}
+    return _resolve_root_ref(cls.model_json_schema(mode="serialization"))
+
+
+def compare_model(
+    endpoint: str,
+    model_name: str,
+    served: Dict[str, Any],
+    local: Dict[str, Any],
+    allowances_used: Optional[Set[str]] = None,
+) -> List[SchemaFinding]:
+    """Compare one object model's shape: property names, required-ness and published defaults."""
     findings: List[SchemaFinding] = []
 
     served_props, local_props = _properties(served), _properties(local)
@@ -269,11 +445,45 @@ def compare_schema(endpoint: str, model_name: str, served: Dict[str, Any], local
                 SchemaFinding(endpoint, model_name, "required-mismatch", f"`{prop}` required by server, optional here")
             )
 
+    for prop in sorted(set(served_props) & set(local_props)):
+        served_default = _normalise_generated_ids(served_props[prop].get("default", _NO_DEFAULT))
+        local_default = _normalise_generated_ids(local_props[prop].get("default", _NO_DEFAULT))
+        if served_default is _NO_DEFAULT and local_default is None and prop in KNOWN_SERIALIZER_DROPPED_DEFAULTS:
+            if allowances_used is not None:
+                allowances_used.add(f"KNOWN_SERIALIZER_DROPPED_DEFAULTS:{prop}")
+            continue
+        if served_default != local_default:
+            findings.append(
+                SchemaFinding(
+                    endpoint,
+                    model_name,
+                    "default-mismatch",
+                    f"`{prop}`: server publishes {_render_default(served_default)}, "
+                    f"mirror publishes {_render_default(local_default)}",
+                )
+            )
+    return findings
+
+
+def compare_schema(
+    endpoint: str,
+    model_name: str,
+    served: Dict[str, Any],
+    local: Dict[str, Any],
+    allowances_used: Optional[Set[str]] = None,
+) -> List[SchemaFinding]:
+    """Compare an endpoint's root model, then the enums its `$defs` share with the mirror.
+
+    Nested `$defs` *models* are compared separately, once each across the whole run — see
+    `compare_nested_models`.
+    """
+    findings = compare_model(endpoint, model_name, served, local, allowances_used)
+
     served_enums, local_enums = _enum_values(served), _enum_values(local)
     for enum_name, served_values in sorted(served_enums.items()):
         local_values = local_enums.get(enum_name)
         if local_values is None:
-            continue  # A $defs name the mirror does not use is a naming difference, not value drift.
+            continue  # reported once per run as `enum-class-missing` by compare_nested_models
         # Keyed on the enum name alone, not the owning model: a shared enum like `ANTHROPICModel` is
         # embedded in every schema that holds an LLM config, so keying by owner would report the same
         # six missing models seven times over. Deduplicated in `run()`.
@@ -286,6 +496,70 @@ def compare_schema(endpoint: str, model_name: str, served: Dict[str, Any], local
                 )
             )
     return findings
+
+
+def compare_nested_models(
+    endpoint: str,
+    served: Dict[str, Any],
+    local: Dict[str, Any],
+    already_compared: Set[str],
+    allowances_used: Optional[Set[str]] = None,
+) -> Tuple[List[SchemaFinding], List[str]]:
+    """Compare every `$defs` entry the server publishes against the mirror's definition of the same name.
+
+    Returns `(findings, names compared)`. A name in `already_compared` is skipped and every name this
+    call handles is added to it, so a definition embedded in many schemas (`GoogleLLMConfig` sits in
+    every schema that carries an LLM config) is compared, and reported, exactly once.
+
+    A served definition the mirror's schema does not contain at all is reported as `model-missing` or
+    `enum-class-missing`. That is not certain to be a missing class — the mirror might name it
+    differently — but the server publishing a definition the mirror never produces is worth a look
+    either way, and silence is how `GoogleBackend` and four whole LLM configs went unreported.
+    """
+    findings: List[SchemaFinding] = []
+    compared: List[str] = []
+    served_defs = served.get("$defs") or {}
+    local_defs = local.get("$defs") or {}
+
+    for name in sorted(served_defs):
+        if name in already_compared:
+            continue
+        already_compared.add(name)
+        definition = served_defs[name]
+        if not isinstance(definition, dict):
+            continue
+        is_enum = isinstance(definition.get("enum"), list)
+        is_model = "properties" in definition
+        if not (is_enum or is_model):
+            continue
+        if name in KNOWN_SERVER_ONLY_DEFS:
+            if allowances_used is not None:
+                allowances_used.add(f"KNOWN_SERVER_ONLY_DEFS:{name}")
+            continue
+
+        local_definition = _local_definition(name, local_defs)
+        if local_definition is None:
+            kind = "enum-class-missing" if is_enum else "model-missing"
+            findings.append(SchemaFinding(endpoint, name, kind, "server publishes it, mirror has no class"))
+            continue
+        if is_model:
+            compared.append(name)
+            findings.extend(compare_model(endpoint, name, definition, local_definition, allowances_used))
+        elif name not in local_defs:
+            # An enum both schemas embed is already compared by compare_schema. One reached only through
+            # the mirror-wide lookup is compared here, keyed by its plain name so _dedupe merges it.
+            served_values = {str(v) for v in definition["enum"]}
+            local_values = {str(v) for v in local_definition.get("enum", [])}
+            plain_name = name.rsplit("__", 1)[-1]
+            findings.extend(
+                SchemaFinding(endpoint, plain_name, "enum-missing", f"server offers `{v}`")
+                for v in sorted(served_values - local_values)
+            )
+            findings.extend(
+                SchemaFinding(endpoint, plain_name, "enum-extra", f"mirror offers `{v}` — **server would reject it**")
+                for v in sorted(local_values - served_values)
+            )
+    return findings, compared
 
 
 def _dedupe_enum_findings(findings: List[SchemaFinding]) -> List[SchemaFinding]:
@@ -320,6 +594,9 @@ def _dedupe_enum_findings(findings: List[SchemaFinding]) -> List[SchemaFinding]:
 
 def run(client: httpx.Client) -> SchemaReport:
     report = SchemaReport()
+    # Root models first, nested `$defs` second: a model that is one endpoint's root (`WorkflowConfig`)
+    # can also sit in another endpoint's `$defs`, and should be compared once, as the root.
+    pairs: List[Tuple[str, Dict[str, Any], Dict[str, Any]]] = []
     for endpoint, model_name, model in resolve_local_models(client):
         if model is None:
             report.unmapped.append(endpoint)
@@ -355,7 +632,14 @@ def run(client: httpx.Client) -> SchemaReport:
             continue
 
         report.compared.append((endpoint, model_name))
-        report.findings.extend(compare_schema(endpoint, model_name, served, local))
+        report.findings.extend(compare_schema(endpoint, model_name, served, local, report.allowances_used))
+        pairs.append((endpoint, served, local))
+
+    already_compared: Set[str] = {model_name for _, model_name in report.compared}
+    for endpoint, served, local in pairs:
+        findings, nested = compare_nested_models(endpoint, served, local, already_compared, report.allowances_used)
+        report.findings.extend(findings)
+        report.nested_compared.extend(nested)
 
     report.findings = _dedupe_enum_findings(report.findings)
     return report
@@ -371,7 +655,7 @@ def render_markdown(report: SchemaReport, base_url: str) -> str:
         "# Live schema drift report — `interactly_configs` vs the running server",
         "",
         f"- Server: `{base_url}`",
-        f"- Schemas compared: **{len(report.compared)}**",
+        f"- Schemas compared: **{len(report.compared)}**, plus **{len(report.nested_compared)}** nested models",
         f"- **Findings: {len(report.findings)}**",
         "",
     ]
@@ -431,7 +715,7 @@ def main() -> int:
         print(f"Report written to {args.output}")
 
     print(
-        f"compared={len(report.compared)} findings={len(report.findings)} "
+        f"compared={len(report.compared)} nested={len(report.nested_compared)} findings={len(report.findings)} "
         f"unmapped={len(report.unmapped)} errors={len(report.errors)}"
     )
     return 0 if report.is_clean else 1

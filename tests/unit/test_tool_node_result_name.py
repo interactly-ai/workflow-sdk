@@ -9,10 +9,9 @@ is the second instance of that blind spot; the first was the inbuilt binding val
 """
 
 import pytest
-from pydantic import ValidationError
-
 from interactly_configs.nodes.tool.tool_node import ToolNodeConfig, effective_result_variable_name
 from interactly_configs.tool import InlinePythonToolConfig, ToolResultVariableMapping
+from pydantic import ValidationError
 
 CODE = "def score():\n    return {'tier': 'high'}\n"
 
