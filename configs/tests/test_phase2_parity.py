@@ -299,6 +299,8 @@ class TestModelCatalogue:
             "gemini-2.0-flash", "gemini-2.0-flash-lite",
             "claude-opus-4-20250514", "claude-sonnet-4-20250514",
             "gpt-5-chat-latest", "gpt-5.1-chat-latest",
+            "gpt-5.2-chat-latest", "gpt-5.3-chat-latest",
+            "claude-opus-4-1-20250805",
         }
         offered = (
             {m.value for m in ic.GOOGLEModel}
@@ -318,6 +320,10 @@ class TestModelCatalogue:
             (ic.GOOGLEModel, "gemini-2.5-flash-lite"),
             (ic.OPENAIModel, "gpt-5.4-pro"),
             (ic.OPENAIModel, "gpt-5.2-pro"),
+            (ic.OPENAIModel, "gpt-5.6-sol"),
+            (ic.OPENAIModel, "gpt-audio-1.5"),
+            (ic.GOOGLEModel, "gemini-3.8-flash"),
+            (ic.GOOGLEModel, "gemini-3.7-flash"),
         ],
     )
     def test_live_models_are_offered(self, enum_cls, value):

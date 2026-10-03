@@ -20,6 +20,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   reported once per `*RunInput` subclass.
 - **`IntegrationAuthConfig`**, and **`integration_auth` on `ExternalAPIToolConfig`** — the second of the
   two fields the rename below introduced upstream.
+- **Four LLM providers served through Google Vertex AI:** `XAILLMConfig` (Grok), `GemmaLLMConfig`,
+  `GLMLLMConfig` and `DeepSeekLLMConfig`, with `XAIModel`, `GemmaModel`, `GLMModel`, `DeepSeekModel`, the
+  matching `LLMProvider` members, and membership in `LLMConfigUnion`. None takes an API key: the server
+  authenticates with its Google Cloud credentials. All four are served only on Vertex's global endpoint
+  (`*_VERTEX_GLOBAL_ONLY`), so leave `vertex_location` blank or `"global"`. Gemma, GLM and DeepSeek have
+  `enable_thinking`, off by default. Note `DeepSeekLLMConfig`'s documented weakness on conditional edges.
+- **Backend selection.** `AnthropicLLMConfig.backend` (`AnthropicBackend`: `direct` by default, or
+  `vertex`) with `vertex_project` / `vertex_location`; `GoogleLLMConfig.backend` (`GoogleBackend`:
+  `ai_studio` / `vertex`, unset by default, which keeps the server's own choice).
+  `vertex_selectable_anthropic_models()` returns what the Vertex backend accepts:
+  `VERTEX_SUPPORTED_ANTHROPIC_MODELS` minus `VERTEX_DISABLED_ANTHROPIC_MODELS` (Opus 5, withheld on cost).
+- **`GoogleLLMConfig.thinking_level`** (`GeminiThinkingLevel`, in the new `interactly_configs.gemini_models`)
+  for the Gemini 3 models that take a level instead of a token budget. Accepts any casing.
+- **Models:** `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-audio-1.5`, `gpt-audio-mini`,
+  `gemini-3.8-flash`, `gemini-3.7-flash`.
+- **Capability data:** `AUDIO_INPUT_OPENAI_MODELS`, `REJECTS_TRAILING_MODEL_TURN_GOOGLE_MODELS`,
+  `VISION_BEDROCK_MODELS`. Upstream keeps these inside the enums as `enum.nonmember`; that is 3.11+, so
+  the mirror hoists them, qualifying a name with its provider where it would otherwise be ambiguous.
+- **`CustomLLMConfig.supports_audio_input`**, off by default.
 
 ### Changed
 - **`OktaAuthConfig` → `IntegrationAuthConfig`, following a server-side rename** made
@@ -33,19 +52,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   **One thing does change for readers, and it changes on the server too:** the attribute is now
   `integration_auth`, so code doing `llm.okta_auth` raises `AttributeError`. Constructing with
   `okta_auth=` is unaffected. Migration is a rename at the read site.
+- **`ALWAYS_THINKING_GOOGLE_MODELS`** gains `gemini-3.8-flash`, `gemini-3.7-flash` and
+  `gemini-3.1-pro-preview`. The last was already in upstream's set before this sync and had been missing
+  from the mirror's copy, unnoticed until the parity harness began comparing the sets' contents.
+- **`BaseLLMConfig.api_key`'s description** now states the server's role rule: an admin is shown the
+  stored key, and an admin who sends a config with the key cleared removes it.
 
 ### Removed
-- Nothing.
+- **`OPENAIModel.GPT_5_2_CHAT_LATEST`, `GPT_5_3_CHAT_LATEST`** and
+  **`ANTHROPICModel.CLAUDE_OPUS_4_1_20250805`.** Removed server-side; each returns 404 on every call.
+  A config naming one now fails validation in the SDK instead of at the provider.
 
 ### Testing
-- **Behaviour parity, not just structural parity.** `make parity-check` compares a validator as
-  `"{decorator}:{mode}"`, ignores module-level functions and does not compare `validation_alias` — so
-  three of this release's changes are invisible to it. They are covered instead by tests that assert the
-  behaviour directly: the old auth keyword still parsing onto the new attribute, the class alias being
-  the same object, and `secret_variables` staying out of `model_dump()` while remaining readable
-  in-process.
+- **Behaviour parity, not just structural parity.** `make parity-check` ignores module-level functions
+  and does not compare `validation_alias`, so some of this release's changes are invisible to it. They are
+  covered instead by tests that assert the behaviour directly: the old auth keyword still parsing onto the
+  new attribute, the class alias being the same object, and `secret_variables` staying out of
+  `model_dump()` while remaining readable in-process.
+- **The drift harnesses see more.** `config_parity` compares validators by name (a second same-mode
+  validator used to be invisible), keeps `default=[]` and `default_factory=list` apart, compares the
+  contents of hoisted capability sets, compares discriminated-union membership, and reports classes
+  imported from files it does not parse. `schema_sync` compares every nested `$defs` model, reports
+  server classes the mirror lacks, discovers tool types from the server, and compares published defaults.
+  Each check has a fixture test proving it fires.
 
 ### Fixed
+- **A workflow using a new provider or model lost its node types.** A node on Grok, Gemma, GLM,
+  DeepSeek, or Gemini 3.7/3.8 hydrated as `UnknownNodeConfig`, with every typed field gone, and
+  validating such an `LLMConfig` on its own raised. An `AnthropicLLMConfig` with `backend="vertex"`
+  parsed but silently dropped the backend, so reading a config and writing it back moved it to the
+  direct API.
 - **Examples 11–23 crashed on launch.** `main()` passed a `dynamic_variables` that was never defined
   in its scope, so `python wf_examples/wf_example_progression_11.py` raised `NameError` on the first
   call it made. The notebook counterparts never caught it because they import the *builder* and drive
