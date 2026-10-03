@@ -58,15 +58,18 @@ class TestConfigParity:
     #:   * 13 — the pre-existing debt: ``NodeRealtimeOverrides`` and four ``realtime_overrides`` fields
     #:          (upstream 2026-08-09); the copilot proposal models, two ``WorkflowCopilotInput`` fields
     #:          and two enum members (upstream 2026-08-17)
-    #:   * 45 — upstream changes between 2026-08-22 and 2026-10-02 that the mirror has not followed: the
-    #:          LLM catalogue (four Vertex providers, two backends, new and retired models, capability
-    #:          sets), the codebase-function tool type, ``result_as_media``, ``stop_with_main_thread``,
-    #:          ``voice_persona``, the copilot ``finish`` command, and ``SelfLoopConfig``'s lifted cap
-    #:   * 29 — gaps the hardened harness surfaced on its first run, all real: 20 literal-vs-factory
-    #:          defaults (12 of them the four upstream ``default=[]`` fields counted per subclass, plus
-    #:          ``api_headers``, ``llm_usage_info`` on seven events and ``WorkflowConfig.llms_config``),
-    #:          six discriminated-union members, ``ExternalAPIToolConfig``'s media validator, stale
-    #:          contents in ``ALWAYS_THINKING_GOOGLE_MODELS``, and ``GeminiThinkingLevel``
+    #:   *  1 — ``ProposalOutput`` missing from ``WorkflowCopilotOutput``: the same copilot debt, made
+    #:          visible once union membership was compared
+    #:   * 11 — upstream changes between 2026-08-22 and 2026-10-02 that the mirror has not followed:
+    #:          the codebase-function tool type (class, two enum members, ``ToolConfig`` membership),
+    #:          ``result_as_media`` and its validator, ``stop_with_main_thread``, ``voice_persona`` and
+    #:          ``generated_voice_persona``, the copilot ``finish`` command, ``SelfLoopConfig``'s lifted cap
+    #:   * 20 — literal-vs-factory defaults: 12 are the four upstream ``default=[]`` fields counted per
+    #:          subclass, plus ``api_headers``, ``llm_usage_info`` on seven events and
+    #:          ``WorkflowConfig.llms_config``
+    #:
+    #: The LLM catalogue (42 items: four Vertex providers, two backends, thinking levels, new and
+    #: retired models, capability data) was closed on 2026-10-02.
     #:
     #: Held as a **ratchet rather than an ignore**: the guard fails if the total moves in either
     #: direction. Up means new drift. Down means somebody closed a gap and left this number stale, which
@@ -77,7 +80,7 @@ class TestConfigParity:
     #: intentional would be a lie that never expires. Why not simply leave the guard red: it was red at
     #: 40 for weeks, and a red guard cannot tell you that a 41st difference just appeared. That is the
     #: failure this file was created to fix.
-    KNOWN_UPSTREAM_DEBT = 87
+    KNOWN_UPSTREAM_DEBT = 45
 
     def test_no_new_drift_against_upstream(self):
         report = self._report()
