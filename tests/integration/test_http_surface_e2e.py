@@ -102,6 +102,29 @@ async def test_clone_names_the_copy_and_keeps_the_config(client, created):
     assert default_named.tool_config.api_endpoint == "https://example.com/lookup"
 
 
+async def test_an_update_changes_only_what_it_sets(client, created):
+    # The server merges a tool PATCH onto the stored config, so a field the SDK sent as null used to be
+    # wiped, and a freshly minted logical_id used to replace the tool's identity.
+    from interactly.configs import InlinePythonToolConfig
+
+    tool = await client.tools.create(
+        tool_config=InlinePythonToolConfig(
+            name=f"{RUN_TAG} update", signature="Returns one.", args_schema={"type": "object"}, code="def f(): return 1"
+        )
+    )
+    created.tools.append(tool.id)
+    identity = tool.tool_config.logical_id
+
+    await client.tools.update(tool.id, tool_config=InlinePythonToolConfig(description="changed"))
+    fetched = await client.tools.get(tool.id)
+
+    assert fetched.description == "changed"
+    assert fetched.name == f"{RUN_TAG} update"
+    assert fetched.tool_config.signature == "Returns one."
+    assert fetched.tool_config.args_schema == {"type": "object"}
+    assert fetched.tool_config.logical_id == identity
+
+
 async def test_import_reports_a_variable_the_team_has_not_defined(client, created):
     source = await client.tools.create(
         tool_config=ExternalAPIToolConfig(

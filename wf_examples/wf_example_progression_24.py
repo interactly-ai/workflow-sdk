@@ -189,6 +189,8 @@ def build_assistant_workflow():
         ),
         # The COMPANION fork. `thread_id` is what makes the thread addressable: without it
         # the thread still runs, but no other thread can read its variables.
+        # `stop_with_main_thread` is left at its default, True: a lab result after the goodbye has no
+        # one left to hear it, so the poller should stop when the conversation does.
         DirectEdgeConfig(
             source_node_logical_id=entry_node.logical_id,
             destination_node_logical_id=poll_node.logical_id,
