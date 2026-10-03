@@ -9,6 +9,36 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+Nothing yet.
+
+---
+
+## [0.3.0] — 2026-10-03
+
+Brings the SDK in line with the workflow service as of `interactly-ai@07a14e7da` (2026-10-02). The
+vendored configs have no structural difference from upstream source and none from the live dev server's
+published schemas. Install both packages at 0.3.0: `pip install "interactly[configs]>=0.3.0"`.
+
+### Upgrading from 0.2.0
+
+The changes that can alter what existing code does:
+
+- **`tools.update(tool_config=<typed config>)` now sends only the fields you set.** Before, it sent every
+  field, so an update wiped the tool's other fields and changed its `logical_id`. Code that relied on
+  replacing the whole config must now set every field it wants changed. A dict is still sent as given.
+- **`llm_configs.update(config=...)` keeps the stored API key** when `config` has none
+  (`preserve_api_key=True`). With an admin token, pass `preserve_api_key=False` to remove a key.
+- **Companion threads stop when the conversation does**, on a server that includes
+  `interactly-ai@310a9a8ec`. Set `CompanionThreadConfig(stop_with_main_thread=False)` for work that must
+  outlive it.
+- **Retired models are gone from the enums:** `gpt-5.2-chat-latest`, `gpt-5.3-chat-latest`,
+  `claude-opus-4-1-20250805`. A config naming one fails validation.
+- **`CustomLLMConfig.okta_auth` is now `integration_auth`** (the old keyword is still accepted on
+  construction; reading `.okta_auth` raises `AttributeError`).
+- **`runs.list()` refuses a `start`–`end` window over 31 days** (`BadRequestError`).
+- **The `configs` extra requires `interactly-configs>=0.3.0`.** `interactly.configs` re-exports names that
+  only exist from 0.3.0, so with an older configs package `import interactly.configs` fails.
+
 ### Added
 - **`secret_variables` on `BaseRunInput` and `WorkflowConfigFullyHydrated`.** Mirrors the server field
   that carries credential-valued variables apart from `dynamic_variables`, with `exclude=True`,

@@ -331,3 +331,19 @@ class TestVersionsAgree:
         namespace: dict = {}
         exec(version_file.read_text(encoding="utf-8"), namespace)  # noqa: S102 - reading our own file
         assert module.__version__ == namespace["__version__"]
+
+    def test_the_configs_extra_requires_the_configs_version_it_was_built_against(self):
+        """`interactly.configs` re-exports every public name of `interactly_configs`.
+
+        So an `interactly-configs` older than the one this SDK was built with is not merely missing
+        features: `import interactly.configs` raises ImportError, reported as "interactly-configs is not
+        installed". The extra's floor must move with the configs package's version.
+        """
+        data = tomllib.loads((_SDK_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+        spec = next(s for s in data["project"]["optional-dependencies"]["configs"] if "interactly-configs" in s)
+        namespace: dict = {}
+        exec((SHIPPED_PACKAGES[1] / "_version.py").read_text(encoding="utf-8"), namespace)  # noqa: S102
+
+        assert spec == f"interactly-configs>={namespace['__version__']}", (
+            f"the configs extra is {spec!r} but interactly_configs is {namespace['__version__']}"
+        )

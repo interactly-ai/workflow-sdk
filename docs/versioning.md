@@ -117,7 +117,7 @@ For production use, pin the SDK to a compatible minor version range in your
 
 ```
 # requirements.txt
-interactly>=0.1.0,<0.2.0  # allow patches, but not breaking minor changes
+interactly>=0.3.0,<0.4.0  # allow patches, but not breaking minor changes
 ```
 
 Or in `pyproject.toml`:
