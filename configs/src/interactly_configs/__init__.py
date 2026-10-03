@@ -103,6 +103,7 @@ from interactly_configs.nodes.data_transformation.field_extractor import FieldEx
 from interactly_configs.nodes.llm.llm import (
     BaseLLMNodeConfig,
     LLMNodeRunInput,
+    NodeRealtimeOverrides,
     SayLLMNodeConfig,
     SayLLMNodeRunOutput,
     WorkerLLMNodeConfig,
@@ -166,6 +167,7 @@ from interactly_configs.workflow_run import (
 )
 
 __all__ = [
+    "NodeRealtimeOverrides",
     "CodebaseFunctionToolConfig",
     "edge_companion_stops_with_main_thread",
     "VOICE_PERSONA_MAX_LENGTH",

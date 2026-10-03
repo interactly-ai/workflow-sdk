@@ -56,6 +56,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **`WorkflowCopilotCommand.FINISH`**: ends a copilot conversation for good, where `STOP` only hangs up.
 - **`interactly_configs.utils.extract_dynamic_variables(*configs)`**: the `{{variables}}` any set of
   configs references, for callers holding something other than a whole workflow.
+- **`NodeRealtimeOverrides`** and `realtime_overrides` on every LLM node: per-node realtime voice
+  settings (reasoning effort, voice, preamble mode, turn detection, and transcription keywords that bias
+  speech recognition for that node only). Everything defaults to "inherit from the workflow", and the
+  whole object is ignored unless the workflow runs on a realtime model.
+- **Copilot proposals.** `ProposalOutput` (with `ProposedChangeItem` and `ProposalGraph`) joins
+  `WorkflowCopilotOutput`: a change the copilot has worked out but not made, for a person to accept or
+  decline. Also `WorkflowCopilotTurnDoneEvent`, the top-level signal that a turn has finished;
+  `WorkflowCopilotCommand.NEW_CHAT`; and `session_id` / `page_context` on `WorkflowCopilotInput`. These
+  live in `interactly_configs.workflow_copilot` and, like the rest of that module, are not re-exported at
+  the package top level.
 
 ### Changed
 - **`OktaAuthConfig` → `IntegrationAuthConfig`, following a server-side rename** made
@@ -110,7 +120,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   anything, which signals that the deploy has landed.
 - **Live round trips for the new fields** (`tests/integration/test_tools_workflow_e2e.py`): a saved tool
   with `result_as_media`, a workflow with `voice_persona`, and a codebase-function tool node, each written
-  to the server and read back intact.
+  to the server and read back intact. Plus `realtime_overrides` on an LLM node.
+- **Parity is zero, and the guard asserts it again.** `KNOWN_UPSTREAM_DEBT` is 0: the mirror has no
+  structural difference from upstream source, and `make schema-check` reports no finding against dev.
 
 ### Fixed
 - **A workflow using a new provider or model lost its node types.** A node on Grok, Gemma, GLM,
@@ -121,6 +133,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **A workflow with a codebase-function tool node lost that node's type**, hydrating it as
   `UnknownNodeConfig`. And `result_as_media` parsed but was dropped, so reading an external-API tool and
   writing it back turned a media result into a parsed one.
+- **Per-node realtime settings were dropped**, so reading a workflow and writing it back erased every
+  node's `realtime_overrides`. **A copilot event carrying a proposal failed validation**, because the
+  payload union had no member for it.
 - **Examples 11–23 crashed on launch.** `main()` passed a `dynamic_variables` that was never defined
   in its scope, so `python wf_examples/wf_example_progression_11.py` raised `NameError` on the first
   call it made. The notebook counterparts never caught it because they import the *builder* and drive
