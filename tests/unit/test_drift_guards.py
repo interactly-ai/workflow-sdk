@@ -52,30 +52,19 @@ class TestConfigParity:
             pytest.skip(f"no upstream config sources under {root}")
         return cp.build_report(root)
 
-    #: Differences that are known and attributed, measured against upstream ``main`` at 07a14e7da
-    #: (2026-10-02). Read the markdown report for the per-item list; by owner:
-    #:
-    #:   * 13 — the pre-existing debt: ``NodeRealtimeOverrides`` and four ``realtime_overrides`` fields
-    #:          (upstream 2026-08-09); the copilot proposal models, two ``WorkflowCopilotInput`` fields
-    #:          and two enum members (upstream 2026-08-17)
-    #:   *  1 — ``ProposalOutput`` missing from ``WorkflowCopilotOutput``: the same copilot debt, made
-    #:          visible once union membership was compared
-    #:
-    #: Closed on 2026-10-02: the LLM catalogue (42 items), then the tool, edge, node and workflow changes
-    #: (31 items: the codebase-function tool, ``result_as_media``, ``stop_with_main_thread``,
-    #: ``voice_persona``, the copilot ``finish`` command, ``SelfLoopConfig``'s lifted cap, and 20
-    #: literal-vs-factory defaults).
+    #: Differences that are known and attributed. **Zero**: every gap was closed on 2026-10-02, measured
+    #: against upstream ``main`` at 07a14e7da. Keep it at zero by mirroring an upstream change in the
+    #: same pull request that notices it.
     #:
     #: Held as a **ratchet rather than an ignore**: the guard fails if the total moves in either
-    #: direction. Up means new drift. Down means somebody closed a gap and left this number stale, which
-    #: is worth a failing test because a baseline nobody lowers becomes a licence.
+    #: direction. While it was non-zero, that meant: up is new drift, down is a closed gap whose number
+    #: nobody lowered. At zero, only "up" can happen.
     #:
-    #: Why not zero, and why not an allow-list entry each: the allow-list is for divergences that are
-    #: *deliberate*, and these are not — they are gaps their owners should close. Recording them as
-    #: intentional would be a lie that never expires. Why not simply leave the guard red: it was red at
-    #: 40 for weeks, and a red guard cannot tell you that a 41st difference just appeared. That is the
-    #: failure this file was created to fix.
-    KNOWN_UPSTREAM_DEBT = 14
+    #: If drift has to be carried for a while, raise this with an attributed breakdown beside it rather
+    #: than allow-listing the gaps: the allow-lists are for divergences that are *deliberate*, and an
+    #: unfollowed upstream change is not. And do not leave the guard red instead: it once sat red at 40
+    #: for weeks, and a red guard cannot tell you that a 41st difference just appeared.
+    KNOWN_UPSTREAM_DEBT = 0
 
     def test_no_new_drift_against_upstream(self):
         report = self._report()

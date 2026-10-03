@@ -6,6 +6,8 @@ the SDK sends and hands it back unchanged, for the fields that used to be droppe
 * ``ExternalAPIToolConfig.result_as_media`` on a saved tool. Before it was mirrored, reading the tool and
   writing it back turned a media result into a parsed one.
 * ``WorkflowConfig.voice_persona``.
+* ``realtime_overrides`` on an LLM node. Before ``NodeRealtimeOverrides`` was mirrored, reading the
+  workflow and writing it back erased every per-node realtime setting.
 * A tool node calling a codebase function. Before ``CodebaseFunctionToolConfig`` was mirrored, the whole
   node hydrated as ``UnknownNodeConfig``. Codebase functions are staff-only, so this skips for a
   credential the server refuses, and when the server has no function registered.
@@ -26,6 +28,9 @@ from interactly import AsyncWorkflowClient, PermissionDeniedError
 from interactly.configs import (
     CodebaseFunctionToolConfig,
     ExternalAPIToolConfig,
+    NodeRealtimeOverrides,
+    PromptConfig,
+    SayLLMNodeConfig,
     SayStaticMessageNodeConfig,
     StaticMessagesConfig,
     ToolNodeConfig,
@@ -144,6 +149,35 @@ async def test_a_codebase_function_tool_node_hydrates_typed():
         assert isinstance(fetched, ToolNodeConfig), f"hydrated as {type(fetched).__name__}"
         assert isinstance(fetched.tool_config, CodebaseFunctionToolConfig)
         assert fetched.tool_config.function_id == function_id
+    finally:
+        if workflow_id:
+            await client.workflows.delete(workflow_id)
+        residual = await _sweep_workflows(client)
+        await client.close()
+        assert not residual, f"residual SDK_E2E workflows remained: {residual}"
+
+
+async def test_realtime_overrides_survive_on_an_llm_node():
+    node = SayLLMNodeConfig(
+        name="Collect member ID",
+        is_start=True,
+        main_response_config=PromptConfig(prompt="Ask for the member ID."),
+        realtime_overrides=NodeRealtimeOverrides(reasoning_effort="high", transcription_keywords=["Aetna", "Cigna"]),
+    )
+    config = WorkflowConfigFullyHydrated(
+        workflow_config=WorkflowConfig(name=f"{RUN_TAG} realtime", category="System Examples"),
+        node_configs=[node],
+        edge_configs=[],
+    )
+    client = AsyncWorkflowClient()
+    workflow_id: str | None = None
+    try:
+        workflow_id = (await client.workflows.create_from_config(config)).id
+        fetched = (await client.workflows.get_fully_hydrated(workflow_id)).node_configs[0]
+        assert isinstance(fetched, SayLLMNodeConfig)
+        assert fetched.realtime_overrides is not None, "the server dropped realtime_overrides"
+        assert fetched.realtime_overrides.reasoning_effort == "high"
+        assert fetched.realtime_overrides.transcription_keywords == ["Aetna", "Cigna"]
     finally:
         if workflow_id:
             await client.workflows.delete(workflow_id)

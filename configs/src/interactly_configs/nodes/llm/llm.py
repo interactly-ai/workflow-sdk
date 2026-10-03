@@ -1,6 +1,6 @@
 from typing import Any, List, Literal, Optional
 
-from pydantic import ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from interactly_configs.llm import WorkflowDefaultLLMConfig
 from interactly_configs.llm_group import LLMOrGroupConfig
@@ -9,6 +9,68 @@ from interactly_configs.prompt import PromptConfig
 from interactly_configs.tool import ToolsConfig
 
 DEFAULT_LLM_NODE_ERROR_MESSAGE = "I am sorry, there seems to be an issue. Could you please repeat?"
+
+
+class NodeRealtimeOverrides(BaseModel):
+    """Per-node realtime voice settings, applied only while this node is the active one.
+
+    Everything here is optional, and ``None`` means "inherit from the workflow": nothing here turns
+    realtime voice on or off. The whole object is ignored unless the workflow runs on a realtime
+    (speech-to-speech) model.
+
+    ``transcription_keywords`` is the field worth knowing about, because the classic voice path has no
+    equivalent. The realtime session is re-primed at every node transition, so a node that collects a
+    member ID can bias speech recognition toward plan names and digit words for the span of that node
+    only, and stop biasing the moment the conversation moves on.
+
+    There is deliberately no "say this verbatim" flag: edge messages are spoken in the model's own words.
+    """
+
+    reasoning_effort: Optional[str] = Field(
+        default=None,
+        description=(
+            "Reasoning effort while this node is active — one of minimal, low, medium, high, xhigh. "
+            "Leave empty to inherit the workflow default. Worth raising on a node that has to choose "
+            "between several similar-sounding paths; costly to raise everywhere."
+        ),
+        title="Reasoning Effort",
+    )
+    voice: Optional[str] = Field(
+        default=None,
+        description=(
+            "Voice for this node only. Rarely useful: changing voice mid-conversation is jarring to "
+            "a caller, who hears it as being handed to a different person."
+        ),
+        title="Voice",
+    )
+    preamble_mode: Optional[str] = Field(
+        default=None,
+        description=(
+            "Whether the model may speak a short filler line before a slow answer while this node "
+            "is active. Leave empty to inherit."
+        ),
+        title="Preamble Mode",
+    )
+    transcription_keywords: List[str] = Field(
+        default_factory=list,
+        description=(
+            "Terms to bias speech recognition toward while this node is active — added to the "
+            "workflow-wide list rather than replacing it. Use for the identifiers a node actually "
+            "asks for: plan names, member ID formats, provider names."
+        ),
+        title="Transcription Keywords",
+    )
+    turn_detection: Optional[dict] = Field(
+        default=None,
+        description=(
+            "Override end-of-speech detection for this node, e.g. to wait longer while a caller "
+            "reads out a long number. Leave empty to inherit the session default."
+        ),
+        title="Turn Detection",
+    )
+
+    model_config = ConfigDict(title="Realtime Overrides")
+
 
 class BaseLLMNodeConfig(BaseNodeConfig):
     primary_category: Optional[str] = Field(
@@ -84,6 +146,14 @@ class BaseLLMNodeConfig(BaseNodeConfig):
             "flag for every tool call this node makes."
         ),
         title="Ignore content received during LLM tool call specification",
+    )
+    realtime_overrides: Optional[NodeRealtimeOverrides] = Field(
+        default=None,
+        description=(
+            "Realtime voice settings that apply only while this node is active. Ignored unless the "
+            "workflow has realtime voice enabled. None means inherit everything from the workflow."
+        ),
+        title="Realtime Overrides",
     )
 
 EXAMPLE_STRUCTURED_SCHEMA = """
