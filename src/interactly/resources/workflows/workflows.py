@@ -13,6 +13,10 @@ Endpoints implemented:
     POST   /v1/workflows/import/bundle              → import_bundle
     GET    /v1/workflows/schema                     → schema
     GET    /v1/workflows/dynamic-variables/{id}     → dynamic_variables
+    GET    /v1/workflows/{id}/lints                 → lints
+    GET    /v1/workflows/{id}/realtime-compatibility → realtime_compatibility
+    GET    /v1/workflows/{id}/counter-workflow      → counter_workflow
+    POST   /v1/workflows/{id}/counter-workflow/generate → generate_counter_workflow
 
 Sub-resource (versions) is exposed as ``resource.versions``.
 """
@@ -27,6 +31,12 @@ from interactly._types import NOT_GIVEN, NotGivenOr, is_given
 from interactly._utils._serialise import serialise_config
 from interactly.resources.workflows.versions import AsyncWorkflowVersionsResource, WorkflowVersionsResource
 from interactly.types._config_types import WorkflowConfigOrDict
+from interactly.types.workflows.analysis import (
+    CounterGenerationState,
+    CounterWorkflowStatus,
+    RealtimeCompatibilityReport,
+    WorkflowLintReport,
+)
 from interactly.types.workflows.workflow import Workflow
 
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
@@ -37,6 +47,36 @@ if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
 __all__ = ["WorkflowsResource", "AsyncWorkflowsResource"]
 
 _PATH = "/v1/workflows"
+
+
+def _version_and_model_params(version_number: Optional[int], model: Optional[str] = None) -> Dict[str, Any]:
+    params: Dict[str, Any] = {}
+    if version_number is not None:
+        params["version_number"] = version_number
+    if model is not None:
+        params["model"] = model
+    return params
+
+
+def _counter_generation_body(
+    *,
+    num_cases: int,
+    instructions: Optional[str],
+    version_number: Optional[int],
+    workflow_name: Optional[str],
+    new_workflow: bool,
+    provider: Optional[str],
+) -> Dict[str, Any]:
+    body: Dict[str, Any] = {"num_cases": num_cases, "new_workflow": new_workflow}
+    for key, value in (
+        ("instructions", instructions),
+        ("version_number", version_number),
+        ("workflow_name", workflow_name),
+        ("provider", provider),
+    ):
+        if value is not None:
+            body[key] = value
+    return body
 
 
 def _is_hydrated_shape(candidate: Dict[str, Any]) -> bool:
@@ -321,6 +361,81 @@ class WorkflowsResource(SyncAPIResource):
         """Return the dynamic variable definitions for a workflow."""
         return self._client.get(f"{_PATH}/dynamic-variables/{workflow_id}", cast_to=dict)
 
+    def lints(self, workflow_id: str, *, version_number: Optional[int] = None) -> WorkflowLintReport:
+        """Every advisory lint for a stored workflow, run against the whole graph.
+
+        Read-only. The same checks a fully-hydrated create runs, but graph-wide, which is the only way to
+        catch a cross-thread reference to a thread that does not exist or a waiting condition that could
+        never fire — the editor saves a node at a time and cannot see either. ``version_number``
+        defaults to the active version.
+        """
+        return self._client.get(
+            f"{_PATH}/{workflow_id}/lints",
+            cast_to=WorkflowLintReport,
+            params=_version_and_model_params(version_number),
+        )
+
+    def realtime_compatibility(
+        self, workflow_id: str, *, version_number: Optional[int] = None, model: Optional[str] = None
+    ) -> RealtimeCompatibilityReport:
+        """Whether this workflow can run its voice calls on a realtime (speech-to-speech) model.
+
+        Pass the realtime ``model`` the call would use to sharpen the verdict: the two realtime protocols
+        differ enough that a workflow can be ready on one and not the other. Without it, the findings
+        describe what holds on either.
+        """
+        return self._client.get(
+            f"{_PATH}/{workflow_id}/realtime-compatibility",
+            cast_to=RealtimeCompatibilityReport,
+            params=_version_and_model_params(version_number, model),
+        )
+
+    def counter_workflow(self, workflow_id: str) -> CounterWorkflowStatus:
+        """The simulated-caller workflow generated from this one, and the state of the newest generation."""
+        return self._client.get(f"{_PATH}/{workflow_id}/counter-workflow", cast_to=CounterWorkflowStatus)
+
+    def generate_counter_workflow(
+        self,
+        workflow_id: str,
+        *,
+        num_cases: int = 10,
+        instructions: Optional[str] = None,
+        version_number: Optional[int] = None,
+        workflow_name: Optional[str] = None,
+        new_workflow: bool = False,
+        provider: Optional[str] = None,
+    ) -> CounterGenerationState:
+        """Start generating a counter workflow: simulated callers written from this workflow's config.
+
+        **Returns immediately**; generation runs on the server and makes several LLM calls. Poll
+        :meth:`counter_workflow` until ``generation.status`` is ``completed`` or ``failed``.
+
+        Args:
+            num_cases:      Test cases to generate, 1–200.
+            instructions:   Extra guidance for the generator.
+            version_number: Source version; defaults to the active one.
+            workflow_name:  Name for the counter workflow; derived from the source when omitted.
+            new_workflow:   Force a new counter workflow. By default a regeneration is appended to the
+                            existing one as a new version.
+            provider:       ``"gemini"`` (the server default) or ``"claude"``.
+
+        Raises:
+            BadRequestError: When ``workflow_id`` is itself a counter workflow.
+            ConflictError: When a generation is already running for this workflow.
+        """
+        body = _counter_generation_body(
+            num_cases=num_cases,
+            instructions=instructions,
+            version_number=version_number,
+            workflow_name=workflow_name,
+            new_workflow=new_workflow,
+            provider=provider,
+        )
+        raw: Dict[str, Any] = self._client.post(
+            f"{_PATH}/{workflow_id}/counter-workflow/generate", body=body, cast_to=dict
+        )
+        return CounterGenerationState.model_validate(raw.get("generation") or {})
+
     # ---------------------------------------------------------------------- #
     # Typed-config upload + read-back                                          #
     # ---------------------------------------------------------------------- #
@@ -555,6 +670,53 @@ class AsyncWorkflowsResource(AsyncAPIResource):
 
     async def dynamic_variables(self, workflow_id: str) -> Dict[str, Any]:
         return await self._client.get(f"{_PATH}/dynamic-variables/{workflow_id}", cast_to=dict)
+
+    async def lints(self, workflow_id: str, *, version_number: Optional[int] = None) -> WorkflowLintReport:
+        """Every advisory lint for a stored workflow, run against the whole graph. See the sync counterpart."""
+        return await self._client.get(
+            f"{_PATH}/{workflow_id}/lints",
+            cast_to=WorkflowLintReport,
+            params=_version_and_model_params(version_number),
+        )
+
+    async def realtime_compatibility(
+        self, workflow_id: str, *, version_number: Optional[int] = None, model: Optional[str] = None
+    ) -> RealtimeCompatibilityReport:
+        """Whether this workflow can run on a realtime model. See the sync counterpart."""
+        return await self._client.get(
+            f"{_PATH}/{workflow_id}/realtime-compatibility",
+            cast_to=RealtimeCompatibilityReport,
+            params=_version_and_model_params(version_number, model),
+        )
+
+    async def counter_workflow(self, workflow_id: str) -> CounterWorkflowStatus:
+        """The counter workflow generated from this one, and the newest generation's state."""
+        return await self._client.get(f"{_PATH}/{workflow_id}/counter-workflow", cast_to=CounterWorkflowStatus)
+
+    async def generate_counter_workflow(
+        self,
+        workflow_id: str,
+        *,
+        num_cases: int = 10,
+        instructions: Optional[str] = None,
+        version_number: Optional[int] = None,
+        workflow_name: Optional[str] = None,
+        new_workflow: bool = False,
+        provider: Optional[str] = None,
+    ) -> CounterGenerationState:
+        """Start generating a counter workflow; returns immediately. See the sync counterpart."""
+        body = _counter_generation_body(
+            num_cases=num_cases,
+            instructions=instructions,
+            version_number=version_number,
+            workflow_name=workflow_name,
+            new_workflow=new_workflow,
+            provider=provider,
+        )
+        raw: Dict[str, Any] = await self._client.post(
+            f"{_PATH}/{workflow_id}/counter-workflow/generate", body=body, cast_to=dict
+        )
+        return CounterGenerationState.model_validate(raw.get("generation") or {})
 
     # ---------------------------------------------------------------------- #
     # Typed-config upload + read-back                                          #

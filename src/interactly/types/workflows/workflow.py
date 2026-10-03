@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, List, Optional
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from interactly._models import BaseAPIModel
 from interactly._utils._logs import logger
@@ -29,6 +29,10 @@ class WorkflowVersion(BaseAPIModel):
     created_at: Optional[datetime] = None
     # Type is Dict when interactly_configs is not installed; upgraded to WorkflowConfig by the validator.
     config: Optional[Any] = None
+    #: Advisory authoring lints the server returned with this write. The write succeeded either way;
+    #: these are things worth fixing, such as a variable a tool needs that is never defined. Empty on
+    #: reads and on routes that do not lint.
+    warnings: List[str] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -40,9 +44,12 @@ class WorkflowVersion(BaseAPIModel):
         inner = data.get("version")
         if isinstance(inner, dict) and "version_number" not in data:
             parent_active = data.get("parent_active_version")
+            warnings = data.get("warnings")
             data = dict(inner)
             if parent_active is not None and "version_number" in data:
                 data["is_active"] = (data["version_number"] == parent_active)
+            if warnings is not None and "warnings" not in data:
+                data["warnings"] = warnings
 
         raw = data.get("config")
         if raw is None or not isinstance(raw, dict):
@@ -106,6 +113,11 @@ class Workflow(BaseAPIModel):
     # the REST path used to execute this workflow.
     execution_url: Optional[str] = None
 
+    #: Advisory authoring lints the server returned with this write. The write succeeded either way;
+    #: these are things worth fixing, such as a variable a tool needs that is never defined. Empty on
+    #: reads and on routes that do not lint.
+    warnings: List[str] = Field(default_factory=list)
+
     @model_validator(mode="before")
     @classmethod
     def _flatten_backend_shape(cls, data: Any) -> Any:
@@ -119,9 +131,12 @@ class Workflow(BaseAPIModel):
         inner = data.get("workflow")
         if isinstance(inner, dict) and "_id" not in data and "id" not in data and "workflow_config" not in data:
             execution_url = data.get("execution_url")
+            warnings = data.get("warnings")
             data = dict(inner)
             if execution_url is not None and "execution_url" not in data:
                 data["execution_url"] = execution_url
+            if warnings is not None and "warnings" not in data:
+                data["warnings"] = warnings
 
         # Extract ID
         if "_id" in data and "id" not in data:

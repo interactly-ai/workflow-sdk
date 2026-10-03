@@ -10,8 +10,11 @@ Endpoints:
     GET    /v1/tools/{id}                → get
     PATCH  /v1/tools/{id}                → update
     DELETE /v1/tools/{id}                → delete
+    POST   /v1/tools/{id}/clone          → clone
     POST   /v1/tools/{id}/execute        → execute
     POST   /v1/tools/execute             → execute_inline
+    GET    /v1/tools/codebase-functions       → codebase_functions      (staff only)
+    GET    /v1/tools/codebase-functions/{id}  → get_codebase_function   (staff only)
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._types import NOT_GIVEN, NotGivenOr
 from interactly._utils._serialise import serialise_config
 from interactly.types._config_types import ToolConfigOrDict
+from interactly.types.tools.codebase_function import CodebaseFunction, CodebaseFunctionCatalogue
 from interactly.types.tools.execute_result import ToolExecuteResult
 from interactly.types.tools.tool import Tool
 
@@ -227,6 +231,45 @@ class ToolsResource(SyncAPIResource):
         """
         self._client.delete(f"{_PATH}/{tool_id}", cast_to=type(None))
 
+    def clone(self, tool_id: str, *, name: NotGivenOr[Optional[str]] = NOT_GIVEN) -> Tool:
+        """Duplicate a saved tool within your team.
+
+        Unlike export/import, the copy is verbatim — secrets included — because both live in the same
+        team. It gets a fresh id and ``logical_id``, and is named ``"<source> (Clone)"`` unless ``name``
+        is given.
+
+        Raises:
+            PermissionDeniedError: For a plain inbuilt tool, which cannot be cloned. A configurable
+                inbuilt instance is a real document of your team's and can be.
+            NotFoundError: If no such tool exists in your team.
+        """
+        from interactly._types import is_given
+
+        # Always a body, even with no name: the server declares one, and an empty dict would be dropped
+        # before sending, which it answers with a 422. A null name means "<source> (Clone)".
+        body: Dict[str, Any] = {"name": name if is_given(name) else None}
+        return self._client.post(f"{_PATH}/{tool_id}/clone", body=body, cast_to=Tool)
+
+    def codebase_functions(self) -> CodebaseFunctionCatalogue:
+        """List the codebase functions a ``CodebaseFunctionToolConfig`` can call.
+
+        **Interactly-staff only.** For any role below super-admin the server refuses, and this raises
+        :class:`PermissionDeniedError`.
+        """
+        return self._client.get(f"{_PATH}/codebase-functions", cast_to=CodebaseFunctionCatalogue)
+
+    def get_codebase_function(self, function_id: str) -> CodebaseFunction:
+        """One codebase function's definition, including the argument schema derived from its signature.
+
+        **Interactly-staff only**: raises :class:`PermissionDeniedError` for any other role.
+
+        Raises:
+            NotFoundError: When nothing is registered under ``function_id``. The error body carries a
+                ``reason`` that separates "no such function" from "its module could not be imported".
+        """
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/codebase-functions/{function_id}", cast_to=dict)
+        return CodebaseFunction.model_validate(raw.get("function") or {})
+
     def execute(self, tool_id: str, *, args: Optional[Dict[str, Any]] = None) -> ToolExecuteResult:
         """
         Execute a saved tool with the given argument values and return its output.
@@ -359,6 +402,22 @@ class AsyncToolsResource(AsyncAPIResource):
     async def delete(self, tool_id: str) -> None:
         """Delete a tool."""
         await self._client.delete(f"{_PATH}/{tool_id}", cast_to=type(None))
+
+    async def clone(self, tool_id: str, *, name: NotGivenOr[Optional[str]] = NOT_GIVEN) -> Tool:
+        """Duplicate a saved tool within your team. See the sync counterpart."""
+        from interactly._types import is_given
+
+        body: Dict[str, Any] = {"name": name if is_given(name) else None}  # always a body; see the sync method
+        return await self._client.post(f"{_PATH}/{tool_id}/clone", body=body, cast_to=Tool)
+
+    async def codebase_functions(self) -> CodebaseFunctionCatalogue:
+        """List the codebase functions a ``CodebaseFunctionToolConfig`` can call. Interactly-staff only."""
+        return await self._client.get(f"{_PATH}/codebase-functions", cast_to=CodebaseFunctionCatalogue)
+
+    async def get_codebase_function(self, function_id: str) -> CodebaseFunction:
+        """One codebase function's definition. Interactly-staff only. See the sync counterpart."""
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/codebase-functions/{function_id}", cast_to=dict)
+        return CodebaseFunction.model_validate(raw.get("function") or {})
 
     async def execute(self, tool_id: str, *, args: Optional[Dict[str, Any]] = None) -> ToolExecuteResult:
         """Execute a saved tool with the given argument values and return its output."""
