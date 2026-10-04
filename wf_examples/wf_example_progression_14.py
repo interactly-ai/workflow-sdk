@@ -56,7 +56,7 @@ def build_assistant_workflow():
     # Primary LLM — fastest, lowest cost (good for most turns)
     openai_nano = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4_NANO,
-        max_tokens=300,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
     )
@@ -64,7 +64,7 @@ def build_assistant_workflow():
     # Secondary LLM — fallback if the primary is slow or fails
     google_flash = GoogleLLMConfig(
         model=GOOGLEModel.GEMINI_2_5_FLASH,
-        max_tokens=300,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
         thinking_budget=0,
@@ -73,7 +73,7 @@ def build_assistant_workflow():
     # Tertiary LLM — second fallback
     claude_haiku = AnthropicLLMConfig(
         model=ANTHROPICModel.CLAUDE_HAIKU_4_5_20251001,
-        max_tokens=300,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
     )

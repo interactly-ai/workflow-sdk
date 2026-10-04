@@ -53,7 +53,7 @@ def _make_fast_llm():
     """Cheap, fast LLM for intake worker and backchannel generation."""
     return OpenAILLMConfig(
         model=OPENAIModel.GPT_4_1_MINI,
-        max_tokens=150,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
     )
@@ -68,7 +68,7 @@ def _make_main_llm_group():
         llms=[
             OpenAILLMConfig(
                 model=OPENAIModel.GPT_5_4,
-                max_tokens=500,
+                max_tokens=8192,
                 temperature=0.3,
                 do_not_split_sentences=True,
             )

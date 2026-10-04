@@ -204,7 +204,7 @@ assistant_node = SayLLMNodeConfig(
     main_response_config=PromptConfig(
         prompt="You are a friendly support assistant. Answer the user's questions concisely.",
     ),
-    llms_config=OpenAILLMConfig(model=OPENAIModel.GPT_5_4_MINI, max_tokens=256),
+    llms_config=OpenAILLMConfig(model=OPENAIModel.GPT_5_4_MINI, max_tokens=8192),
 )
 
 # 2) END node — a static "say" node that emits a fixed message (no LLM call) and finishes.

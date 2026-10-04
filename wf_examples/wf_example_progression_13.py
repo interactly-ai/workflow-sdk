@@ -58,7 +58,7 @@ def build_assistant_workflow():
     # reasoning_effort controls how much reasoning GPT-5 models spend before responding.
     openai_nano = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4_NANO,
-        max_tokens=60,
+        max_tokens=8192,
         temperature=0.3,
         do_not_split_sentences=True,
         reasoning_effort="low",  # 'minimal' | 'low' | 'medium' | 'high'
@@ -69,7 +69,7 @@ def build_assistant_workflow():
     # endpoint and api_version fall back to AZURE_OPENAI_ENDPOINT / OPENAI_API_VERSION env vars.
     azure_mini = AzureOpenAILLMConfig(
         model=AZUREOPENAIModel.GPT_5_MINI,
-        max_tokens=200,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
         reasoning_effort="medium",
@@ -83,7 +83,7 @@ def build_assistant_workflow():
     # thinking_budget=0 disables the extended-thinking / reasoning chain (faster, cheaper).
     google_flash = GoogleLLMConfig(
         model=GOOGLEModel.GEMINI_2_5_FLASH,
-        max_tokens=400,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
         thinking_budget=0,  # 0 = no thinking; set > 0 for deeper reasoning
@@ -94,7 +94,7 @@ def build_assistant_workflow():
     # thinking_budget=0 disables Claude's extended thinking feature.
     claude_haiku = AnthropicLLMConfig(
         model=ANTHROPICModel.CLAUDE_HAIKU_4_5_20251001,
-        max_tokens=300,
+        max_tokens=8192,
         temperature=0.3,
         do_not_split_sentences=True,
         thinking_budget=0,
@@ -104,7 +104,7 @@ def build_assistant_workflow():
     # Inherits whatever LLM the Interactly platform is configured to use by default.
     # This is the most portable option: no provider lock-in, picks up platform upgrades.
     global_default = WorkflowDefaultLLMConfig(
-        max_tokens=300,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
     )

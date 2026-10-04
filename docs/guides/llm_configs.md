@@ -33,7 +33,7 @@ llm_config = await client.llm_configs.create(
     config=OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4_MINI,
         temperature=0.7,
-        max_tokens=2000,
+        max_tokens=8192,
     ),
     description="Fast model for structured tasks",
     is_default=False,
@@ -52,7 +52,7 @@ llm_config = await client.llm_configs.create(
         "provider": "openai",
         "model": "gpt-5.4-mini",
         "temperature": 0.7,
-        "max_tokens": 2000,
+        "max_tokens": 8192,
     },
     description="Fast model for structured tasks",
     is_default=False,
@@ -107,7 +107,7 @@ from interactly.configs import DeepSeekLLMConfig, GemmaLLMConfig, GLMLLMConfig, 
 
 XAILLMConfig(model=XAIModel.GROK_4_1_FAST_NON_REASONING)   # Grok; the default is grok-4.6
 GemmaLLMConfig()                                           # gemma-4-26b-a4b-it-maas
-GLMLLMConfig(enable_thinking=True, max_tokens=1000)        # thinking needs room — see below
+GLMLLMConfig(enable_thinking=True, max_tokens=8192)        # thinking needs room — see below
 DeepSeekLLMConfig()                                        # deepseek-v3.2-maas
 ```
 

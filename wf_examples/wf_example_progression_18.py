@@ -78,7 +78,7 @@ def build_assistant_workflow():
 
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
-        max_tokens=800,
+        max_tokens=8192,
         temperature=0.0,  # Deterministic for scoring
         do_not_split_sentences=True,
     )

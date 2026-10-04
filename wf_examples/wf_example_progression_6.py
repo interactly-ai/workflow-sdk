@@ -44,19 +44,19 @@ from _shared_constants import GLOBAL_PROMPT_PREFIX, GLOBAL_PROMPT_SUFFIX
 def build_assistant_workflow():
     openai_llm_config_nano = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4_NANO,
-        max_tokens=100,
+        max_tokens=8192,
         temperature=0.5,
         do_not_split_sentences=True,
     )
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
-        max_tokens=1000,
+        max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
     )
     worker_openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
-        max_tokens=1000,
+        max_tokens=8192,
         temperature=0.0,
         do_not_split_sentences=True,
     )
