@@ -144,7 +144,7 @@ def build_assistant_workflow():
         llms=[
             OpenAILLMConfig(
                 model=OPENAIModel.GPT_4_1_MINI,
-                max_tokens=8192,
+                max_tokens=100,  # Fillers are a few words; a small cap keeps them fast
                 temperature=0.7,
                 do_not_split_sentences=True,
             )

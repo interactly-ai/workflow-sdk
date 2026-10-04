@@ -32,8 +32,8 @@ from interactly.configs import (
 )
 
 # LLM settings the nodes will use
-fast_llm = OpenAILLMConfig(model=OPENAIModel.GPT_5_4_NANO, max_tokens=40, temperature=0.5)
-main_llm = OpenAILLMConfig(model=OPENAIModel.GPT_5_4, max_tokens=300, temperature=0.2)
+fast_llm = OpenAILLMConfig(model=OPENAIModel.GPT_5_4_NANO, max_tokens=8192, temperature=0.5)
+main_llm = OpenAILLMConfig(model=OPENAIModel.GPT_5_4, max_tokens=8192, temperature=0.2)
 
 # --- Nodes ---
 greeting = SayLLMNodeConfig(
