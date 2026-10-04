@@ -63,7 +63,7 @@ def _make_llm():
         llms=[
             OpenAILLMConfig(
                 model=OPENAIModel.GPT_4_1_MINI,
-                max_tokens=120,
+                max_tokens=8192,
                 temperature=0.2,
                 do_not_split_sentences=True,
             )

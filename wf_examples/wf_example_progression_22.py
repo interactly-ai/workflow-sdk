@@ -127,7 +127,7 @@ def build_assistant_workflow():
         llms=[
             OpenAILLMConfig(
                 model=OPENAIModel.GPT_5_4,
-                max_tokens=400,
+                max_tokens=8192,
                 temperature=0.3,
                 do_not_split_sentences=True,
             )
@@ -144,7 +144,7 @@ def build_assistant_workflow():
         llms=[
             OpenAILLMConfig(
                 model=OPENAIModel.GPT_4_1_MINI,
-                max_tokens=30,  # Filler should be very short
+                max_tokens=8192,
                 temperature=0.7,
                 do_not_split_sentences=True,
             )
@@ -199,7 +199,7 @@ def build_assistant_workflow():
         # Simple single LLM for the greeting (no backchannel needed here — it's fast)
         llms_config=OpenAILLMConfig(
             model=OPENAIModel.GPT_4_1_MINI,
-            max_tokens=100,
+            max_tokens=8192,
             temperature=0.3,
             do_not_split_sentences=True,
         ),
