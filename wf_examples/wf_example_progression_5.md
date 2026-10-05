@@ -27,7 +27,7 @@ flowchart TD
     N3["End Conversation<br/><small>Static message</small>"]
     N0 --> N1
     N1 -. "isPresent([[full_name]]) AND isPresent([[prim…" .-> N2
-    N2 --> N3
+    N2 -. "Take this path when the patient has no more…" .-> N3
     classDef start fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef glob fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
     class N0 start;
@@ -41,7 +41,7 @@ flowchart TD
 |---|---|---|
 | Greeting Node | Say LLM | start |
 | Patient Intake Worker | Worker LLM | waits for user, self-loops |
-| Intake Summary | Say LLM | waits for user |
+| Intake Summary | Say LLM | waits for user, self-loops |
 | End Conversation | Static message | — |
 
 ## Routing
@@ -50,7 +50,7 @@ flowchart TD
 |---|---|---|---|
 | Greeting Node | Patient Intake Worker | direct | — |
 | Patient Intake Worker | Intake Summary | conditional | `isPresent([[full_name]]) AND isPresent([[primary_complaint]])` |
-| Intake Summary | End Conversation | direct | — |
+| Intake Summary | End Conversation | conditional | `Take this path when the patient has no more questions, thanks you, or says goodbye…` |
 
 ## Dynamic variables
 

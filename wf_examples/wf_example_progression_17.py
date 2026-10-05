@@ -20,8 +20,9 @@ from langchain_core.messages import HumanMessage
 from interactly.configs import DirectEdgeConfig
 from interactly.configs import OpenAILLMConfig, OPENAIModel
 from interactly.configs import SayLLMNodeConfig
-from interactly.configs import SuperNodeConfig
+from interactly.configs import SuperNodeConfig, SuperNodeInterface
 from interactly.configs import PromptConfig
+from interactly.configs import ConditionConfig, GlobalNodeConfig, SayStaticMessageNodeConfig, StaticMessagesConfig
 from interactly.configs import WorkflowConfig, WorkflowConfigFullyHydrated
 from interactly.configs import WorkflowRunInput
 from interactly.runtime.events import AssistantResponseEvent, BusyWaitForUserMessageEvent
@@ -59,6 +60,8 @@ def build_intake_sub_workflow() -> WorkflowConfigFullyHydrated:
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
 
     intake_workflow_config = WorkflowConfig(
@@ -160,6 +163,8 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
 
     google_docs_md_link = (
@@ -214,6 +219,11 @@ def build_assistant_workflow():
         # super_workflow_version_number=2,
         # Illustration usage (no DB required):
         encapsulated_workflow_config=build_intake_sub_workflow(),
+        # The interface is the super node's contract with its parent: the input fields it accepts.
+        # It is required even when there are none — the server refuses to expand a super node whose
+        # interface was never declared. In production it comes from publishing the sub-workflow
+        # (``client.super_nodes.publish``); embedded here, it declares no inputs.
+        super_node_interface=SuperNodeInterface(input_fields=[]),
         # field_values: used to pass parent-workflow variables into the child workflow.
         # Keys are SuperNodeInputField.name values declared in the sub-workflow's interface.
         # Left empty in this illustration.
@@ -225,6 +235,7 @@ def build_assistant_workflow():
     The member has already provided their member ID and reason for contact.
     Acknowledge their reason and ask how you can best assist them today.
     Keep your response under 30 words.
+    When the person says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
     """
     assistant_node = SayLLMNodeConfig(
         name="Main Assistant",
@@ -233,6 +244,20 @@ def build_assistant_workflow():
         wait_for_user_message=True,
         main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + ASSISTANT_PROMPT + GLOBAL_PROMPT_SUFFIX),
         llms_config=openai_llm_config,
+    )
+
+    # A call can only hang up from a node that ends the conversation, and a voice call that cannot hang up
+    # answers every goodbye with another goodbye. Global, so the caller can leave from any point.
+    end_conversation_node = SayStaticMessageNodeConfig(
+        name="End Conversation",
+        description="Says goodbye and ends the conversation",
+        static_messages_config=StaticMessagesConfig(static_messages=["Thank you for contacting member support. Goodbye!"]),
+        global_node_config=GlobalNodeConfig(
+            is_global=True,
+            condition=ConditionConfig(
+                condition_freeform="Take this path when the person says goodbye or that they have no more questions."
+            ),
+        ),
     )
 
     ############# EDGE CONFIGS BELOW #############
@@ -259,6 +284,7 @@ def build_assistant_workflow():
             welcome_node,
             intake_super_node,
             assistant_node,
+            end_conversation_node,
         ],
         edge_configs=[
             edge_welcome_to_intake,

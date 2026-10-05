@@ -39,12 +39,16 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.5,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4_MINI,
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
 
     google_docs_md_link = (
@@ -175,6 +179,8 @@ def build_assistant_workflow():
     - Provide medical advice, diagnoses, or treatment plans.
     - Provide legal, financial, or investment advice.
     - Engage in casual chat or unrelated topics.
+
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
     - Help with bills or payments: those belong to the payment specialist, reached through the routing agent.
 
     If the caller asks for help with another topic this service supports — scheduling an appointment or making a payment — do not decline it and do not answer it yourself: hand the conversation back to the routing agent (the Router Node), which brings in the right specialist.
@@ -285,6 +291,8 @@ def build_assistant_workflow():
         - A medical professional or emergency responder.
         - A substitute for direct provider communication.
         - A conversational chatbot for general or unrelated topics.
+
+        When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
         If the caller asks for help with another topic this service supports — an insurance question or a payment — do not decline it and do not answer it yourself: hand the conversation back to the routing agent (the Router Node), which brings in the right specialist.
 
@@ -405,6 +413,8 @@ def build_assistant_workflow():
     - A conversational chatbot for non-Cigna topics.
 
     Reject unrelated requests (e.g., sports, news, general chat) politely.
+
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
     If the caller asks for help with another topic this service supports — an insurance question or scheduling an appointment — do not decline it and do not answer it yourself: hand the conversation back to the routing agent (the Router Node), which brings in the right specialist.
 

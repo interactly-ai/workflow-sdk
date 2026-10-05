@@ -47,12 +47,16 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.5,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     worker_openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
@@ -140,7 +144,8 @@ def build_assistant_workflow():
     - If yes, the severity level: none, mild, moderate, or severe
     - Their occupation
     - Any risk factors: smoking, high-risk occupation (police, firefighter, pilot, etc.), dangerous hobbies (skydiving, racing, etc.)
-    - Lifestyle health score (1-100) based on their exercise habits, diet quality, and sleep patterns
+    - Their exercise habits, diet quality, and sleep patterns. Ask about these in words; never ask them to rate
+      themselves or give a score, which is worked out for them from what they describe.
     """
 
     assessment_say_node = SayLLMNodeConfig(
@@ -193,12 +198,12 @@ def build_assistant_workflow():
                     "title": "Risk Factors",
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "List of identified risk factors (e.g., smoking, high-risk occupation, dangerous hobbies). Return as an empty list [] if no risk factors are identified.",
+                    "description": "List of the applicant's risk factors. Only three kinds count: smoking; a high-risk occupation (police, firefighter, pilot and the like); a dangerous hobby (skydiving, racing and the like). Shift work, an ordinary job, or a question about whether something counts is not a risk factor. Return an empty list [] once the applicant has said they have none.",
                 },
                 "lifestyle_score": {
                     "title": "Lifestyle Score",
                     "type": "integer",
-                    "description": "Lifestyle health score from 1-100 based on exercise, diet, sleep habits",
+                    "description": "Your own assessment, from 1 to 100, of the applicant's lifestyle health, based on what they have said about their exercise, diet and sleep. This one is not given by the applicant: fill it as soon as they have described all three, and leave it empty until then.",
                 },
             },
             "required": ["risk_factors"],
@@ -232,6 +237,7 @@ def build_assistant_workflow():
     3. Tell them that they may be eligible for {{discount_program}} discounts
 
     End with: Thank you for choosing {{company_name}} and check if they have any other questions.
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
     """
 
     standard_risk_node = SayLLMNodeConfig(
@@ -266,6 +272,7 @@ def build_assistant_workflow():
     A premium services representative will contact you within {{premium_contact_time}} to discuss your customized coverage options.
 
     Finish by asking how you may further assist them today.
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
     """
 
     premium_client_node = SayLLMNodeConfig(
@@ -293,6 +300,7 @@ def build_assistant_workflow():
     4. We'll work with you to find the best coverage options
 
     Tell them that you appreciate their patience. And finish by asking if they have any questions about the underwriting process.
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
     """
 
     elevated_risk_node = SayLLMNodeConfig(

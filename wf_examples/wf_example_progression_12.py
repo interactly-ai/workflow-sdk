@@ -17,9 +17,12 @@ import time
 
 from langchain_core.messages import HumanMessage
 
-from interactly.configs import DirectEdgeConfig
+import json
+
+from interactly.configs import CompanionEdgeConfig, ConditionalEdgeConfig, DirectEdgeConfig
+from interactly.configs import ConditionConfig
 from interactly.configs import OpenAILLMConfig, OPENAIModel
-from interactly.configs import SayLLMNodeConfig
+from interactly.configs import SayLLMNodeConfig, WorkerLLMNodeConfig
 from interactly.configs import (
     BodyContentTypeEnum,
     HttpMethodEnum,
@@ -27,6 +30,7 @@ from interactly.configs import (
     ResponseFormatEnum,
 )
 from interactly.configs import PromptConfig
+from interactly.configs import GlobalNodeConfig, SayStaticMessageNodeConfig, StaticMessagesConfig
 from interactly.configs import WorkflowConfig, WorkflowConfigFullyHydrated
 from interactly.configs import WorkflowRunInput
 from interactly.runtime.events import (
@@ -58,6 +62,14 @@ def build_assistant_workflow():
         model=OPENAIModel.GPT_5_4,
         max_tokens=8192,
         temperature=0.2,
+        do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
+    )
+    worker_openai_llm_config = OpenAILLMConfig(
+        model=OPENAIModel.GPT_5_4,
+        max_tokens=8192,
+        temperature=0.0,
         do_not_split_sentences=True,
     )
 
@@ -101,9 +113,49 @@ def build_assistant_workflow():
         description="Greets the user and asks for a drug name to look up",
         is_start=True,
         self_loop=False,
-        wait_for_user_message=True,
+        # Speaks first; the node below waits for the answer and asks again until it has a drug name.
+        wait_for_user_message=False,
         main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + GREETING_PROMPT + GLOBAL_PROMPT_SUFFIX),
         llms_config=openai_llm_config,
+    )
+
+    # The lookup needs a drug name, so a speaking node asks until there is one while a silent companion
+    # (as in Example 6) extracts it; an expression moves on once it is known, and the HTTP node below
+    # puts it into its query.
+    ASK_DRUG_PROMPT = """
+    You are finding out which medication the person wants information about. If they have not named one,
+    ask for the name in one short sentence. If they have, say you will look it up now. Do not describe the
+    drug yourself.
+    """
+    ask_drug_node = SayLLMNodeConfig(
+        name="Ask Drug Name",
+        description="Asks for the drug name until one is given",
+        self_loop=True,
+        wait_for_user_message=True,
+        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + ASK_DRUG_PROMPT),
+        llms_config=openai_llm_config,
+    )
+    drug_name_extractor_node = WorkerLLMNodeConfig(
+        name="Drug Name Extractor",
+        description="Silently extracts the drug name the person asked about",
+        self_loop=False,
+        wait_for_user_message=False,
+        main_response_config=PromptConfig(prompt=""),
+        structured_output_schema={
+            "name": "DrugLookupRequest",
+            "description": "The medication the person wants looked up. Leave it empty until they name one.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "drug_name": {
+                        "type": "string",
+                        "description": "The drug's name as the person said it, brand or generic, lower case, spelling corrected",
+                    }
+                },
+                "required": [],
+            },
+        },
+        llms_config=worker_openai_llm_config,
     )
 
     # HttpRequestNodeConfig: makes a GET request to the Open FDA drug endpoint.
@@ -133,9 +185,11 @@ def build_assistant_workflow():
             # "Authorization": "Bearer {{api_token}}"  ← dynamic var injected at runtime
         },
         # query_parameters is a JSON string; Interactly will URL-encode and append it.
-        # [[drug_name_query]] would normally be set by a preceding WorkerLLM node.
-        # For the illustration we fall back to searching for "aspirin".
-        query_parameters='{"search": "openfda.brand_name:aspirin", "limit": 1}',
+        # [[drug_name]] is what the companion above extracted. openFDA treats the space between the two
+        # clauses as OR, so a brand name ("advil") and a generic one ("ibuprofen") both find a label.
+        query_parameters=json.dumps(
+            {"search": 'openfda.brand_name:"[[drug_name]]" openfda.generic_name:"[[drug_name]]"', "limit": 1}
+        ),
         body_parameters=None,
         body_content_type=BodyContentTypeEnum.JSON,
         response_format=ResponseFormatEnum.JSON,
@@ -154,24 +208,74 @@ def build_assistant_workflow():
     - Key warnings or contraindications (one or two bullet points maximum)
 
     Use plain language. Keep the summary under 6 sentences.
-    If the JSON is empty or indicates no results, tell the user politely that no information was found.
+    If the JSON is empty or indicates no results, tell the user politely that no information was found for
+    [[drug_name]] and suggest they check the spelling.
     """
     drug_info_node = SayLLMNodeConfig(
         name="Drug Information",
         description="Reads the FDA API response from the runtime variable and explains it to the user",
-        self_loop=True,
-        wait_for_user_message=True,
+        # Speaks as soon as the lookup returns; a node that waited here would stay silent until the
+        # person spoke again.
+        self_loop=False,
+        wait_for_user_message=False,
         main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + DRUG_INFO_PROMPT + GLOBAL_PROMPT_SUFFIX),
         llms_config=openai_llm_config,
     )
 
+    FOLLOW_UP_PROMPT = """
+    You have summarised this FDA drug label for the person:
+        [[fda_drug_result]]
+
+    Answer follow-up questions about it from the label only, in two or three sentences, and suggest a
+    pharmacist or doctor for anything the label does not cover. When they say goodbye or have no more
+    questions, wish them well briefly.
+    When the person says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
+    """
+    follow_up_node = SayLLMNodeConfig(
+        name="Follow-up Questions",
+        description="Answers questions about the drug label",
+        self_loop=True,
+        wait_for_user_message=True,
+        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + FOLLOW_UP_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        llms_config=openai_llm_config,
+    )
+
+    # A call can only hang up from a node that ends the conversation, and a voice call that cannot hang up
+    # answers every goodbye with another goodbye. Global, so the caller can leave from any point.
+    end_conversation_node = SayStaticMessageNodeConfig(
+        name="End Conversation",
+        description="Says goodbye and ends the conversation",
+        static_messages_config=StaticMessagesConfig(static_messages=["Thanks for calling. For anything the label does not cover, a pharmacist can help. Goodbye!"]),
+        global_node_config=GlobalNodeConfig(
+            is_global=True,
+            condition=ConditionConfig(
+                condition_freeform="Take this path when the person says goodbye or that they have no more questions."
+            ),
+        ),
+    )
+
     ############# EDGE CONFIGS BELOW #############
 
-    edge_greeting_to_fda = DirectEdgeConfig(
-        name="Greeting → FDA Lookup",
-        description="After the user provides a drug name, run the HTTP lookup node",
+    edge_greeting_to_ask = DirectEdgeConfig(
+        name="Greeting → Ask Drug Name",
+        description="After the greeting, wait for the drug name",
         source_node_logical_id=greeting_node.logical_id,
+        destination_node_logical_id=ask_drug_node.logical_id,
+    )
+
+    edge_ask_companion = CompanionEdgeConfig(
+        name="Ask Drug Name companion",
+        description="Extracts the drug name from every caller turn",
+        source_node_logical_id=ask_drug_node.logical_id,
+        destination_node_logical_id=drug_name_extractor_node.logical_id,
+    )
+
+    edge_ask_to_fda = ConditionalEdgeConfig(
+        name="Ask Drug Name → FDA Lookup",
+        description="Once a drug name is known, run the HTTP lookup node",
+        source_node_logical_id=ask_drug_node.logical_id,
         destination_node_logical_id=fda_lookup_node.logical_id,
+        condition=ConditionConfig(condition_expression="isNonEmpty([[drug_name]])"),
     )
 
     edge_fda_to_drug_info = DirectEdgeConfig(
@@ -181,18 +285,32 @@ def build_assistant_workflow():
         destination_node_logical_id=drug_info_node.logical_id,
     )
 
+    edge_drug_info_to_follow_up = DirectEdgeConfig(
+        name="Drug Information → Follow-up",
+        description="After the summary, answer any follow-up questions",
+        source_node_logical_id=drug_info_node.logical_id,
+        destination_node_logical_id=follow_up_node.logical_id,
+    )
+
     ############# WORKFLOW HYDRATION BELOW #############
 
     workflow = WorkflowConfigFullyHydrated(
         workflow_config=workflow_config,
         node_configs=[
             greeting_node,
+            ask_drug_node,
+            drug_name_extractor_node,
             fda_lookup_node,
             drug_info_node,
+            follow_up_node,
+            end_conversation_node,
         ],
         edge_configs=[
-            edge_greeting_to_fda,
+            edge_greeting_to_ask,
+            edge_ask_companion,
+            edge_ask_to_fda,
             edge_fda_to_drug_info,
+            edge_drug_info_to_follow_up,
         ],
     )
 
