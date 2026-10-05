@@ -39,12 +39,16 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.5,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4_MINI,
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
 
     google_docs_md_link = (
@@ -140,6 +144,8 @@ def build_assistant_workflow():
     - Provide medical advice, diagnoses, or treatment plans.
     - Provide legal, financial, or investment advice.
     - Engage in casual chat or unrelated topics.
+
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
     If asked for account-specific details (e.g., “What's my deductible?”), reply:
     > “I don't have access to your account information. Please log in to your Cigna member portal or contact Cigna Member Services at the number on your ID card for personalized assistance.”
@@ -247,6 +253,8 @@ def build_assistant_workflow():
         - A medical professional or emergency responder.
         - A substitute for direct provider communication.
         - A conversational chatbot for general or unrelated topics.
+
+        When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
         ==================================================
         2. SAFETY & EMERGENCY GUARDRAILS
@@ -365,6 +373,8 @@ def build_assistant_workflow():
     - A conversational chatbot for non-Cigna topics.
 
     Reject unrelated requests (e.g., sports, news, general chat) politely.
+
+    When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
     ==================================================
     2. PRIVACY, SECURITY & COMPLIANCE

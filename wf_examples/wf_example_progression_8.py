@@ -46,12 +46,16 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.5,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
 
     google_docs_md_link = (
@@ -351,6 +355,7 @@ def estimate_annual_costs(monthly_premium: float, expected_medical_expenses: flo
     - If information is missing (e.g., age, coverage amount), politely ask for it
     - These are estimates only - remind users to contact an agent for final quotes
     - After answering, ask if they'd like to explore other scenarios
+    - When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
     ==================================================
     EXAMPLE INTERACTIONS

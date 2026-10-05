@@ -17,11 +17,13 @@ import time
 
 from langchain_core.messages import HumanMessage
 
-from interactly.configs import DirectEdgeConfig
+from interactly.configs import CompanionEdgeConfig, ConditionalEdgeConfig, DirectEdgeConfig
+from interactly.configs import ConditionConfig
 from interactly.configs import OpenAILLMConfig, OPENAIModel
-from interactly.configs import SayLLMNodeConfig
+from interactly.configs import SayLLMNodeConfig, WorkerLLMNodeConfig
 from interactly.configs import ToolNodeConfig
 from interactly.configs import PromptConfig
+from interactly.configs import GlobalNodeConfig, SayStaticMessageNodeConfig, StaticMessagesConfig
 from interactly.configs import InlinePythonToolConfig
 from interactly.configs import WorkflowConfig, WorkflowConfigFullyHydrated
 from interactly.configs import WorkflowRunInput
@@ -51,6 +53,14 @@ def build_assistant_workflow():
         model=OPENAIModel.GPT_5_4,
         max_tokens=8192,
         temperature=0.2,
+        do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
+    )
+    worker_openai_llm_config = OpenAILLMConfig(
+        model=OPENAIModel.GPT_5_4,
+        max_tokens=8192,
+        temperature=0.0,
         do_not_split_sentences=True,
     )
 
@@ -94,9 +104,59 @@ def build_assistant_workflow():
         description="Greets the user and collects three inputs needed for risk assessment",
         is_start=True,
         self_loop=False,
-        wait_for_user_message=True,
+        # Speaks first, then hands the answer to the node below, which keeps asking until all three are known.
+        wait_for_user_message=False,
         main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + GREETING_PROMPT + GLOBAL_PROMPT_SUFFIX),
         llms_config=openai_llm_config,
+    )
+
+    # The tool needs three typed inputs. A speaking node asks for whichever is still missing while a
+    # silent companion (as in Example 6) extracts them; an expression moves on once all three are known.
+    COLLECT_PROMPT = """
+    You are collecting three details for a health-risk calculation: the person's age in years, whether they
+    smoke, and how many days a week they exercise (0 to 7). Acknowledge what they have said in a few words and
+    ask only for what is still missing, in one short sentence. Do not estimate their risk yourself.
+    """
+    collect_node = SayLLMNodeConfig(
+        name="Collect Details",
+        description="Asks for whichever of the three inputs is still missing",
+        self_loop=True,
+        wait_for_user_message=True,
+        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + COLLECT_PROMPT),
+        llms_config=openai_llm_config,
+    )
+    HEALTH_DETAILS_SCHEMA = {
+        "name": "HealthRiskInputs",
+        # "Empty" alone was once read as 0 and false on a bare "Hello, I'm calling": the route out of the
+        # collector tests only that each field is present, so the calculator ran on a score of zeros.
+        "description": (
+            "Extract the three health-risk inputs from what the person has said. Leave a field out (null) until "
+            "they have said it; never fill one with 0 or false as a placeholder."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "age": {"type": "integer", "description": "The person's age in years, as they said it; null until said"},
+                "smokes": {
+                    "type": "boolean",
+                    "description": "Whether the person smokes, as they said it; null until said",
+                },
+                "exercise_days_per_week": {
+                    "type": "integer",
+                    "description": "How many days a week the person exercises, 0 to 7, as they said it; null until said",
+                },
+            },
+            "required": [],
+        },
+    }
+    details_extractor_node = WorkerLLMNodeConfig(
+        name="Health Details Extractor",
+        description="Silently extracts age, smoking and exercise from the conversation",
+        self_loop=False,
+        wait_for_user_message=False,
+        main_response_config=PromptConfig(prompt=""),
+        structured_output_schema=HEALTH_DETAILS_SCHEMA,
+        llms_config=worker_openai_llm_config,
     )
 
     # ToolNodeConfig: runs unconditionally when the workflow reaches this node.
@@ -107,10 +167,15 @@ def build_assistant_workflow():
         name="Health Risk Calculator",
         description="Computes a simple health-risk score from conversation context. "
         "Runs unconditionally — no LLM decision required.",
-        # tool_arguments can use [[runtime_var]] or {{dynamic_var}} values. Here we
-        # intentionally leave it empty so the tool reads from conversation history via
-        # its own prompt (this is for illustration; real use would pass extracted values).
-        tool_arguments={},
+        # tool_arguments can use [[runtime_var]] or {{dynamic_var}} values; here they are the three
+        # fields the companion extracted. preserve_argument_types passes a value that is exactly one
+        # placeholder with its real type (an integer, a boolean) rather than as text.
+        tool_arguments={
+            "age": "[[age]]",
+            "smokes": "[[smokes]]",
+            "exercise_days_per_week": "[[exercise_days_per_week]]",
+        },
+        preserve_argument_types=True,
         result_runtime_variable_name="health_risk_result",
         tool_config=InlinePythonToolConfig(
             name="compute_health_risk_score",
@@ -183,19 +248,71 @@ def compute_health_risk_score(age: float, smokes: bool, exercise_days_per_week: 
     risk_explanation_node = SayLLMNodeConfig(
         name="Risk Explanation",
         description="Reads the computed risk score from the runtime variable and explains it to the user",
-        self_loop=True,
-        wait_for_user_message=True,
+        # Speaks as soon as the tool has run: a node that waited here would say nothing until the
+        # person spoke again, right after they had given everything asked of them.
+        self_loop=False,
+        wait_for_user_message=False,
         main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + RISK_EXPLANATION_PROMPT + GLOBAL_PROMPT_SUFFIX),
         llms_config=openai_llm_config,
     )
 
+    FOLLOW_UP_PROMPT = """
+    You have explained this health-risk result to the person:
+        [[health_risk_result]]
+
+    Answer any follow-up questions about it in plain language, in two or three sentences, without
+    diagnosing anything. When they say goodbye or that they have no more questions, wish them well briefly.
+    When the person says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
+    """
+    follow_up_node = SayLLMNodeConfig(
+        name="Follow-up Questions",
+        description="Answers questions about the risk result",
+        self_loop=True,
+        wait_for_user_message=True,
+        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + FOLLOW_UP_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        llms_config=openai_llm_config,
+    )
+
+    # A call can only hang up from a node that ends the conversation, and a voice call that cannot hang up
+    # answers every goodbye with another goodbye. Global, so the caller can leave from any point.
+    end_conversation_node = SayStaticMessageNodeConfig(
+        name="End Conversation",
+        description="Says goodbye and ends the conversation",
+        static_messages_config=StaticMessagesConfig(static_messages=["Thank you for checking in on your health. Take care!"]),
+        global_node_config=GlobalNodeConfig(
+            is_global=True,
+            condition=ConditionConfig(
+                condition_freeform="Take this path when the person says goodbye or that they have no more questions."
+            ),
+        ),
+    )
+
     ############# EDGE CONFIGS BELOW #############
 
-    edge_greeting_to_tool = DirectEdgeConfig(
-        name="Greeting → Risk Calculator",
-        description="After collecting user inputs, immediately run the risk-scoring tool",
+    edge_greeting_to_collect = DirectEdgeConfig(
+        name="Greeting → Collect Details",
+        description="After the greeting, collect whichever inputs are still missing",
         source_node_logical_id=greeting_node.logical_id,
+        destination_node_logical_id=collect_node.logical_id,
+    )
+
+    edge_collect_companion = CompanionEdgeConfig(
+        name="Collect Details companion",
+        description="Extracts the three inputs from every caller turn",
+        source_node_logical_id=collect_node.logical_id,
+        destination_node_logical_id=details_extractor_node.logical_id,
+    )
+
+    edge_collect_to_tool = ConditionalEdgeConfig(
+        name="Collect Details → Risk Calculator",
+        description="Once all three inputs are known, run the risk-scoring tool",
+        source_node_logical_id=collect_node.logical_id,
         destination_node_logical_id=health_risk_tool_node.logical_id,
+        condition=ConditionConfig(
+            condition_expression=(
+                "isPresent([[age]]) AND isPresent([[smokes]]) AND isPresent([[exercise_days_per_week]])"
+            )
+        ),
     )
 
     edge_tool_to_explanation = DirectEdgeConfig(
@@ -205,18 +322,32 @@ def compute_health_risk_score(age: float, smokes: bool, exercise_days_per_week: 
         destination_node_logical_id=risk_explanation_node.logical_id,
     )
 
+    edge_explanation_to_follow_up = DirectEdgeConfig(
+        name="Explanation → Follow-up",
+        description="After the explanation, answer any follow-up questions",
+        source_node_logical_id=risk_explanation_node.logical_id,
+        destination_node_logical_id=follow_up_node.logical_id,
+    )
+
     ############# WORKFLOW HYDRATION BELOW #############
 
     workflow = WorkflowConfigFullyHydrated(
         workflow_config=workflow_config,
         node_configs=[
             greeting_node,
+            collect_node,
+            details_extractor_node,
             health_risk_tool_node,
             risk_explanation_node,
+            follow_up_node,
+            end_conversation_node,
         ],
         edge_configs=[
-            edge_greeting_to_tool,
+            edge_greeting_to_collect,
+            edge_collect_companion,
+            edge_collect_to_tool,
             edge_tool_to_explanation,
+            edge_explanation_to_follow_up,
         ],
     )
 

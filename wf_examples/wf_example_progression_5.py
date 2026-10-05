@@ -44,12 +44,16 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.5,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
     worker_openai_llm_config = OpenAILLMConfig(
         model=OPENAIModel.GPT_5_4,
@@ -106,7 +110,10 @@ def build_assistant_workflow():
     ############# NODE CONFIGS BELOW #############
 
     GREETING_NODE_PROMPT = """
-    Welcome the user with a friendly message in less than 15 words. Ask them to provide their basic information for a healthcare intake form.
+    Welcome the user with a friendly message in less than 15 words. Ask them, in one or two spoken sentences
+    and never as a list, for the details the intake form needs: their full name, their age, the reason for
+    their visit, whether they have health insurance, and how they prefer to be contacted (phone, email,
+    text or the patient portal). Ask for nothing else.
     Use the greeting phrase: {{greeting_phrase}}
     Mention that we are from {{organization_name}}.
     """
@@ -198,13 +205,32 @@ def build_assistant_workflow():
     summary_node = SayLLMNodeConfig(
         name="Intake Summary",
         description="Provides a summary of the collected intake information and next steps",
-        self_loop=False,
+        # Waits for the answer to its closing question; the edge below ends the call when there is nothing more.
+        self_loop=True,
         # wait_for_user_message=True: the summary node responds immediately after the worker
         # transitions to it, then waits for the user to acknowledge before moving to the end node.
         # This matches Example 4's behaviour — the user gets a chance to confirm the summary.
         wait_for_user_message=True,
         main_response_config=PromptConfig(prompt=SUMMARY_NODE_PROMPT),
         llms_config=openai_llm_config,
+    )
+
+    ASK_MISSING_PROMPT = """
+    The intake form is not complete yet. From the conversation, work out what the patient has not told you.
+    If their full name or the reason for their visit is missing, ask for that. Otherwise ask, once, for whichever
+    of their age, health insurance and preferred contact method they have not mentioned.
+    Acknowledge what they just said in a few words, then ask in one short spoken sentence. Do not summarise and
+    do not give advice.
+    """
+    ask_missing_node = SayLLMNodeConfig(
+        name="Ask for Missing Details",
+        description="Asks for what the intake form still lacks, then hands back to the worker",
+        # Speaks once and returns to the worker, which reads the answer. Without this node a caller who
+        # answered only part of the greeting's question heard nothing at all: a worker cannot speak.
+        self_loop=False,
+        wait_for_user_message=False,
+        main_response_config=PromptConfig(prompt=ASK_MISSING_PROMPT),
+        llms_config=openai_llm_config_nano,
     )
 
     end_conversation_node = SayStaticMessageNodeConfig(
@@ -232,11 +258,31 @@ def build_assistant_workflow():
         condition=ConditionConfig(condition_expression=INTAKE_TO_SUMMARY_CONDITION_EXPRESSION),
     )
 
-    summary_to_end_edge = DirectEdgeConfig(
+    intake_to_ask_missing_edge = ConditionalEdgeConfig(
+        source_node_logical_id=intake_worker_node.logical_id,
+        destination_node_logical_id=ask_missing_node.logical_id,
+        name="Ask for Missing Details",
+        description="Routes from intake worker to a question when the form is not complete.",
+        condition=ConditionConfig(condition_expression=f"NOT ({INTAKE_TO_SUMMARY_CONDITION_EXPRESSION})"),
+    )
+    ask_missing_to_intake_edge = DirectEdgeConfig(
+        source_node_logical_id=ask_missing_node.logical_id,
+        destination_node_logical_id=intake_worker_node.logical_id,
+        name="Back to Patient Intake",
+        description="After asking, the worker reads the answer.",
+    )
+
+    summary_to_end_edge = ConditionalEdgeConfig(
         source_node_logical_id=summary_node.logical_id,
         destination_node_logical_id=end_conversation_node.logical_id,
         name="End Conversation",
-        description="After providing summary, end the conversation.",
+        description="After the summary, end the conversation once the patient has nothing more to ask.",
+        condition=ConditionConfig(
+            condition_freeform=(
+                "Take this path when the patient has no more questions, thanks you, or says goodbye. "
+                "Do not say goodbye yourself; this path says it."
+            )
+        ),
     )
 
     ############# WORKFLOW ASSEMBLY BELOW #############
@@ -247,11 +293,14 @@ def build_assistant_workflow():
             greeting_node,
             intake_worker_node,
             summary_node,
+            ask_missing_node,
             end_conversation_node,
         ],
         edge_configs=[
             greeting_to_intake_edge,
             intake_to_summary_edge,
+            intake_to_ask_missing_edge,
+            ask_missing_to_intake_edge,
             summary_to_end_edge,
         ],
     )
