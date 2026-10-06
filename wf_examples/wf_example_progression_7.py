@@ -471,7 +471,7 @@ def build_assistant_workflow():
         description="Immediately redirects patients with emergency symptoms to emergency services",
         static_messages_config=StaticMessagesConfig(
             static_messages=[
-                "🚨 STOP - This sounds like a medical emergency. Please call {{emergency_number}} immediately or go to your nearest emergency room. Do not wait for an appointment. Your safety is our top priority."
+                "This sounds like a medical emergency. Please call {{emergency_number}} immediately or go to your nearest emergency room. Do not wait for an appointment. Your safety is our top priority."
             ]
         ),
         global_node_config=GlobalNodeConfig(

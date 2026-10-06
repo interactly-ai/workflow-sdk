@@ -18,7 +18,7 @@ import time
 
 from langchain_core.messages import HumanMessage
 
-from interactly.configs import ConditionConfig
+from interactly.configs import ConditionConfig, GlobalNodeConfig
 from interactly.configs import ConditionalEdgeConfig, DirectEdgeConfig
 from interactly.configs import OpenAILLMConfig, OPENAIModel
 from interactly.configs import LLMNodeRunInput, SayLLMNodeConfig, WorkerLLMNodeConfig
@@ -231,10 +231,22 @@ def build_assistant_workflow():
         llms_config=openai_llm_config_nano,
     )
 
+    # Global, so the caller can end the call from any node: a caller who will not give their name never
+    # reaches the summary, and had no way to leave until the idle timeout.
+    END_CONVERSATION_GLOBAL_EDGE_CONDITION = """
+    Trigger this to route to the conversation-ending agent when the patient says goodbye, says they have
+    nothing more to ask, or says they want to stop (for example, they will not give their name and want to
+    leave). A plain "no" that answers one of your questions is not a goodbye.
+    Do not say goodbye yourself; this path says it.
+    """
+
     end_conversation_node = SayStaticMessageNodeConfig(
         name="End Conversation",
         description="Ends the conversation with a thank you message",
         static_messages_config=StaticMessagesConfig(static_messages=["{{farewell_message}}"]),
+        global_node_config=GlobalNodeConfig(
+            is_global=True, condition=ConditionConfig(condition_freeform=END_CONVERSATION_GLOBAL_EDGE_CONDITION)
+        ),
     )
 
     ############# EDGE CONFIGS BELOW #############
@@ -278,19 +290,6 @@ def build_assistant_workflow():
         description="After asking, the worker reads the answer.",
     )
 
-    summary_to_end_edge = ConditionalEdgeConfig(
-        source_node_logical_id=summary_node.logical_id,
-        destination_node_logical_id=end_conversation_node.logical_id,
-        name="End Conversation",
-        description="After the summary, end the conversation once the patient has nothing more to ask.",
-        condition=ConditionConfig(
-            condition_freeform=(
-                "Take this path when the patient has no more questions, thanks you, or says goodbye. "
-                "Do not say goodbye yourself; this path says it."
-            )
-        ),
-    )
-
     ############# WORKFLOW ASSEMBLY BELOW #############
 
     workflow_config_full = WorkflowConfigFullyHydrated(
@@ -307,7 +306,6 @@ def build_assistant_workflow():
             intake_to_summary_edge,
             intake_to_ask_missing_edge,
             ask_missing_to_intake_edge,
-            summary_to_end_edge,
         ],
     )
 
