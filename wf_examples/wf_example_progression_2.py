@@ -94,6 +94,10 @@ def build_assistant_workflow():
     Until you are able to ascertain the intent of the user, ask them politely for their intent and continue the conversation to gather more information.
 
     Take the appropriate path to route to the correct agent when the user's intent matches one of the available paths.
+    Route only when the user's words point to exactly one of them. A request that could belong to more than one, such as
+    help with "my account", "my plan", "my Cigna membership", "a problem" or "a question", is not yet an intent: ask
+    whether it is about an insurance or coverage question, scheduling an appointment, or a bill or payment, and route
+    once they say which.
     If the user has clearly specified their intent, but it does not match with any of the paths, just reply politely that their intent is not supported by the system.
 
     You support only the intents which are related to insurance, scheduling appointments or payments.
@@ -144,6 +148,9 @@ def build_assistant_workflow():
     - Provide medical advice, diagnoses, or treatment plans.
     - Provide legal, financial, or investment advice.
     - Engage in casual chat or unrelated topics.
+    - Help with bills or payments, or with booking appointments: those belong to the payment and scheduling teams.
+
+    If the caller asks for help with another topic this service supports — a bill or payment, or scheduling an appointment — do not answer it yourself and do not decline it as unrelated: tell them it is handled by our payment team or scheduling team, that this conversation is about insurance and coverage, and that they can start a new conversation and ask for it to be connected to the right team. Then offer to keep helping with insurance and coverage.
 
     When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
@@ -225,6 +232,7 @@ def build_assistant_workflow():
     - Follow all safety, privacy, and compliance rules.  
     - Encourage professional medical or customer service contact for personal, urgent, or complex matters.  
     - Refuse to answer questions unrelated to Cigna or healthcare.
+    - When the caller says goodbye or that they have everything they need, even inside an "okay, I'll do that", take the path that ends the conversation instead of replying.
     """
 
     insurance_chatbot_node = SayLLMNodeConfig(
@@ -312,6 +320,8 @@ def build_assistant_workflow():
         If the user asks about irrelevant topics (sports, weather, etc.):
         > “I can only help with scheduling or managing Cigna provider appointments.”
 
+        If the caller asks for help with another topic this service supports — a bill or payment, or an insurance or coverage question — do not answer it yourself and do not decline it as unrelated: tell them it is handled by our payment team or insurance team, that this conversation is about scheduling appointments, and that they can start a new conversation and ask for it to be connected to the right team. Then offer to keep helping with scheduling appointments.
+
 
         ==================================================
         6. EXAMPLES
@@ -341,6 +351,7 @@ def build_assistant_workflow():
         GLOBAL REMINDER (APPLIES TO EVERY RESPONSE of YOURS)
         ==================================================
         - Stay within Cigna provider scheduling topics.  
+        - When the caller says goodbye or that they have everything they need, even inside an "okay, I'll do that", take the path that ends the conversation instead of replying.
         - Ask before continuing if a full answer won't fit.
         - Follow all safety, privacy, and compliance rules.  
         - Never provide medical, legal, or unrelated advice.
@@ -373,6 +384,8 @@ def build_assistant_workflow():
     - A conversational chatbot for non-Cigna topics.
 
     Reject unrelated requests (e.g., sports, news, general chat) politely.
+
+    If the caller asks for help with another topic this service supports — an insurance or coverage question, or scheduling an appointment — do not answer it yourself and do not decline it as unrelated: tell them it is handled by our insurance team or scheduling team, that this conversation is about bills and payments, and that they can start a new conversation and ask for it to be connected to the right team. Then offer to keep helping with bills and payments.
 
     When the caller says goodbye, or that they have everything they need, do not say goodbye yourself: take the path that ends the conversation, which says the goodbye for you.
 
@@ -434,7 +447,7 @@ def build_assistant_workflow():
     ==================================================
     6. OUT-OF-SCOPE TOPICS
     ==================================================
-    Reject irrelevant questions (sports, entertainment, medical advice, or non-payment issues):
+    Reject irrelevant questions (sports, entertainment, medical advice, or other non-payment issues outside this service):
     > “I can only assist with Cigna billing and payment questions.”
 
     If a user insists or asks to bypass policies:
@@ -466,6 +479,7 @@ def build_assistant_workflow():
     - Ask before continuing if more detail is needed.
     - Never collect or store financial data.  
     - Follow all Cigna privacy, security, and compliance standards.
+    - When the caller says goodbye or that they have everything they need, even inside an "okay, I'll do that", take the path that ends the conversation instead of replying.
     """
 
     payment_chatbot_node = SayLLMNodeConfig(
@@ -482,6 +496,9 @@ def build_assistant_workflow():
     - "That's all for now, thank you."
     - "Goodbye!"
     - "I don't have any more questions. Thanks!"
+    - "Alright, I'll sort that out myself. That's all, bye."
+    - "Got it, I'll call them then. Thanks, that's everything."
+    A goodbye that comes inside an acknowledgement of advice still ends the conversation.
     """
 
     end_conversation_node = SayStaticMessageNodeConfig(
@@ -505,7 +522,7 @@ def build_assistant_workflow():
     )
 
     ROUTER_TO_INSURANCE_CONDITION = """
-    Take this path to route to an internal insurance agent. Take this path only when it is clear that the user wants help with insurance.
+    Take this path to route to an internal insurance agent. Take this path only when it is clear that the user wants help with insurance. Not for a request that only mentions the user's account, plan or a problem without saying which.
     """
     router_to_insurance_chatbot_edge = ConditionalEdgeConfig(
         source_node_logical_id=router_node.logical_id,
@@ -516,7 +533,7 @@ def build_assistant_workflow():
     )
 
     ROUTER_TO_SCHEDULING_CONDITION = """
-    Take this path to route to an internal scheduling agent. Take this path only when it is clear that the user wants help with scheduling appointments.
+    Take this path to route to an internal scheduling agent. Take this path only when it is clear that the user wants help with scheduling appointments. Not for a request that only mentions the user's account, plan or a problem without saying which.
     """
     router_to_scheduling_chatbot_edge = ConditionalEdgeConfig(
         source_node_logical_id=router_node.logical_id,
@@ -527,7 +544,7 @@ def build_assistant_workflow():
     )
 
     ROUTER_TO_PAYMENT_CONDITION = """
-    Take this path to route to an internal payment agent. Take this path only when it is clear that the user wants help with billing, payments or invoices.
+    Take this path to route to an internal payment agent. Take this path only when it is clear that the user wants help with billing, payments or invoices. Not for a request that only mentions the user's account, plan or a problem without saying which.
     """
     router_to_payment_chatbot_edge = ConditionalEdgeConfig(
         source_node_logical_id=router_node.logical_id,
