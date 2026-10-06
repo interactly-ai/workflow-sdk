@@ -14,7 +14,7 @@
 ## What it does
 
 This workflow builds upon Example 2 by introducing dynamic variables for runtime customization and global re-routing capabilities.
-Users can inject custom values (like greeting phrases, supported intents, farewell messages) at workflow execution time.
+Users can inject custom values (like greeting phrases and farewell messages) at workflow execution time.
 Additionally, the router agent becomes globally accessible, allowing users to switch between agents mid-conversation - for example, starting with insurance questions, then switching to scheduling without ending the conversation.
 
 ## Workflow diagram
@@ -66,11 +66,6 @@ Seeded as `default_dynamic_variables` in the workflow's `miscellaneous`; overrid
 ```json
 {
   "greeting_phrase": "Hello, Welcome to Cigna Healthcare",
-  "supported_intents": [
-    "appointments",
-    "insurance",
-    "payment"
-  ],
   "farewell_phrase_1": "Thank you for chatting with CignaCare Assistant. Have a great day!",
   "farewell_phrase_2": "We appreciate your time. Goodbye!"
 }

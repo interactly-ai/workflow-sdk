@@ -9,7 +9,7 @@
 | **Workflow name** | Example 4: Structured Output with Worker LLM |
 | **Builder** | [`wf_example_progression_4.py`](./wf_example_progression_4.py) · `build_assistant_workflow()` |
 | **Runnable notebook** | [`notebooks/wf_example_notebooks/wf_example_progression_4.ipynb`](../notebooks/wf_example_notebooks/wf_example_progression_4.ipynb) |
-| **Nodes / edges** | 4 nodes, 3 edges |
+| **Nodes / edges** | 5 nodes, 4 edges |
 
 ## What it does
 
@@ -25,13 +25,16 @@ flowchart TD
     N0(["Greeting Node ⭑<br/><small>Say LLM</small>"])
     N1["Patient Intake Worker<br/><small>Worker LLM</small>"]
     N2["Intake Summary<br/><small>Say LLM</small>"]
-    N3["End Conversation<br/><small>Static message</small>"]
+    N3["Ask for Missing Details<br/><small>Say LLM</small>"]
+    N4{{"End Conversation<br/><small>Static message</small>"}}
     N0 --> N1
     N1 -. "Trigger this to route to the internal summary…" .-> N2
-    N2 -. "Take this path when the patient has no more…" .-> N3
+    N1 -. "Trigger this when 'full_name' or 'primary_com…" .-> N3
+    N3 --> N1
     classDef start fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef glob fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
     class N0 start;
+    class N4 glob;
 ```
 
 *⭑ = start node · solid arrow = direct edge · dashed arrow = conditional edge (label = condition).*
@@ -43,7 +46,8 @@ flowchart TD
 | Greeting Node | Say LLM | start |
 | Patient Intake Worker | Worker LLM | waits for user, self-loops |
 | Intake Summary | Say LLM | waits for user, self-loops |
-| End Conversation | Static message | — |
+| Ask for Missing Details | Say LLM | asks for what the form still lacks |
+| End Conversation | Static message | global: reachable from every node when the patient says goodbye or wants to stop |
 
 ## Routing
 
@@ -51,7 +55,8 @@ flowchart TD
 |---|---|---|---|
 | Greeting Node | Patient Intake Worker | direct | — |
 | Patient Intake Worker | Intake Summary | conditional | `Trigger this to route to the internal summary agent right after you have collected suffic…` |
-| Intake Summary | End Conversation | conditional | `Take this path when the patient has no more questions, thanks you, or says goodbye…` |
+| Patient Intake Worker | Ask for Missing Details | conditional | `Trigger this when 'full_name' or 'primary_complaint' is still missing from the structured output…` |
+| Ask for Missing Details | Patient Intake Worker | direct | — |
 
 ## Dynamic variables
 

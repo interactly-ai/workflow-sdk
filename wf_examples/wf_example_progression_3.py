@@ -57,7 +57,7 @@ def build_assistant_workflow():
 
     workflow_description = f"""
     This workflow builds upon Example 2 by introducing dynamic variables for runtime customization and global re-routing capabilities. 
-    Users can inject custom values (like greeting phrases, supported intents, farewell messages) at workflow execution time. 
+    Users can inject custom values (like greeting phrases and farewell messages) at workflow execution time. 
     Additionally, the router agent becomes globally accessible, allowing users to switch between agents mid-conversation - for example, starting with insurance questions, then switching to scheduling without ending the conversation.
 
     See more details at {google_docs_md_link}
@@ -66,11 +66,6 @@ def build_assistant_workflow():
 
         {{
             "greeting_phrase": "Hello, Welcome to Cigna Healthcare",
-            "supported_intents": [
-                "appointments",
-                "insurance",
-                "payment"
-            ],
             "farewell_phrase_1": "Thank you for chatting with CignaCare Assistant. Have a great day!",
             "farewell_phrase_2": "We appreciate your time. Goodbye!"
         }}
@@ -87,7 +82,6 @@ def build_assistant_workflow():
         miscellaneous={
             "default_dynamic_variables": {
                 "greeting_phrase": "Hello, Welcome to Cigna Healthcare",
-                "supported_intents": ["appointments", "insurance", "payment"],
                 "farewell_phrase_1": "Thank you for chatting with CignaCare Assistant. Have a great day!",
                 "farewell_phrase_2": "We appreciate your time. Goodbye!",
             }
@@ -117,8 +111,6 @@ def build_assistant_workflow():
 
     Take the appropriate path to route to the correct agent when the user's intent matches one of the available paths.
     If the user has clearly specified their intent, but it does not match with any of the paths, just reply politely that their intent is not supported by the system.
-
-    You support only the following intents -> {{supported_intents}}
     """
 
     ROUTER_GLOBAL_EDGE_CONDITION = """

@@ -78,6 +78,7 @@ def build_assistant_workflow():
 
     GREETING_NODE_PROMPT = """
     Welcome the user with a friendly message in less than 15 words. Greet them politely and ask them what they would like to ask or talk about.
+    Use words only: no emoji. The greeting may be read aloud, and an emoji cannot be said.
     """
     greeting_node = SayLLMNodeConfig(
         name="Greeting Node",
@@ -119,6 +120,8 @@ def build_assistant_workflow():
     - Refuse to answer questions unrelated to Cigna or healthcare.
     - Keep your responses concise, clear, and professional.
     - Never output more than 3 sentences at a time.
+    - Answer in plain sentences only: no lists, bullet points, numbering, headings, bold text or emoji. Your
+      replies are read aloud, and none of those can be said.
     - Always ask if the user has any other questions after answering.
     """
 
