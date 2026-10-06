@@ -206,7 +206,9 @@ def build_assistant_workflow():
                     "description": "Your own assessment, from 1 to 100, of the applicant's lifestyle health, based on what they have said about their exercise, diet and sleep. This one is not given by the applicant: fill it as soon as they have described all three, and leave it empty until then.",
                 },
             },
-            "required": ["risk_factors"],
+            # Nothing is required: on a bare "Hello" there is nothing to extract, and a required field
+            # made the companion's empty answer a failed run. The edges wait on isPresent(...) anyway.
+            "required": [],
         },
     }
 
