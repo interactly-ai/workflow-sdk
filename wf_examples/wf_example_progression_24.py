@@ -156,6 +156,19 @@ def build_assistant_workflow():
         output_runtime_variable_name="lab_result_ready",
     )
 
+    # Speaks first. The chat node waits for the caller before it says anything, so without this a voice
+    # call opened in silence and a caller who waited politely heard nothing until the result itself.
+    opening_node = SayStaticMessageNodeConfig(
+        name="Opening",
+        description="Tells the caller the lab is being checked, then hands over to the chat node.",
+        static_messages_config=StaticMessagesConfig(
+            static_messages=[
+                "Thanks for calling about your lab results. I'm checking with the lab now; it takes a few "
+                "seconds, and I'm happy to chat while we wait."
+            ]
+        ),
+    )
+
     CHAT_PROMPT = """
     You are keeping a patient company on the phone while their lab results are still
     being fetched. Reply in ONE short sentence. Answer whatever they ask, be warm, and
@@ -185,6 +198,10 @@ def build_assistant_workflow():
         # this is it, and it is not flagged as a companion.
         DirectEdgeConfig(
             source_node_logical_id=entry_node.logical_id,
+            destination_node_logical_id=opening_node.logical_id,
+        ),
+        DirectEdgeConfig(
+            source_node_logical_id=opening_node.logical_id,
             destination_node_logical_id=chat_node.logical_id,
         ),
         # The COMPANION fork. `thread_id` is what makes the thread addressable: without it
@@ -228,7 +245,7 @@ def build_assistant_workflow():
 
     return WorkflowConfigFullyHydrated(
         workflow_config=workflow_config,
-        node_configs=[entry_node, poll_node, landed_node, chat_node, deliver_node],
+        node_configs=[entry_node, opening_node, poll_node, landed_node, chat_node, deliver_node],
         edge_configs=edges,
     )
 

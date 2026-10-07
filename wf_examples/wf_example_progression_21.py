@@ -20,7 +20,7 @@ from langchain_core.messages import HumanMessage
 from interactly.configs import ConditionConfig
 from interactly.configs import ConditionalEdgeConfig
 from interactly.configs import OpenAILLMConfig, OPENAIModel
-from interactly.configs import SayLLMNodeConfig
+from interactly.configs import SayLLMNodeConfig, SayStaticMessageNodeConfig
 from interactly.configs import GlobalConditionEdgeEvaluationMethod, GlobalNodeConfig
 from interactly.configs import DynamicMessagesConfig, PromptConfig, StaticMessagesConfig
 from interactly.configs import GlobalConditionEdgeEvaluationMethod as WorkflowGlobalMethod
@@ -75,6 +75,8 @@ def build_assistant_workflow():
         max_tokens=8192,
         temperature=0.2,
         do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
     )
 
     google_docs_md_link = (
@@ -102,6 +104,12 @@ def build_assistant_workflow():
 
     ############# NODE CONFIGS BELOW #############
 
+    # Every reply is read aloud on a voice call, so each say node ends with the same reminder.
+    SPOKEN_REPLY_RULES = """
+    Reply in plain spoken sentences: no lists, bullet points, numbering, headings, bold text or emoji, and
+    never more than 3 sentences at a time.
+    """
+
     GREETING_PROMPT = """
     Greet the member warmly. Ask why they are calling today.
     """
@@ -111,33 +119,47 @@ def build_assistant_workflow():
         is_start=True,
         self_loop=False,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + GREETING_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + GREETING_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
         llms_config=openai_llm_config,
     )
 
     BILLING_PROMPT = """
     You are the Cigna billing specialist. Help the member with billing inquiries.
-    Answer their question and ask if there is anything else.
+    Answer their question; once you have answered it, ask if there is anything else.
+    If the member asks about a claim, a claim's status or a reimbursement, do not answer it yourself and do
+    not decline it as unrelated: tell them claims are handled by our claims team, that this conversation is
+    about billing, and that they can start a new call and ask for claims. Then offer to keep helping with
+    billing.
     """
     billing_node = SayLLMNodeConfig(
         name="Billing Support",
         description="Handles billing questions",
         self_loop=True,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + BILLING_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + BILLING_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
         llms_config=openai_llm_config,
     )
 
     CLAIMS_PROMPT = """
     You are the Cigna claims specialist. Help the member with claims status and submissions.
-    Answer their question and ask if there is anything else.
+    Answer their question; once you have answered it, ask if there is anything else.
+    If the member asks about a bill, a payment, a premium or a deductible, do not answer it yourself and do
+    not decline it as unrelated: tell them billing is handled by our billing team, that this conversation is
+    about claims, and that they can start a new call and ask for billing. Then offer to keep helping with
+    claims.
     """
     claims_node = SayLLMNodeConfig(
         name="Claims Support",
         description="Handles claims questions",
         self_loop=True,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + CLAIMS_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + CLAIMS_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
         llms_config=openai_llm_config,
     )
 
@@ -155,7 +177,9 @@ def build_assistant_workflow():
         description="Handles medical emergency mentions — reachable from any node",
         self_loop=False,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + EMERGENCY_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + EMERGENCY_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
         llms_config=openai_llm_config,
         # ── GlobalNodeConfig ───────────────────────────────────────────────────
         global_node_config=GlobalNodeConfig(
@@ -210,9 +234,13 @@ def build_assistant_workflow():
             # The reverse_conditional_edge fires if its condition is met while this
             # global node is running.
             reverse_conditional_edge=ConditionConfig(
+                # Only once the member says it is over. A member who asks about something else while
+                # still in pain, or while waiting for an ambulance, is still in the emergency: taken
+                # then, the call went back to billing questions with help not yet there.
                 condition_freeform=(
-                    "The emergency situation has been addressed and the member is calm again, "
-                    "indicating they would like to continue with the original inquiry."
+                    "The member says the emergency is over (the pain has passed, they are fine now) and asks "
+                    "to continue with their original inquiry. Not while they still describe symptoms or say "
+                    "help is on its way, even if they also ask about something else."
                 ),
                 # dynamic_messages_config: instead of a static message, provide a prompt
                 # that guides the LLM to generate a contextual bridging message.
@@ -223,6 +251,28 @@ def build_assistant_workflow():
                         "acknowledges the member is okay and returns to their original inquiry. "
                         "Be warm but concise."
                     )
+                ),
+            ),
+        ),
+    )
+
+    # ── GLOBAL NODE: End Conversation ─────────────────────────────────────────
+    # Neither specialist has a route out, so without this a member who said goodbye stayed on the line
+    # until the idle timeout. Global, like the Emergency node: reachable from any node.
+    end_conversation_node = SayStaticMessageNodeConfig(
+        name="End Conversation",
+        description="Says goodbye and ends the call — reachable from any node",
+        static_messages_config=StaticMessagesConfig(
+            static_messages=["Thank you for calling Cigna. Take care, and goodbye."]
+        ),
+        global_node_config=GlobalNodeConfig(
+            is_global=True,
+            condition=ConditionConfig(
+                condition_freeform=(
+                    "The member says goodbye, says they have nothing more to ask, or says they want to stop; "
+                    "this includes a member already given emergency guidance who says help has arrived and "
+                    "they have to go. Not when they describe a new medical emergency, even if they also say "
+                    "they have to go: that is the emergency path. Do not say goodbye yourself; this path says it."
                 ),
             ),
         ),
@@ -302,6 +352,7 @@ def build_assistant_workflow():
             billing_node,
             claims_node,
             emergency_node,  # Global node — no explicit source edge needed
+            end_conversation_node,  # Global node too
         ],
         edge_configs=[
             edge_greeting_to_billing,
