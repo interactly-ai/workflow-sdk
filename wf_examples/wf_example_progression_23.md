@@ -9,7 +9,7 @@
 | **Workflow name** | Example 23: Synthesis Capstone — Cigna Member Services |
 | **Builder** | [`wf_example_progression_23.py`](./wf_example_progression_23.py) · `build_assistant_workflow()` |
 | **Runnable notebook** | [`notebooks/wf_example_notebooks/wf_example_progression_23.ipynb`](../notebooks/wf_example_notebooks/wf_example_progression_23.ipynb) |
-| **Nodes / edges** | 6 nodes, 5 edges |
+| **Nodes / edges** | 6 nodes, 6 edges |
 
 ## What it does
 
@@ -34,6 +34,7 @@ flowchart TD
     N2 -. "The member is asking specifically about a bil…" .-> N3
     N2 -. "The member has indicated they are done and ar…" .-> N4
     N3 -. "The billing question is resolved and the memb…" .-> N2
+    N3 -. "The member has indicated they are done and ar…" .-> N4
     classDef start fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef glob fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
     class N0 start;
@@ -62,6 +63,7 @@ flowchart TD
 | Main Assistant | Billing Specialist | conditional | `The member is asking specifically about a bill, invoice, payment, premium charge, or EOB …` |
 | Main Assistant | Farewell | conditional | `The member has indicated they are done and are ending the call — e.g. 'goodbye', 'that's …` |
 | Billing Specialist | Main Assistant | conditional | `The billing question is resolved and the member wants to ask something else.` |
+| Billing Specialist | Farewell | conditional | `The member has indicated they are done and are ending the call — e.g. 'goodbye', 'that's …` |
 
 ## Dynamic variables
 

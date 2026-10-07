@@ -9,7 +9,7 @@
 | **Workflow name** | Example 21: Advanced Condition Features |
 | **Builder** | [`wf_example_progression_21.py`](./wf_example_progression_21.py) · `build_assistant_workflow()` |
 | **Runnable notebook** | [`notebooks/wf_example_notebooks/wf_example_progression_21.ipynb`](../notebooks/wf_example_notebooks/wf_example_progression_21.ipynb) |
-| **Nodes / edges** | 4 nodes, 2 edges |
+| **Nodes / edges** | 5 nodes, 2 edges |
 
 ## What it does
 
@@ -28,12 +28,13 @@ flowchart TD
     N1["Billing Support<br/><small>Say LLM</small>"]
     N2["Claims Support<br/><small>Say LLM</small>"]
     N3{{"Emergency Node<br/><small>Say LLM</small>"}}
+    N4{{"End Conversation<br/><small>Say Static</small>"}}
     N0 -. "The member mentioned billing, invoices, payme…" .-> N1
     N0 -. "The member mentioned a claim, claim status, c…" .-> N2
     classDef start fill:#dcfce7,stroke:#16a34a,color:#14532d;
     classDef glob fill:#ffedd5,stroke:#ea580c,color:#7c2d12;
     class N0 start;
-    class N3 glob;
+    class N3,N4 glob;
 ```
 
 *⭑ = start node · solid arrow = direct edge · dashed arrow = conditional edge (label = condition) · hexagon = **global node** (reachable from any node in the workflow).*
@@ -46,6 +47,7 @@ flowchart TD
 | Billing Support | Say LLM | waits for user, self-loops |
 | Claims Support | Say LLM | waits for user, self-loops |
 | Emergency Node | Say LLM | global, waits for user |
+| End Conversation | Say Static | global; says goodbye and ends the call |
 
 ## Routing
 

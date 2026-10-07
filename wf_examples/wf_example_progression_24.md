@@ -9,7 +9,7 @@
 | **Workflow name** | Example 24: Companion thread + evaluate-while-waiting |
 | **Builder** | [`wf_example_progression_24.py`](./wf_example_progression_24.py) · `build_assistant_workflow()` |
 | **Runnable notebook** | [`notebooks/wf_example_notebooks/wf_example_progression_24.ipynb`](../notebooks/wf_example_notebooks/wf_example_progression_24.ipynb) · concepts in [`notebooks/19_companion_threads.ipynb`](../notebooks/19_companion_threads.ipynb) |
-| **Nodes / edges** | 5 nodes, 4 edges |
+| **Nodes / edges** | 6 nodes, 5 edges |
 
 ## What it does
 
@@ -17,7 +17,7 @@ A caller has had blood work done and rings in to ask whether the results are bac
 making them hold in silence:
 
 1. a **companion thread** polls the lab system in the background, bounded so it cannot run forever;
-2. the **main thread** carries on the conversation and parks waiting for the caller;
+2. the **main thread** says it is checking, then carries on the conversation and parks waiting for the caller;
 3. when the poll succeeds, an **evaluate-while-waiting** edge fires and the workflow speaks the
    result — **with no user message**.
 
@@ -31,11 +31,13 @@ conversation on its own. That is the gap this closes.
 ```mermaid
 flowchart TD
     N0(["Entry ⭑<br/><small>No-op</small>"])
+    N5["Opening<br/><small>Say Static</small>"]
     N1["Poll Lab Results<br/><small>Tool · self-loop</small>"]
     N2["Result Landed<br/><small>No-op</small>"]
     N3["Chat While Waiting<br/><small>Say LLM · waits</small>"]
     N4["Deliver Result<br/><small>Say Static</small>"]
-    N0 --> N3
+    N0 --> N5
+    N5 --> N3
     N0 -. "companion thread 'labpoll'" .-> N1
     N1 -. "[[lab_attempts]] >= 3" .-> N2
     N3 == "waiting: [[thread_labpoll.lab_attempts]] >= 3" ==> N4
@@ -52,6 +54,7 @@ flowchart TD
 | Node | Type | Role |
 |---|---|---|
 | Entry | No-op | start; exists only to fan out |
+| Opening | Say Static | main thread; says the lab is being checked |
 | Poll Lab Results | Tool (inline Python) | companion thread `labpoll`; self-loops on a bound |
 | Result Landed | No-op | companion's terminal node |
 | Chat While Waiting | Say LLM | main thread; waits for user |
@@ -61,7 +64,8 @@ flowchart TD
 
 | From | To | Edge | Condition |
 |---|---|---|---|
-| Entry | Chat While Waiting | direct (**main**) | — |
+| Entry | Opening | direct (**main**) | — |
+| Opening | Chat While Waiting | direct | — |
 | Entry | Poll Lab Results | direct (**companion** `labpoll`) | — |
 | Poll Lab Results | Result Landed | conditional | `[[lab_attempts]] >= 3` |
 | Chat While Waiting | Deliver Result | conditional + **evaluate-while-waiting** | `[[thread_labpoll.lab_attempts]] >= 3` |
@@ -187,6 +191,7 @@ cuts off mid-turn here.
 
 ```
 Created workflow 6a7670acc4436e6511a9631d
+🤖 Assistant: Thanks for calling about your lab results. I'm checking with the lab now; it takes a few seconds, and I'm happy to chat while we wait.
    … still running in the background: ['0_companion_labpoll']
 👤 Caller: Sure, I'll hold.
    ⏳ [labpoll] one poll step finished

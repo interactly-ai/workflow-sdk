@@ -59,6 +59,25 @@ def _make_fast_llm():
     )
 
 
+def _make_say_llm():
+    """The same fast model for the nodes that speak on their own (greeting, farewell, escalation)."""
+    return OpenAILLMConfig(
+        model=OPENAIModel.GPT_4_1_MINI,
+        max_tokens=8192,
+        temperature=0.2,
+        do_not_split_sentences=True,
+        # Say nodes stream, so a voice call speaks the first sentence while the rest is written.
+        streaming=True,
+    )
+
+
+# Every reply is read aloud on a voice call, so each say node ends with the same reminder.
+SPOKEN_REPLY_RULES = """
+Reply in plain spoken sentences: no lists, bullet points, numbering, headings, bold text or emoji, and
+never more than 3 sentences at a time.
+"""
+
+
 def _make_main_llm_group():
     """
     Primary LLM group for the main assistant.
@@ -240,8 +259,10 @@ def build_assistant_workflow():
         is_start=False,
         self_loop=False,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + GREETING_PROMPT + GLOBAL_PROMPT_SUFFIX),
-        llms_config=_make_fast_llm(),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + GREETING_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
+        llms_config=_make_say_llm(),
     )
 
     # ── 3. Main Assistant Node (Ex 15, 22) ────────────────────────────────────
@@ -263,7 +284,9 @@ def build_assistant_workflow():
         description="Primary conversational AI with backchannel and tool support",
         self_loop=True,  # Default: stay in this node after each turn
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + MAIN_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + MAIN_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
         # LLMGroupWithBackchannelConfig: voice-optimized with static filler (Ex 22)
         llms_config=_make_backchannel_config(),
         # LLM-invoked tools: ExternalAPIToolConfig + KnowledgeBaseToolConfig (Ex 15)
@@ -281,7 +304,9 @@ def build_assistant_workflow():
         description="Dedicated billing support node",
         self_loop=True,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + BILLING_PROMPT + GLOBAL_PROMPT_SUFFIX),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + BILLING_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
         llms_config=_make_main_llm_group(),
     )
 
@@ -295,8 +320,10 @@ def build_assistant_workflow():
         description="Closing node — ends the conversation gracefully",
         self_loop=False,
         wait_for_user_message=False,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + FAREWELL_PROMPT + GLOBAL_PROMPT_SUFFIX),
-        llms_config=_make_fast_llm(),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + FAREWELL_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
+        llms_config=_make_say_llm(),
     )
 
     # ── 6. Escalation Node (GLOBAL) (Ex 21) ──────────────────────────────────
@@ -311,8 +338,10 @@ def build_assistant_workflow():
         description="Human escalation — global node reachable from any point in the conversation",
         self_loop=False,
         wait_for_user_message=True,
-        main_response_config=PromptConfig(prompt=GLOBAL_PROMPT_PREFIX + ESCALATION_PROMPT + GLOBAL_PROMPT_SUFFIX),
-        llms_config=_make_fast_llm(),
+        main_response_config=PromptConfig(
+            prompt=GLOBAL_PROMPT_PREFIX + ESCALATION_PROMPT + SPOKEN_REPLY_RULES + GLOBAL_PROMPT_SUFFIX
+        ),
+        llms_config=_make_say_llm(),
         global_node_config=GlobalNodeConfig(
             is_global=True,  # Reachable from ANY node
             # Condition that triggers navigation to this global node (Ex 21)
@@ -408,21 +437,27 @@ def build_assistant_workflow():
         ),
     )
 
-    # Main Assistant → Farewell (conditional — member is done)
+    # Main Assistant → Farewell, and Billing → Farewell (conditional — member is done). No message on
+    # the edge: the Farewell node says the goodbye, and a line here as well made the caller hear two.
+    MEMBER_IS_DONE = (
+        "The member has indicated they are done and are ending the call — "
+        "e.g. 'goodbye', 'that's all', 'thanks, bye', 'I'm good now'."
+    )
     edge_main_to_farewell = ConditionalEdgeConfig(
         name="Main → Farewell",
         description="End conversation when member says goodbye",
         source_node_logical_id=main_assistant_node.logical_id,
         destination_node_logical_id=farewell_node.logical_id,
-        condition=ConditionConfig(
-            condition_freeform=(
-                "The member has indicated they are done and are ending the call — "
-                "e.g. 'goodbye', 'that's all', 'thanks, bye', 'I'm good now'."
-            ),
-            static_messages_config=StaticMessagesConfig(
-                static_messages=["Thank you so much for calling Cigna — have a wonderful day!"]
-            ),
-        ),
+        condition=ConditionConfig(condition_freeform=MEMBER_IS_DONE),
+    )
+    # Without this a member who said goodbye to the billing specialist stayed on the line until the idle
+    # timeout: Billing's only way out was back to the main assistant.
+    edge_billing_to_farewell = ConditionalEdgeConfig(
+        name="Billing → Farewell",
+        description="End conversation when member says goodbye to the billing specialist",
+        source_node_logical_id=billing_node.logical_id,
+        destination_node_logical_id=farewell_node.logical_id,
+        condition=ConditionConfig(condition_freeform=MEMBER_IS_DONE),
     )
 
     # Billing → Main (conditional — billing issue resolved, return to main)
@@ -456,6 +491,7 @@ def build_assistant_workflow():
             edge_main_to_billing,
             edge_main_to_farewell,
             edge_billing_to_main,
+            edge_billing_to_farewell,
         ],
     )
 
