@@ -9,6 +9,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Runs and webhooks — pausing
+#### Added
+- **`RunStatus.WAITING`**: a durable run parked until a timer, a signal or an external job wakes it.
+- **A run's pause state on `Run`**: `durable`, `pause_summary`, `pause_requested`, `paused_by`, `pause_reason`,
+  `paused_since` and `paused_seconds_total`, all optional. The single-run GET fills all seven; a list row fills
+  `pause_requested` and `pause_summary`; each is `None` when the answer does not carry it.
+- **`WebhookAction.WORKFLOW_RUN_PAUSED` and `WORKFLOW_RUN_RESUMED`.**
+
+#### Changed
+- **Webhook actions parse forward-compatibly.** `WebhookSubscription.actions`, `WebhookEvent.action` and
+  `WebhookDeliveryAttempt.action` hold a `WebhookAction` member when the value is known and the plain string
+  otherwise. Before, a subscription or event naming an action newer than the SDK failed to parse.
+
+#### Fixed
+- **`client.runs.get(...).feedback_users` is filled.** The server sends it beside the run record, which the SDK
+  unwrapped and dropped, so it always read `{}`.
+
 ### Configs — mirror synced to `interactly-ai@8810d0c05` (2026-11-20)
 `make parity-check` reads 0 differences again; it read 257 against this upstream. Without this sync a workflow
 holding a Pause Workflow, Wait, Wait for signal, Terminate, ECS, analysis or Decisions node parsed each such node as

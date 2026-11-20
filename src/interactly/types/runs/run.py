@@ -28,6 +28,19 @@ else:
 
 __all__ = ["FeedbackUser", "Run", "RunComment", "RunEvaluationResult", "RunFeedbackResponse"]
 
+#: Keys the server computes for a run answer, beside the stored record: the single-run GET puts them on its envelope,
+#: and a list row carries ``pause_requested`` and ``pause_summary`` on the row itself.
+_COMPUTED_RUN_KEYS = (
+    "durable",
+    "pause_summary",
+    "pause_requested",
+    "paused_by",
+    "pause_reason",
+    "paused_since",
+    "paused_seconds_total",
+    "feedback_users",
+)
+
 
 class FeedbackUser(BaseAPIModel):
     """Display identity for one feedback author.
@@ -144,6 +157,26 @@ class Run(BaseAPIModel):
     #: the team roster.
     feedback_users: Dict[str, FeedbackUser] = Field(default_factory=dict)
 
+    # A durable run's pause state (scheduled, re-run and background runs). Each is None when the answer did not carry
+    # it: a list row carries only ``pause_requested`` and ``pause_summary``, and a server older than the pause fields
+    # carries none.
+
+    #: True when the run is durable, so it can be paused, resumed, cancelled or signalled.
+    durable: Optional[bool] = None
+    #: What the run waits on, as of its latest stored turn: counts by wake kind, the earliest timer, and the pauses
+    #: waiting for a person (``manual_pauses``, whose ``pause_id`` an approval names). None when it waits on nothing.
+    pause_summary: Optional[Dict[str, Any]] = None
+    #: True while a person's pause of the run stands. Resuming the run lifts it; a node waiting for approval is listed
+    #: in ``pause_summary`` instead and is approved separately.
+    pause_requested: Optional[bool] = None
+    #: User id of the person whose pause stands; their name is in ``feedback_users``.
+    paused_by: Optional[str] = None
+    pause_reason: Optional[str] = None
+    #: When the pause that stands began, in UTC.
+    paused_since: Optional[datetime] = None
+    #: How long the run has spent paused by people, in seconds, the current pause included.
+    paused_seconds_total: Optional[float] = None
+
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -178,16 +211,25 @@ class Run(BaseAPIModel):
         if "id" in data and "workflow_id" in data:
             return data
 
-        # Unwrap the outer single-object envelope from single-get responses.
+        # Unwrap the outer single-object envelope from single-get responses. The envelope itself carries what the
+        # server computes for the answer rather than stores: the pause state and the feedback authors' identities.
+        envelope: Dict[str, Any] = {}
         record = data
         if isinstance(record.get("workflow_run"), dict) and "_id" not in record and "id" not in record:
+            envelope = record
             record = record["workflow_run"]
 
         state = record.get("workflow_run")
         if not isinstance(state, dict):
             return data
 
+        computed = {
+            key: envelope[key] if key in envelope else record[key]
+            for key in _COMPUTED_RUN_KEYS
+            if key in envelope or key in record
+        }
         return {
+            **computed,
             "id": state.get("workflow_run_id") or record.get("_id") or record.get("id"),
             "workflow_id": state.get("workflow_id"),
             "status": state.get("status"),

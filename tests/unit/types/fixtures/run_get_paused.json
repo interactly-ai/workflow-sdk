@@ -1,0 +1,68 @@
+{
+  "workflow_run": {
+    "team_id": "665f1c0a2b3c4d5e6f708100",
+    "created_by": null,
+    "updated_by": null,
+    "created_at": "2026-11-20T09:04:53.576Z",
+    "updated_at": "2026-11-20T09:09:53.593Z",
+    "_id": "665f1c0a2b3c4d5e6f708200",
+    "workflow_run": {
+      "logical_id": "workflow_run_665f1c0a2b3c4d5e6f708200",
+      "workflow_id": "665f1c0a2b3c4d5e6f708300",
+      "version_number": 1,
+      "status": "paused",
+      "termination_source": null,
+      "input_output_pairs": [],
+      "run_by": "c7-capture",
+      "comments": [],
+      "llm_token_usage": null,
+      "llm_latency_stats": null,
+      "version_name": "Initial Version",
+      "workflow_config_fully_hydrated": null,
+      "workflow_run_id": null,
+      "miscellaneous": null,
+      "voice_conversation_id": null,
+      "source_workflow_run_id": null,
+      "checkpoint_source_turn_index": null,
+      "carried_over_llm_token_usage": null,
+      "carried_over_llm_latency_stats": null,
+      "is_evaluation_run": false,
+      "evaluation_run_info": null
+    },
+    "debug_info": null,
+    "schedule_id": null,
+    "is_background_run": true,
+    "is_copilot_run": false,
+    "copilot_session_id": null
+  },
+  "workflow_deleted": true,
+  "durable": true,
+  "pause_summary": {
+    "by_wake_kind": {
+      "timer": 1,
+      "manual": 1
+    },
+    "manual_pauses": [
+      {
+        "thread_id": "0_companion_approval",
+        "node_id": "approve",
+        "pause_id": "665f1c0a2b3c4d5e6f708400",
+        "reason": "Approve the refill"
+      }
+    ],
+    "earliest_wake_at": "2026-11-20T10:09:53.576508+00:00"
+  },
+  "pause_requested": true,
+  "paused_by": "665f1c0a2b3c4d5e6f708192",
+  "pause_reason": "Checking the dose",
+  "paused_since": "2026-11-20T09:09:53.590000Z",
+  "paused_seconds_total": 0.015993,
+  "feedback_users": {
+    "665f1c0a2b3c4d5e6f708192": {
+      "id": "665f1c0a2b3c4d5e6f708192",
+      "firstName": "Ada",
+      "lastName": "Lovelace",
+      "email": "ada@example.com"
+    }
+  }
+}

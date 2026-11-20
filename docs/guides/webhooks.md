@@ -329,6 +329,18 @@ The complete set of `WebhookAction` values — these are all of them, and they m
 - `WORKFLOW_CREATED` / `WORKFLOW_UPDATED` / `WORKFLOW_DELETED`: workflow lifecycle.
 - `WORKFLOW_RUN_STARTED`: a run began executing.
 - `WORKFLOW_RUN_COMPLETED`: a run reached a terminal status.
+- `WORKFLOW_RUN_PAUSED`: a durable run paused, or a Pause Workflow node is waiting for a person to approve it. The
+  payload's `metadata.pending_pauses` lists what is waiting, with the `pause_id` an approval names, and
+  `metadata.paused_by` / `metadata.reason` say who paused the run and why, when a person did. Its run status is
+  `waiting` when another branch still waits on a timer, a signal or a job.
+- `WORKFLOW_RUN_RESUMED`: a person resumed a durable run (`metadata.scope` is `run`) or approved pauses waiting for
+  them (`scope` is `pauses`, with their `pause_ids`). A timeout, or a timer, signal or job waking a pause, sends none.
+
+Older subscriptions keep the actions they were created with; add the two pause actions to subscribe to them.
+
+**An action this SDK doesn't know yet still parses.** The server adds actions over time. `WebhookSubscription.actions`,
+`WebhookEvent.action` and `WebhookDeliveryAttempt.action` hold a `WebhookAction` member for a known value and the
+plain string otherwise; both compare equal to the string, so branch on `action == "..."` or on the member.
 
 There is **no separate "run failed" action**. A run that errors still emits
 `WORKFLOW_RUN_COMPLETED`; the outcome is carried in the payload's run status, so subscribe to that one
