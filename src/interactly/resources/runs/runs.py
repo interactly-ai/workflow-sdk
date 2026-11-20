@@ -14,21 +14,37 @@ Endpoints implemented:
     WS     /v1/workflow-runs/ws                                → stream (context manager)
     POST   /v1/workflows/{id}/execute  (turn 1: new session)  → execute (run_id=None)
     POST   /v1/workflows/{id}/execute  (turn N: resume)       → execute (run_id=<echo>)
+    POST   /v1/workflow-runs/{id}/pause                        → pause
+    POST   /v1/workflow-runs/{id}/resume                       → resume
+    POST   /v1/workflow-runs/{id}/cancel                       → cancel
+    POST   /v1/workflow-runs/{id}/signals/{key}                → send_signal
+    GET    /v1/workflow-runs/{id}/pauses                       → list_pauses (cursor-paged)
+    GET    /v1/workflow-runs/{id}/signals                      → list_signals (cursor-paged)
+    GET    /v1/workflow-runs/{id}/external-jobs                → list_external_jobs (cursor-paged)
+
+Run control applies to durable runs only (scheduled runs, re-runs and background runs), and pausing, resuming,
+cancelling and signalling need Developer access or above. A 409 that carries ``Retry-After`` (the run kept changing
+while the request was recorded, so nothing was) is retried within ``max_retries``. A 503 (the server's durable store is
+unavailable) is raised at once as ``InternalServerError``: its ``Retry-After`` is long, and whether to wait is the
+caller's call.
 """
 
 from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type
+from urllib.parse import quote
 
-from interactly._pagination import AsyncPage, SyncPage
+from interactly._pagination import AsyncCursorPage, AsyncPage, SyncCursorPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._streaming import AsyncStream, Stream
 from interactly._utils._serialise import serialise_config
 from interactly.types.runs.interactive_run import InteractiveRunResponse
 from interactly.types.runs.run import Run, RunComment, RunEvaluationResult, RunFeedbackResponse
+from interactly.types.runs.run_control import RunControlResult, RunExternalJob, RunPause, RunSignal, SignalResult
 from interactly.types.runs.run_event import RunEvent
 from interactly.types.shared import WorkflowCommand
 
@@ -39,6 +55,13 @@ __all__ = ["RunsResource", "AsyncRunsResource"]
 
 _PATH = "/v1/workflow-runs"
 _WS_PATH = "/v1/workflow-runs/ws"
+
+#: Statuses a run-control request retries when the server sends ``Retry-After``: its 409 when the run kept changing
+#: while the request was recorded, which recorded nothing.
+_RETRY_WHEN_TOLD = frozenset({409})
+
+#: Rows per page of a run's pauses, signals or jobs, as the server defaults to (it takes up to 500).
+_LIST_LIMIT = 100
 
 
 class RunsResource(SyncAPIResource):
@@ -307,6 +330,160 @@ class RunsResource(SyncAPIResource):
     # ---------------------------------------------------------------------- #
     # Background work (companion threads / waiting-condition evaluation)       #
     # ---------------------------------------------------------------------- #
+
+    # ---------------------------------------------------------------------- #
+    # Run control: durable runs (scheduled, re-run and background runs)       #
+    # ---------------------------------------------------------------------- #
+
+    def pause(self, run_id: str, *, reason: Optional[str] = None) -> RunControlResult:
+        """Pause a durable run.
+
+        A waiting run is paused at once. A working one finishes the node it is running and pauses before its next,
+        so ``status`` in the answer may still be the working status. Pausing a run already paused by a person
+        answers ``outcome="already_requested"``.
+
+        Raises:
+            ConflictError: the run is not durable, or has ended.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return self._client.post(
+            f"{_PATH}/{run_id}/pause",
+            body=_set_fields(reason=reason),
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=RunControlResult,
+        )
+
+    def resume(
+        self,
+        run_id: str,
+        *,
+        note: Optional[str] = None,
+        pause_ids: Optional[List[str]] = None,
+        all_waiting_for_person: bool = False,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> RunControlResult:
+        """Resume a durable run, in one of two scopes that never mix.
+
+        * Without ``pause_ids`` or ``all_waiting_for_person``: lift a person's pause of the run. Nodes waiting for
+          approval keep waiting.
+        * With ``pause_ids``, or ``all_waiting_for_person=True``: approve those pauses waiting for a person (a Pause
+          Workflow node's), and only them. ``note`` and ``data`` reach the nodes that resume; ``made_ready`` in the
+          answer lists the pauses approved.
+
+        Raises:
+            ConflictError: nothing to resume in that scope, or the run is not durable or has ended.
+            BadRequestError: unknown pause ids, an empty ``pause_ids``, or both scopes at once.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return self._client.post(
+            f"{_PATH}/{run_id}/resume",
+            body=_set_fields(
+                note=note,
+                pause_ids=pause_ids,
+                all_waiting_for_person=all_waiting_for_person or None,
+                data=data,
+            ),
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=RunControlResult,
+        )
+
+    def cancel(self, run_id: str, *, reason: Optional[str] = None) -> RunControlResult:
+        """Cancel a durable run. It stops as soon as it can and is stored as cancelled; this can't be undone.
+
+        Raises:
+            ConflictError: the run is not durable, or has ended.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return self._client.post(
+            f"{_PATH}/{run_id}/cancel",
+            body=_set_fields(reason=reason),
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=RunControlResult,
+        )
+
+    def send_signal(
+        self,
+        run_id: str,
+        signal_key: str,
+        body: Any = None,
+        *,
+        idempotency_key: Optional[str] = None,
+    ) -> SignalResult:
+        """Post a signal to a durable run. A Wait for signal node waiting on ``signal_key`` takes it, now or when it
+        starts waiting.
+
+        ``signal_key`` is 1 to 128 letters, digits, ``_``, ``.``, ``:`` or ``-``. ``body`` is any JSON value (or
+        None for no body); the wait may check it against a schema.
+
+        Every post carries an ``Idempotency-Key``, so a retry can never deliver a signal twice: the SDK makes one per
+        call unless you pass your own. Pass your own to make a retry safe across calls too, such as after a restart:
+        a post repeating the key, with the same signal key and body, gets the first post's answer
+        (``replayed=True``).
+
+        Raises:
+            ConflictError: the key already holds a different body, or the run has too many signals, is not durable or
+                has ended.
+            UnprocessableEntityError: the body fails the waiting node's schema.
+            BadRequestError: a bad signal key or Idempotency-Key, or a body that cannot be stored.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return self._client.post(
+            f"{_PATH}/{run_id}/signals/{quote(signal_key, safe='')}",
+            body=body,
+            headers={"Idempotency-Key": idempotency_key or uuid.uuid4().hex},
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=SignalResult,
+        )
+
+    def list_pauses(
+        self,
+        run_id: str,
+        *,
+        open_only: bool = False,
+        limit: int = _LIST_LIMIT,
+        after: Optional[str] = None,
+    ) -> SyncCursorPage[RunPause]:
+        """A page of the run's pauses, oldest first. ``open_only`` keeps only those that can still be woken or
+        delivered. Use ``list_all()`` on the answer for every page."""
+        params = _list_params(limit=limit, after=after, open_only=open_only or None)
+        raw = self._client.get(f"{_PATH}/{run_id}/pauses", params=params, cast_to=dict)
+        items = [RunPause.model_validate(row) for row in raw.get("pauses") or []]
+        return SyncCursorPage(
+            items=items,
+            limit=limit,
+            next_after=items[-1].pause_id if items else None,
+            fetch_after=lambda cursor: self.list_pauses(run_id, open_only=open_only, limit=limit, after=cursor),
+        )
+
+    def list_signals(
+        self, run_id: str, *, limit: int = _LIST_LIMIT, after: Optional[str] = None
+    ) -> SyncCursorPage[RunSignal]:
+        """A page of the signals posted to the run, oldest first, without their bodies."""
+        raw = self._client.get(
+            f"{_PATH}/{run_id}/signals", params=_list_params(limit=limit, after=after), cast_to=dict
+        )
+        items = [RunSignal.model_validate(row) for row in raw.get("signals") or []]
+        return SyncCursorPage(
+            items=items,
+            limit=limit,
+            next_after=items[-1].signal_id if items else None,
+            fetch_after=lambda cursor: self.list_signals(run_id, limit=limit, after=cursor),
+        )
+
+    def list_external_jobs(
+        self, run_id: str, *, limit: int = _LIST_LIMIT, after: Optional[str] = None
+    ) -> SyncCursorPage[RunExternalJob]:
+        """A page of the external jobs (ECS tasks) the run started, oldest first."""
+        raw = self._client.get(
+            f"{_PATH}/{run_id}/external-jobs", params=_list_params(limit=limit, after=after), cast_to=dict
+        )
+        items = [RunExternalJob.model_validate(row) for row in raw.get("external_jobs") or []]
+        return SyncCursorPage(
+            items=items,
+            limit=limit,
+            next_after=items[-1].job_id if items else None,
+            fetch_after=lambda cursor: self.list_external_jobs(run_id, limit=limit, after=cursor),
+        )
 
     def pump_companions(self, workflow_id: str, run_id: str) -> InteractiveRunResponse:
         """Advance due background work for a paused interactive run, WITHOUT consuming a user turn.
@@ -668,6 +845,160 @@ class AsyncRunsResource(AsyncAPIResource):
     # Background work (companion threads / waiting-condition evaluation)       #
     # ---------------------------------------------------------------------- #
 
+    # ---------------------------------------------------------------------- #
+    # Run control: durable runs (scheduled, re-run and background runs)       #
+    # ---------------------------------------------------------------------- #
+
+    async def pause(self, run_id: str, *, reason: Optional[str] = None) -> RunControlResult:
+        """Pause a durable run.
+
+        A waiting run is paused at once. A working one finishes the node it is running and pauses before its next,
+        so ``status`` in the answer may still be the working status. Pausing a run already paused by a person
+        answers ``outcome="already_requested"``.
+
+        Raises:
+            ConflictError: the run is not durable, or has ended.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return await self._client.post(
+            f"{_PATH}/{run_id}/pause",
+            body=_set_fields(reason=reason),
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=RunControlResult,
+        )
+
+    async def resume(
+        self,
+        run_id: str,
+        *,
+        note: Optional[str] = None,
+        pause_ids: Optional[List[str]] = None,
+        all_waiting_for_person: bool = False,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> RunControlResult:
+        """Resume a durable run, in one of two scopes that never mix.
+
+        * Without ``pause_ids`` or ``all_waiting_for_person``: lift a person's pause of the run. Nodes waiting for
+          approval keep waiting.
+        * With ``pause_ids``, or ``all_waiting_for_person=True``: approve those pauses waiting for a person (a Pause
+          Workflow node's), and only them. ``note`` and ``data`` reach the nodes that resume; ``made_ready`` in the
+          answer lists the pauses approved.
+
+        Raises:
+            ConflictError: nothing to resume in that scope, or the run is not durable or has ended.
+            BadRequestError: unknown pause ids, an empty ``pause_ids``, or both scopes at once.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return await self._client.post(
+            f"{_PATH}/{run_id}/resume",
+            body=_set_fields(
+                note=note,
+                pause_ids=pause_ids,
+                all_waiting_for_person=all_waiting_for_person or None,
+                data=data,
+            ),
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=RunControlResult,
+        )
+
+    async def cancel(self, run_id: str, *, reason: Optional[str] = None) -> RunControlResult:
+        """Cancel a durable run. It stops as soon as it can and is stored as cancelled; this can't be undone.
+
+        Raises:
+            ConflictError: the run is not durable, or has ended.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return await self._client.post(
+            f"{_PATH}/{run_id}/cancel",
+            body=_set_fields(reason=reason),
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=RunControlResult,
+        )
+
+    async def send_signal(
+        self,
+        run_id: str,
+        signal_key: str,
+        body: Any = None,
+        *,
+        idempotency_key: Optional[str] = None,
+    ) -> SignalResult:
+        """Post a signal to a durable run. A Wait for signal node waiting on ``signal_key`` takes it, now or when it
+        starts waiting.
+
+        ``signal_key`` is 1 to 128 letters, digits, ``_``, ``.``, ``:`` or ``-``. ``body`` is any JSON value (or
+        None for no body); the wait may check it against a schema.
+
+        Every post carries an ``Idempotency-Key``, so a retry can never deliver a signal twice: the SDK makes one per
+        call unless you pass your own. Pass your own to make a retry safe across calls too, such as after a restart:
+        a post repeating the key, with the same signal key and body, gets the first post's answer
+        (``replayed=True``).
+
+        Raises:
+            ConflictError: the key already holds a different body, or the run has too many signals, is not durable or
+                has ended.
+            UnprocessableEntityError: the body fails the waiting node's schema.
+            BadRequestError: a bad signal key or Idempotency-Key, or a body that cannot be stored.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return await self._client.post(
+            f"{_PATH}/{run_id}/signals/{quote(signal_key, safe='')}",
+            body=body,
+            headers={"Idempotency-Key": idempotency_key or uuid.uuid4().hex},
+            retry_when_told=_RETRY_WHEN_TOLD,
+            cast_to=SignalResult,
+        )
+
+    async def list_pauses(
+        self,
+        run_id: str,
+        *,
+        open_only: bool = False,
+        limit: int = _LIST_LIMIT,
+        after: Optional[str] = None,
+    ) -> AsyncCursorPage[RunPause]:
+        """A page of the run's pauses, oldest first. ``open_only`` keeps only those that can still be woken or
+        delivered. Use ``list_all()`` on the answer for every page."""
+        params = _list_params(limit=limit, after=after, open_only=open_only or None)
+        raw = await self._client.get(f"{_PATH}/{run_id}/pauses", params=params, cast_to=dict)
+        items = [RunPause.model_validate(row) for row in raw.get("pauses") or []]
+        return AsyncCursorPage(
+            items=items,
+            limit=limit,
+            next_after=items[-1].pause_id if items else None,
+            fetch_after=lambda cursor: self.list_pauses(run_id, open_only=open_only, limit=limit, after=cursor),
+        )
+
+    async def list_signals(
+        self, run_id: str, *, limit: int = _LIST_LIMIT, after: Optional[str] = None
+    ) -> AsyncCursorPage[RunSignal]:
+        """A page of the signals posted to the run, oldest first, without their bodies."""
+        raw = await self._client.get(
+            f"{_PATH}/{run_id}/signals", params=_list_params(limit=limit, after=after), cast_to=dict
+        )
+        items = [RunSignal.model_validate(row) for row in raw.get("signals") or []]
+        return AsyncCursorPage(
+            items=items,
+            limit=limit,
+            next_after=items[-1].signal_id if items else None,
+            fetch_after=lambda cursor: self.list_signals(run_id, limit=limit, after=cursor),
+        )
+
+    async def list_external_jobs(
+        self, run_id: str, *, limit: int = _LIST_LIMIT, after: Optional[str] = None
+    ) -> AsyncCursorPage[RunExternalJob]:
+        """A page of the external jobs (ECS tasks) the run started, oldest first."""
+        raw = await self._client.get(
+            f"{_PATH}/{run_id}/external-jobs", params=_list_params(limit=limit, after=after), cast_to=dict
+        )
+        items = [RunExternalJob.model_validate(row) for row in raw.get("external_jobs") or []]
+        return AsyncCursorPage(
+            items=items,
+            limit=limit,
+            next_after=items[-1].job_id if items else None,
+            fetch_after=lambda cursor: self.list_external_jobs(run_id, limit=limit, after=cursor),
+        )
+
     async def pump_companions(self, workflow_id: str, run_id: str) -> InteractiveRunResponse:
         """Advance due background work for a paused interactive run, without consuming a user turn."""
         return await self._client.post(
@@ -858,3 +1189,12 @@ def _build_execute_body(
     if run_id is not None:
         body["run_id"] = run_id
     return body
+
+
+def _set_fields(**fields: Any) -> Dict[str, Any]:
+    """The fields given a value, as a request body; the server applies its own defaults to the rest."""
+    return {name: value for name, value in fields.items() if value is not None}
+
+
+def _list_params(**params: Any) -> Dict[str, Any]:
+    return {name: value for name, value in params.items() if value is not None}

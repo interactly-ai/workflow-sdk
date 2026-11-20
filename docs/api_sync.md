@@ -122,6 +122,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `add_comment` | `(run_id: 'str', *, content: 'str') -> 'RunComment'` | Add a comment to a run. |
 | `add_event_comment` | `(run_id: 'str', event_logical_id: 'str', *, content: 'str') -> 'RunComment'` | Add a comment to a specific event within a run. |
 | `add_turn_comment` | `(run_id: 'str', turn_index: 'int', content: 'str') -> 'RunFeedbackResponse'` | Comment on a turn as a whole. Content is trimmed and may not be blank. |
+| `cancel` | `(run_id: 'str', *, reason: 'Optional[str]' = None) -> 'RunControlResult'` | Cancel a durable run. It stops as soon as it can and is stored as cancelled; this can't be undone. |
 | `delete` | `(run_id: 'str') -> 'None'` | Delete a run record. |
 | `delete_comment` | `(run_id: 'str', comment_logical_id: 'str') -> 'None'` | Delete a comment from a run. |
 | `delete_event_comment` | `(run_id: 'str', event_logical_id: 'str', comment_logical_id: 'str') -> 'None'` | Delete a comment from a specific event within a run. |
@@ -134,8 +135,14 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `execute_with_input` | `(workflow_id: 'str', *, run_input: "'WorkflowRunInput'", run_id: 'Optional[str]' = None) -> 'InteractiveRunResponse'` | Execute one turn using a typed ``WorkflowRunInput`` payload. |
 | `get` | `(run_id: 'str') -> 'Run'` | Retrieve a single run by ID. |
 | `list` | `(*, workflow_id: 'Optional[str]' = None, status: 'Optional[str]' = None, start: 'Optional[datetime]' = None, end: 'Optional[datetime]' = None, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, source_workflow_run_id: 'Optional[str]' = None, source_turn_index: 'Optional[int]' = None) -> 'SyncPage[Run]'` | List workflow runs with optional filtering (paginated). |
+| `list_external_jobs` | `(run_id: 'str', *, limit: 'int' = 100, after: 'Optional[str]' = None) -> 'SyncCursorPage[RunExternalJob]'` | A page of the external jobs (ECS tasks) the run started, oldest first. |
+| `list_pauses` | `(run_id: 'str', *, open_only: 'bool' = False, limit: 'int' = 100, after: 'Optional[str]' = None) -> 'SyncCursorPage[RunPause]'` | A page of the run's pauses, oldest first. ``open_only`` keeps only those that can still be woken or |
+| `list_signals` | `(run_id: 'str', *, limit: 'int' = 100, after: 'Optional[str]' = None) -> 'SyncCursorPage[RunSignal]'` | A page of the signals posted to the run, oldest first, without their bodies. |
+| `pause` | `(run_id: 'str', *, reason: 'Optional[str]' = None) -> 'RunControlResult'` | Pause a durable run. |
 | `pump_companions` | `(workflow_id: 'str', run_id: 'str') -> 'InteractiveRunResponse'` | Advance due background work for a paused interactive run, WITHOUT consuming a user turn. |
+| `resume` | `(run_id: 'str', *, note: 'Optional[str]' = None, pause_ids: 'Optional[List[str]]' = None, all_waiting_for_person: 'bool' = False, data: 'Optional[Dict[str, Any]]' = None) -> 'RunControlResult'` | Resume a durable run, in one of two scopes that never mix. |
 | `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schemas for workflow run structures. |
+| `send_signal` | `(run_id: 'str', signal_key: 'str', body: 'Any' = None, *, idempotency_key: 'Optional[str]' = None) -> 'SignalResult'` | Post a signal to a durable run. A Wait for signal node waiting on ``signal_key`` takes it, now or when it |
 | `set_event_rating` | `(run_id: 'str', event_logical_id: 'str', value: 'str') -> 'RunFeedbackResponse'` | Rate one event of a run. At most one rating per user per target — re-rating replaces |
 | `set_turn_rating` | `(run_id: 'str', turn_index: 'int', value: 'str') -> 'RunFeedbackResponse'` | Rate a whole turn, as opposed to one of its events. |
 | `stream` | `(*, workflow_id: 'str', command: 'WorkflowCommand' = <WorkflowCommand.START: 'start'>, run_by: 'str' = 'api', version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, runtime_variables: 'Optional[Dict[str, Any]]' = None, run_input: "Optional['WorkflowRunInput']" = None, rerun_token: 'Optional[str]' = None, cast_to: 'Type[RunEvent]' = <class 'interactly.types.runs.run_event.RunEvent'>) -> 'Stream[RunEvent]'` | Open a WebSocket connection and stream workflow run events. |

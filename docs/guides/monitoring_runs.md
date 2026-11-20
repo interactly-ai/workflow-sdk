@@ -385,6 +385,7 @@ print(run.status, len(run.input_output_pairs))
 ## See also
 
 - [Running Workflows](running_workflows.md) — how to execute workflows and capture events
+- [Run control](run_control.md) — pause, resume, approve, cancel and signal a durable run
 - [Workflows and Versions](workflows_and_versions.md) — understand the workflow structure
 - [Streaming](../streaming.md) — real-time event streaming during execution
 - [Runtime Events](../runtime.md) — reference for event types and structure

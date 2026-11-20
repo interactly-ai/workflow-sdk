@@ -9,6 +9,24 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Run control
+#### Added
+- **`client.runs.pause()`, `resume()` and `cancel()`** for durable runs (scheduled runs, re-runs, background runs).
+  `resume()` takes one of two scopes: lift a person's pause of the run, or approve steps waiting for a person with
+  `pause_ids` or `all_waiting_for_person`, with a `note` and `data` for them. Each returns a `RunControlResult`.
+- **`client.runs.send_signal(run_id, signal_key, body, idempotency_key=None)`**: any JSON body, and an
+  `Idempotency-Key` on every post (one per call unless you pass yours), so a retry never delivers twice. Returns a
+  `SignalResult`.
+- **`client.runs.list_pauses()`, `list_signals()` and `list_external_jobs()`**, returning `RunPause`, `RunSignal` and
+  `RunExternalJob` rows in the new cursor pages, `SyncCursorPage` / `AsyncCursorPage`.
+- **Guide:** [Run control](docs/guides/run_control.md).
+
+#### Changed
+- **The base client's `post()` takes any JSON value as its body, and per-request `headers`.** A dict body is cleaned
+  of unset values as before.
+- **A run-control request answered 409 with `Retry-After` is retried** within `max_retries`: the run kept changing
+  and nothing was recorded. Every other request keeps its rule, and the run-control 503 is raised at once.
+
 ### Runs and webhooks — pausing
 #### Added
 - **`RunStatus.WAITING`**: a durable run parked until a timer, a signal or an external job wakes it.
