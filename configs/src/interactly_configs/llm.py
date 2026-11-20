@@ -4,10 +4,20 @@ from enum import Enum
 from typing import Annotated, Any, Dict, FrozenSet, Literal, Optional, Union
 from uuid import uuid4
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, SecretStr, field_serializer, field_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from interactly_configs.auth import IntegrationAuthConfig
 from interactly_configs.gemini_models import GeminiThinkingLevel
+from interactly_configs.secrets import SensitiveMap, SensitiveMapField
 
 
 class LLMProvider(str, Enum):
@@ -45,6 +55,13 @@ class OPENAIModel(str, Enum):
     GPT_5_6_SOL = "gpt-5.6-sol"
     GPT_5_6_TERRA = "gpt-5.6-terra"
     GPT_5_6_LUNA = "gpt-5.6-luna"
+
+    # GPT 6. Served by the Responses API, as the 5.6 tiers are.
+    GPT_6_LUNA = "gpt-6-luna"
+
+    # GPT 6.1. Served by the Responses API; tool calling is Responses-only for both.
+    GPT_6_1_SOL = "gpt-6.1-sol"
+    GPT_6_1_TERRA = "gpt-6.1-terra"
 
     # GPT 5.x Models. These do not consume reasoning tokens by default (unlike the original GPT-5 series)
     GPT_5_4 = "gpt-5.4"
@@ -263,6 +280,17 @@ MODELS_WITHOUT_LOW_REASONING_EFFORT = frozenset({OPENAIModel.GPT_5_4_PRO, OPENAI
 LOW_REASONING_EFFORTS = frozenset({"minimal", "low"})
 MINIMUM_PRO_REASONING_EFFORT = "medium"
 
+#: gpt-6-luna and gpt-6.1-terra refuse "minimal" and take "none" as their no-reasoning setting.
+MODELS_WITHOUT_MINIMAL_REASONING_EFFORT = frozenset({OPENAIModel.GPT_6_LUNA, OPENAIModel.GPT_6_1_TERRA})
+#: gpt-6.1-sol has no no-reasoning setting: "none" and "minimal" are refused and "low" is its floor
+#: (OpenAI's GPT-6.1 migration guide: "If your current effort is none, use low").
+MODELS_WITHOUT_NO_REASONING_EFFORT = frozenset({OPENAIModel.GPT_6_1_SOL})
+NO_REASONING_EFFORTS = frozenset({"none", "minimal"})
+
+#: OpenAI models the Decisions API (POST /v1/decisions) serves when a Decisions node asks: typed answers, no
+#: generated text. Upstream: `OPENAIModel.DECISIONS_MODELS`.
+DECISIONS_OPENAI_MODELS = frozenset({OPENAIModel.GPT_6_LUNA})
+
 #: OpenAI models that accept audio input. Audio is served on the Chat Completions API only, and only
 #: wav/mp3 are valid input formats. Upstream: `OPENAIModel.AUDIO_INPUT_MODELS`.
 AUDIO_INPUT_OPENAI_MODELS = frozenset({OPENAIModel.GPT_AUDIO_1_5, OPENAIModel.GPT_AUDIO_MINI})
@@ -362,11 +390,12 @@ def resolve_reasoning_effort(model_name: str | None, reasoning_effort: str | Non
     """
     if not reasoning_effort or not model_name:
         return reasoning_effort
-    if (
-        model_name.lower() in MODELS_WITHOUT_LOW_REASONING_EFFORT
-        and reasoning_effort.lower() in LOW_REASONING_EFFORTS
-    ):
+    if model_name.lower() in MODELS_WITHOUT_LOW_REASONING_EFFORT and reasoning_effort.lower() in LOW_REASONING_EFFORTS:
         return MINIMUM_PRO_REASONING_EFFORT
+    if model_name.lower() in MODELS_WITHOUT_NO_REASONING_EFFORT and reasoning_effort.lower() in NO_REASONING_EFFORTS:
+        return "low"
+    if model_name.lower() in MODELS_WITHOUT_MINIMAL_REASONING_EFFORT and reasoning_effort.lower() == "minimal":
+        return "none"
     return reasoning_effort
 
 
@@ -633,10 +662,7 @@ class AnthropicLLMConfig(BaseLLMConfig):
     )
     thinking_budget: Optional[int] = Field(
         default=0,
-        description=(
-            "Token budget for Claude's extended thinking feature. "
-            "Set to 0 to disable."
-        ),
+        description=("Token budget for Claude's extended thinking feature. Set to 0 to disable."),
         title="Thinking Budget (tokens)",
     )
     backend: AnthropicBackend = Field(
@@ -697,7 +723,8 @@ class CustomLLMConfig(BaseLLMConfig):
         description="Base URL of the custom OpenAI-compatible LLM gateway.",
         title="Gateway Base URL",
     )
-    default_headers: Optional[dict] = Field(
+    default_headers: Optional[dict] = SensitiveMapField(
+        SensitiveMap.HEADERS,
         default=None,
         description="Optional HTTP headers to include in every request to the gateway.",
         title="Headers",
@@ -744,6 +771,18 @@ class CustomLLMConfig(BaseLLMConfig):
         description="Whether to use the GPT 5.x+ style Responses API instead of Chat Completions API.",
         title="Use Responses API",
     )
+    decisions_api: Optional[Literal["openai", "gemini"]] = Field(
+        default=None,
+        description=(
+            "On a Decisions step, answer on this endpoint's Decisions API (POST <base URL>/decisions), which returns "
+            "each answer with its probability or confidence. Choose the request format the endpoint speaks: "
+            "OpenAI's, or Gemini's (its key goes in the x-goog-api-key header). Unset: the step's questions are "
+            "answered as JSON, without probabilities. Other steps ignore it. With Rewrite Base URL on, the request "
+            "goes to the base URL exactly as written, so give this configuration the full URL of the Decisions "
+            "endpoint and use it for Decisions steps only."
+        ),
+        title="Decisions API",
+    )
     supports_audio_input: bool = Field(
         default=False,
         description=(
@@ -754,6 +793,13 @@ class CustomLLMConfig(BaseLLMConfig):
     )
 
     model_config = ConfigDict(title="Custom LLM", populate_by_name=True)
+
+    @model_validator(mode="after")
+    def _a_decisions_api_names_its_endpoint(self) -> "CustomLLMConfig":
+        # With no base URL the request, its key and the caller's words would have nowhere of their own to go.
+        if self.decisions_api and not self.base_url:
+            raise ValueError("a Decisions API needs the Gateway Base URL of the endpoint that serves it")
+        return self
 
 
 class BedrockLLMConfig(BaseLLMConfig):

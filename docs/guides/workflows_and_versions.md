@@ -216,14 +216,6 @@ Pass the realtime `model` the call would use: the realtime protocols differ enou
 ready on one model and not another. Without it, the findings describe what holds on either. A super node
 that could not be expanded is reported as `indeterminate` rather than assumed fine.
 
-### Voice persona
-
-For GPT-Live calls, `WorkflowConfig.voice_persona` says who is speaking, in two to four sentences
-written as "You are …" (at most 600 characters). The voice answers most turns without consulting any
-node's prompt, so this is how it knows who it is. Left empty, the server may generate one from the
-workflow's prompts when a version is saved; `WorkflowConfigFullyHydrated.resolved_voice_persona()` tells
-you which applies.
-
 ## Typed Config API
 
 Create and retrieve workflows using fully-typed Pydantic models from the `[configs]` extra.

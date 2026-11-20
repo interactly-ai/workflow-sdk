@@ -5,7 +5,6 @@ the SDK sends and hands it back unchanged, for the fields that used to be droppe
 
 * ``ExternalAPIToolConfig.result_as_media`` on a saved tool. Before it was mirrored, reading the tool and
   writing it back turned a media result into a parsed one.
-* ``WorkflowConfig.voice_persona``.
 * ``realtime_overrides`` on an LLM node. Before ``NodeRealtimeOverrides`` was mirrored, reading the
   workflow and writing it back erased every per-node realtime setting.
 * A tool node calling a codebase function. Before ``CodebaseFunctionToolConfig`` was mirrored, the whole
@@ -31,8 +30,6 @@ from interactly.configs import (
     NodeRealtimeOverrides,
     PromptConfig,
     SayLLMNodeConfig,
-    SayStaticMessageNodeConfig,
-    StaticMessagesConfig,
     ToolNodeConfig,
     WorkflowConfig,
     WorkflowConfigFullyHydrated,
@@ -93,30 +90,6 @@ async def test_a_media_result_survives_on_a_saved_tool():
         residual = await _sweep_tools(client)
         await client.close()
         assert not residual, f"residual SDK_E2E tools remained: {residual}"
-
-
-async def test_a_voice_persona_survives_on_a_workflow():
-    persona = "You are Ada, the scheduling assistant for Riverside Clinic. You are warm and brief."
-    start = SayStaticMessageNodeConfig(
-        name="Hello", is_start=True, static_messages_config=StaticMessagesConfig(static_messages=["Hi."])
-    )
-    config = WorkflowConfigFullyHydrated(
-        workflow_config=WorkflowConfig(name=f"{RUN_TAG} persona", category="System Examples", voice_persona=persona),
-        node_configs=[start],
-        edge_configs=[],
-    )
-    client = AsyncWorkflowClient()
-    workflow_id: str | None = None
-    try:
-        workflow_id = (await client.workflows.create_from_config(config)).id
-        hydrated = await client.workflows.get_fully_hydrated(workflow_id)
-        assert hydrated.workflow_config.voice_persona == persona
-    finally:
-        if workflow_id:
-            await client.workflows.delete(workflow_id)
-        residual = await _sweep_workflows(client)
-        await client.close()
-        assert not residual, f"residual SDK_E2E workflows remained: {residual}"
 
 
 async def test_a_codebase_function_tool_node_hydrates_typed():

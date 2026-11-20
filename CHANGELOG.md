@@ -9,6 +9,48 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Configs — mirror synced to `interactly-ai@8810d0c05` (2026-11-20)
+`make parity-check` reads 0 differences again; it read 257 against this upstream. Without this sync a workflow
+holding a Pause Workflow, Wait, Wait for signal, Terminate, ECS, analysis or Decisions node parsed each such node as
+`UnknownNodeConfig`, and none of them could be built in code.
+
+#### Added
+- **Pausing.** `interactly_configs.pauses`: `WakeKind` and the wake conditions (`ManualWake`, `TimerWake`,
+  `SignalWake`, `ExternalJobWake`, `RunPauseWake`, as the `WakeCondition` union), `PauseEntry`, `ResumeReason`, the
+  resume payloads (`ResumePayload`), `PauseRecord`, `PausableNodeConfig` and `MAX_WAITING_SECONDS` (30 days).
+- **Control nodes:** `PauseWorkflowNodeConfig`, `WaitNodeConfig`, `WaitForSignalNodeConfig`,
+  `TerminateWorkflowNodeConfig`, each with its run input and output.
+- **ECS nodes** (`nodes.aws.ecs`): run, start, get status, stop, wait for and get logs of tasks, with
+  `nodes.external_job`'s job types.
+- **Analysis nodes** (`conversation_fetch`, `analysis_llm`, `store_analysis`) and the **Decisions** node.
+- **`on_failure`** on every node (`NodeFailurePolicy`: `route`, `abort_workflow`). `abort_workflow` cannot be
+  combined with an enabled self loop, as the server refuses it.
+- **`WorkflowStatus.WAITING`**, and the matching `NodeType` and `NodeCategory` members.
+- **Events:** `PauseEvent` carries `wake`, `pause_id`, `entry`, `deadline_at` and `display_refs`; `PauseThreadEvent`
+  carries `pause_id` and `wake_kind`; `EndWorkflowEvent` carries `outcome`, `reason` and `cause`;
+  `WorkflowErrorEvent` carries `fatal`; new `TerminateWorkflowEvent`.
+- `SimulationConfig.simulated_node_outcomes` (one per node), `WorkflowConfig.workflow_type`,
+  `CustomLLMConfig.decisions_api`, `StaticMessagesConfig.word_for_word`, LLM nodes' `ignore_global_tools` and
+  `excluded_global_tools`, and further `NodeRealtimeOverrides` fields.
+- `gpt-6-luna`, `gpt-6.1-sol` and `gpt-6.1-terra`, with their reasoning-effort rules in
+  `resolve_reasoning_effort`; `UILoginRole.VIEWER`.
+- `nodes.gating`: which server flag enables each gated node type and field, and the refusal error types. Whether a
+  flag is on is the server's to say; a refused save arrives as its 400.
+
+#### Changed
+- Credential fields are declared with `SecretField` / `SensitiveMapField`, as upstream does. In the mirror they are
+  plain `Field`s: the dashboard annotation they add upstream is dropped, as every dashboard annotation is.
+- `tests/tools/config_parity.py` compares those two as field declarations, and lists the new hoisted
+  capability sets (`MODELS_WITHOUT_MINIMAL_REASONING_EFFORT`, `MODELS_WITHOUT_NO_REASONING_EFFORT`,
+  `NO_REASONING_EFFORTS`, `DECISIONS_OPENAI_MODELS`).
+
+#### Removed
+- **`WorkflowConfig.voice_persona`, `WorkflowConfigFullyHydrated.generated_voice_persona`,
+  `resolved_voice_persona()` and `VOICE_PERSONA_MAX_LENGTH`.** The server removed them: a GPT-Live call takes the
+  voice persona of the assistant placing it. A stored workflow that still carries the field loads and sheds it.
+- `WorkflowStatus.is_active_run_status()`, removed upstream: which statuses are reaped and which hold a
+  concurrency slot differ for `WAITING`, so the server keeps those rules itself.
+
 ### Docs
 - **Three examples in the running-workflows guide never delivered the user's message.**
   - "Typed Execution" used thread key `"thread_0"` and a plain dict for the node input. That constructs

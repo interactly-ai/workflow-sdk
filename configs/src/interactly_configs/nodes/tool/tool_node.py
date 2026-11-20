@@ -2,6 +2,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import Field, model_validator
 
+from interactly_configs.nodes.llm.llm import NodeRealtimeOverrides
 from interactly_configs.nodes.node import (
     BaseNodeConfig,
     BaseNodeRunInput,
@@ -58,6 +59,12 @@ class ToolNodeConfig(BaseNodeConfig):
             "default because it changes the type an existing tool receives."
         ),
         title="Preserve Argument Types",
+    )
+    # On a tool node only `hold_for_caller`, `hold_for_caller_ms` and `stt_keyterms_variable` are read.
+    realtime_overrides: Optional[NodeRealtimeOverrides] = Field(
+        default=None,
+        description="Realtime voice settings for this node. Ignored unless the call runs on a realtime voice.",
+        title="Realtime Overrides",
     )
 
     @model_validator(mode="after")
@@ -142,6 +149,7 @@ class ToolNodeRunInput(BaseNodeRunInput):
         default="tool_node",
         description="Discriminator field which must always be 'tool_node'",
     )
+
 
 class ToolNodeRunOutput(BaseNodeRunOutput):
     type: Literal["tool_node"] = Field(

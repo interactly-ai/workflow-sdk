@@ -33,6 +33,11 @@ class StaticMessagesConfig(BaseModel):
         description="Selection mode for static messages",
         title="Static Messages Selection Mode",
     )
+    word_for_word: bool = Field(
+        default=True,
+        description="Realtime voice only: say the message word for word. Off, the voice asks it in its own words.",
+        title="Word for Word",
+    )
 
 
 class DynamicMessagesConfig(BaseModel):

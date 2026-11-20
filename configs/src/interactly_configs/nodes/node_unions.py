@@ -2,6 +2,17 @@ from typing import Annotated, Dict, List, Type, Union
 
 from pydantic import BaseModel, Field
 
+from interactly_configs.nodes.analysis.analysis_llm import AnalysisLLMNodeConfig
+from interactly_configs.nodes.analysis.conversation_fetch import (
+    ConversationFetchNodeConfig,
+    ConversationFetchNodeRunInput,
+    ConversationFetchNodeRunOutput,
+)
+from interactly_configs.nodes.analysis.store_analysis import (
+    StoreAnalysisNodeConfig,
+    StoreAnalysisNodeRunInput,
+    StoreAnalysisNodeRunOutput,
+)
 from interactly_configs.nodes.athena.appointments_create import (
     AthenaAppointmentsCreateNodeConfig,
     AthenaAppointmentsCreateNodeRunInput,
@@ -22,10 +33,50 @@ from interactly_configs.nodes.athena.patients_update import (
     AthenaPatientsUpdateNodeRunInput,
     AthenaPatientsUpdateNodeRunOutput,
 )
+from interactly_configs.nodes.aws.ecs import (
+    GetEcsTaskLogsNodeConfig,
+    GetEcsTaskLogsNodeRunInput,
+    GetEcsTaskLogsNodeRunOutput,
+    GetEcsTaskStatusNodeConfig,
+    GetEcsTaskStatusNodeRunInput,
+    GetEcsTaskStatusNodeRunOutput,
+    RunEcsTaskNodeConfig,
+    RunEcsTaskNodeRunInput,
+    RunEcsTaskNodeRunOutput,
+    StartEcsTaskNodeConfig,
+    StartEcsTaskNodeRunInput,
+    StartEcsTaskNodeRunOutput,
+    StopEcsTaskNodeConfig,
+    StopEcsTaskNodeRunInput,
+    StopEcsTaskNodeRunOutput,
+    WaitForEcsTasksNodeConfig,
+    WaitForEcsTasksNodeRunInput,
+    WaitForEcsTasksNodeRunOutput,
+)
 from interactly_configs.nodes.communications.sms import (
     SendSMSNodeConfig,
     SendSMSNodeRunInput,
     SendSMSNodeRunOutput,
+)
+from interactly_configs.nodes.control.pause_workflow import (
+    PauseWorkflowNodeConfig,
+    PauseWorkflowNodeRunInput,
+    PauseWorkflowNodeRunOutput,
+)
+from interactly_configs.nodes.control.terminate_workflow import (
+    TerminateWorkflowNodeConfig,
+    TerminateWorkflowNodeRunInput,
+    TerminateWorkflowNodeRunOutput,
+)
+from interactly_configs.nodes.control.wait import (
+    WaitNodeConfig,
+    WaitNodeRunInput,
+    WaitNodeRunOutput,
+)
+from interactly_configs.nodes.control.wait_for_signal import (
+    WaitForSignalNodeConfig,
+    WaitForSignalNodeRunInput,
+    WaitForSignalNodeRunOutput,
 )
 from interactly_configs.nodes.conversations.end_conversation import (
     EndConversationNodeConfig,
@@ -47,6 +98,7 @@ from interactly_configs.nodes.data_transformation.field_extractor import (
     FieldExtractorNodeRunInput,
     FieldExtractorNodeRunOutput,
 )
+from interactly_configs.nodes.decisions import DecisionsNodeConfig
 from interactly_configs.nodes.google_workspace.google_docs import (
     GoogleDocsNodeConfig,
     GoogleDocsNodeRunInput,
@@ -95,6 +147,7 @@ from interactly_configs.nodes.workflows.workflow_run_fetch import (
     WorkflowRunFetchNodeRunInput,
     WorkflowRunFetchNodeRunOutput,
 )
+from interactly_configs.pauses import ResumeRunInput
 
 NodeConfig = Annotated[
     Union[
@@ -125,6 +178,22 @@ NodeConfig = Annotated[
         FieldExtractorNodeConfig,
         # Utility nodes
         NoOpNodeConfig,
+        PauseWorkflowNodeConfig,
+        WaitNodeConfig,
+        WaitForSignalNodeConfig,
+        TerminateWorkflowNodeConfig,
+        RunEcsTaskNodeConfig,
+        StartEcsTaskNodeConfig,
+        GetEcsTaskStatusNodeConfig,
+        StopEcsTaskNodeConfig,
+        WaitForEcsTasksNodeConfig,
+        GetEcsTaskLogsNodeConfig,
+        # Analysis nodes
+        ConversationFetchNodeConfig,
+        AnalysisLLMNodeConfig,
+        StoreAnalysisNodeConfig,
+        # Decisions (runs as a worker, like analysis_llm)
+        DecisionsNodeConfig,
     ],
     Field(discriminator="type"),
 ]
@@ -158,6 +227,21 @@ NodeRunInput = Annotated[
         FieldExtractorNodeRunInput,
         # Utility nodes
         NoOpNodeRunInput,
+        PauseWorkflowNodeRunInput,
+        WaitNodeRunInput,
+        WaitForSignalNodeRunInput,
+        TerminateWorkflowNodeRunInput,
+        RunEcsTaskNodeRunInput,
+        StartEcsTaskNodeRunInput,
+        GetEcsTaskStatusNodeRunInput,
+        StopEcsTaskNodeRunInput,
+        WaitForEcsTasksNodeRunInput,
+        GetEcsTaskLogsNodeRunInput,
+        # Analysis nodes (analysis_llm runs as a worker and uses LLMNodeRunInput)
+        ConversationFetchNodeRunInput,
+        StoreAnalysisNodeRunInput,
+        # Resuming a paused node. Not a node type: built only by the server, for whichever node paused.
+        ResumeRunInput,
     ],
     Field(discriminator="type"),
 ]
@@ -191,9 +275,23 @@ NodeRunOutput = Annotated[
         FieldExtractorNodeRunOutput,
         # Utility nodes
         NoOpNodeRunOutput,
+        PauseWorkflowNodeRunOutput,
+        WaitNodeRunOutput,
+        WaitForSignalNodeRunOutput,
+        TerminateWorkflowNodeRunOutput,
+        RunEcsTaskNodeRunOutput,
+        StartEcsTaskNodeRunOutput,
+        GetEcsTaskStatusNodeRunOutput,
+        StopEcsTaskNodeRunOutput,
+        WaitForEcsTasksNodeRunOutput,
+        GetEcsTaskLogsNodeRunOutput,
+        # Analysis nodes (analysis_llm runs as a worker and reports WorkerLLMNodeRunOutput)
+        ConversationFetchNodeRunOutput,
+        StoreAnalysisNodeRunOutput,
     ],
     Field(discriminator="type"),
 ]
+
 
 class NodesRunInputs(BaseModel):
     """
@@ -205,6 +303,7 @@ class NodesRunInputs(BaseModel):
         description="Mapping of node logical IDs to their respective run inputs",
         title="Node Run Inputs",
     )
+
 
 class NodeMetadataRetriever:
     """
@@ -244,6 +343,22 @@ class NodeMetadataRetriever:
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeConfig(),
             # Utility nodes
             NodeType.NO_OP: NoOpNodeConfig(),
+            # Control nodes
+            NodeType.PAUSE_WORKFLOW: PauseWorkflowNodeConfig(),
+            NodeType.WAIT: WaitNodeConfig(),
+            NodeType.WAIT_FOR_SIGNAL: WaitForSignalNodeConfig(),
+            NodeType.TERMINATE_WORKFLOW: TerminateWorkflowNodeConfig(),
+            NodeType.AWS_ECS_RUN_TASK: RunEcsTaskNodeConfig(),
+            NodeType.AWS_ECS_START_TASK: StartEcsTaskNodeConfig(),
+            NodeType.AWS_ECS_GET_TASK_STATUS: GetEcsTaskStatusNodeConfig(),
+            NodeType.AWS_ECS_STOP_TASK: StopEcsTaskNodeConfig(),
+            NodeType.AWS_ECS_WAIT_FOR_TASKS: WaitForEcsTasksNodeConfig(),
+            NodeType.AWS_ECS_GET_TASK_LOGS: GetEcsTaskLogsNodeConfig(),
+            # Analysis nodes
+            NodeType.CONVERSATION_FETCH: ConversationFetchNodeConfig(),
+            NodeType.ANALYSIS_LLM: AnalysisLLMNodeConfig(),
+            NodeType.STORE_ANALYSIS: StoreAnalysisNodeConfig(),
+            NodeType.DECISIONS: DecisionsNodeConfig(),
         }
 
     @classmethod
@@ -279,6 +394,22 @@ class NodeMetadataRetriever:
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeConfig,
             # Utility nodes
             NodeType.NO_OP: NoOpNodeConfig,
+            # Control nodes
+            NodeType.PAUSE_WORKFLOW: PauseWorkflowNodeConfig,
+            NodeType.WAIT: WaitNodeConfig,
+            NodeType.WAIT_FOR_SIGNAL: WaitForSignalNodeConfig,
+            NodeType.TERMINATE_WORKFLOW: TerminateWorkflowNodeConfig,
+            NodeType.AWS_ECS_RUN_TASK: RunEcsTaskNodeConfig,
+            NodeType.AWS_ECS_START_TASK: StartEcsTaskNodeConfig,
+            NodeType.AWS_ECS_GET_TASK_STATUS: GetEcsTaskStatusNodeConfig,
+            NodeType.AWS_ECS_STOP_TASK: StopEcsTaskNodeConfig,
+            NodeType.AWS_ECS_WAIT_FOR_TASKS: WaitForEcsTasksNodeConfig,
+            NodeType.AWS_ECS_GET_TASK_LOGS: GetEcsTaskLogsNodeConfig,
+            # Analysis nodes
+            NodeType.CONVERSATION_FETCH: ConversationFetchNodeConfig,
+            NodeType.ANALYSIS_LLM: AnalysisLLMNodeConfig,
+            NodeType.STORE_ANALYSIS: StoreAnalysisNodeConfig,
+            NodeType.DECISIONS: DecisionsNodeConfig,
         }
 
     @classmethod
@@ -314,6 +445,22 @@ class NodeMetadataRetriever:
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeRunInput,
             # Utility nodes
             NodeType.NO_OP: NoOpNodeRunInput,
+            # Control nodes
+            NodeType.PAUSE_WORKFLOW: PauseWorkflowNodeRunInput,
+            NodeType.WAIT: WaitNodeRunInput,
+            NodeType.WAIT_FOR_SIGNAL: WaitForSignalNodeRunInput,
+            NodeType.TERMINATE_WORKFLOW: TerminateWorkflowNodeRunInput,
+            NodeType.AWS_ECS_RUN_TASK: RunEcsTaskNodeRunInput,
+            NodeType.AWS_ECS_START_TASK: StartEcsTaskNodeRunInput,
+            NodeType.AWS_ECS_GET_TASK_STATUS: GetEcsTaskStatusNodeRunInput,
+            NodeType.AWS_ECS_STOP_TASK: StopEcsTaskNodeRunInput,
+            NodeType.AWS_ECS_WAIT_FOR_TASKS: WaitForEcsTasksNodeRunInput,
+            NodeType.AWS_ECS_GET_TASK_LOGS: GetEcsTaskLogsNodeRunInput,
+            # Analysis nodes
+            NodeType.CONVERSATION_FETCH: ConversationFetchNodeRunInput,
+            NodeType.ANALYSIS_LLM: LLMNodeRunInput,
+            NodeType.STORE_ANALYSIS: StoreAnalysisNodeRunInput,
+            NodeType.DECISIONS: LLMNodeRunInput,
         }
 
     @classmethod
@@ -349,4 +496,20 @@ class NodeMetadataRetriever:
             NodeType.FIELD_EXTRACTOR: FieldExtractorNodeRunOutput,
             # Utility nodes
             NodeType.NO_OP: NoOpNodeRunOutput,
+            # Control nodes
+            NodeType.PAUSE_WORKFLOW: PauseWorkflowNodeRunOutput,
+            NodeType.WAIT: WaitNodeRunOutput,
+            NodeType.WAIT_FOR_SIGNAL: WaitForSignalNodeRunOutput,
+            NodeType.TERMINATE_WORKFLOW: TerminateWorkflowNodeRunOutput,
+            NodeType.AWS_ECS_RUN_TASK: RunEcsTaskNodeRunOutput,
+            NodeType.AWS_ECS_START_TASK: StartEcsTaskNodeRunOutput,
+            NodeType.AWS_ECS_GET_TASK_STATUS: GetEcsTaskStatusNodeRunOutput,
+            NodeType.AWS_ECS_STOP_TASK: StopEcsTaskNodeRunOutput,
+            NodeType.AWS_ECS_WAIT_FOR_TASKS: WaitForEcsTasksNodeRunOutput,
+            NodeType.AWS_ECS_GET_TASK_LOGS: GetEcsTaskLogsNodeRunOutput,
+            # Analysis nodes
+            NodeType.CONVERSATION_FETCH: ConversationFetchNodeRunOutput,
+            NodeType.ANALYSIS_LLM: WorkerLLMNodeRunOutput,
+            NodeType.STORE_ANALYSIS: StoreAnalysisNodeRunOutput,
+            NodeType.DECISIONS: WorkerLLMNodeRunOutput,
         }

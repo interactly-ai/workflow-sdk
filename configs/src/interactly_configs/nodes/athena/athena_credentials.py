@@ -1,13 +1,15 @@
-
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from interactly_configs.secrets import SecretField
+
 
 class StartEndTimings(BaseModel):
     start: str = Field(..., description="Start time in HH:MM format", title="Start Time")
     end: str = Field(..., description="End time in HH:MM format", title="End Time")
+
 
 class WorkingHours(BaseModel):
     monday: StartEndTimings = Field(..., description="Working hours for Monday")
@@ -18,6 +20,7 @@ class WorkingHours(BaseModel):
     saturday: StartEndTimings = Field(..., description="Working hours for Saturday")
     sunday: StartEndTimings = Field(..., description="Working hours for Sunday")
 
+
 class UseCase(str, Enum):
     APPOINTMENT_SCHEDULING = "appointment_scheduling"
     APPOINTMENT_CANCELLATION = "appointment_cancellation"
@@ -25,6 +28,7 @@ class UseCase(str, Enum):
     APPOINTMENT_SCHEDULING_WITH_WAITLIST = "appointment_scheduling_with_waitlist"
     MEDICATION_REFILL = "medication_refill"
     INVOICE_BILLING = "invoice_billing"
+
 
 class AthenaCredentialsConfig(BaseModel):
     source_id: Optional[str] = Field(
@@ -37,7 +41,7 @@ class AthenaCredentialsConfig(BaseModel):
         description="Department ID of the node",
         title="Department ID",
     )
-    api_key: Optional[str] = Field(
+    api_key: Optional[str] = SecretField(
         default=None,
         description="API key for the node",
         title="API Key",

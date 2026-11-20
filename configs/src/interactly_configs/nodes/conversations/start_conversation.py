@@ -3,6 +3,7 @@ from typing import Literal, Optional
 from pydantic import ConfigDict, Field
 
 from interactly_configs.nodes.node import BaseNodeConfig, BaseNodeRunInput, BaseNodeRunOutput, NodeType
+from interactly_configs.secrets import SecretField
 
 
 class StartConversationNodeConfig(BaseNodeConfig):
@@ -21,9 +22,15 @@ class StartConversationNodeConfig(BaseNodeConfig):
         description="Secondary category of the node",
         title="Secondary Category",
     )
+    # Kept visible so a node saved with it on can still be switched off; the node refuses to run while it is
+    # on with is_outbound_call. The other call settings below are hidden: nothing reads them any more, but
+    # saved workflows still carry them.
     is_voice_conversation: bool = Field(
         default=False,
-        description="Whether this conversation is a voice-based conversation",
+        description=(
+            "No longer supported: a start conversation node cannot place a phone call. Leave this off, and place "
+            "the call from a workflow-based assistant instead."
+        ),
         title="Is Voice Conversation",
     )
     is_outbound_call: bool = Field(
@@ -31,7 +38,7 @@ class StartConversationNodeConfig(BaseNodeConfig):
         description="Whether this conversation is an outbound call",
         title="Is Outbound Call",
     )
-    bearer_token: Optional[str] = Field(
+    bearer_token: Optional[str] = SecretField(
         default=None,
         description="The bearer token used for authenticating with the outbound phone call service",
         title="Bearer Token",
@@ -61,16 +68,16 @@ class StartConversationNodeConfig(BaseNodeConfig):
         description="If polling for an existing conversation, the interval (in seconds) at which to poll for updates",
         title="Polling Interval Seconds",
     )
-    ### We need to add more config options later for voice conversations ###
-    ### e.g., TTS and STT settings, inbound vs outbound, phone number to call, etc ###
     model_config = ConfigDict(
         title="Start Conversation Node",
     )
+
 
 class StartConversationNodeRunInput(BaseNodeRunInput):
     type: Literal["start_conversation"] = Field(
         default="start_conversation", description="Discriminator field which must always be 'start_conversation'"
     )
+
 
 class StartConversationNodeRunOutput(BaseNodeRunOutput):
     type: Literal["start_conversation"] = Field(

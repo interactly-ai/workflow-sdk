@@ -1,8 +1,10 @@
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Any, List, Literal, Optional
 from uuid import uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from interactly_configs.simulated_outcomes import SimulatedNodeOutcome, simulated_outcomes_by_node
 
 
 class SimulationStatus(str, Enum):
@@ -11,6 +13,7 @@ class SimulationStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
 
 class SimulationWorkflowDetails(BaseModel):
     workflow_id: Optional[str] = Field(
@@ -58,6 +61,7 @@ class SimulationWorkflowDetails(BaseModel):
         description="Workflow Run ID of the executed workflow",
         title="Workflow Run ID",
     )
+
 
 class SimulationConfig(BaseModel):
     logical_id: Optional[str] = Field(
@@ -130,10 +134,27 @@ class SimulationConfig(BaseModel):
         description="Identifier of the user or system that initiated the workflow simulation",
         title="Workflow Simulation Initiator",
     )
+    simulated_node_outcomes: List[SimulatedNodeOutcome] = Field(
+        default_factory=list,
+        description=(
+            "Outcomes for nodes that would wait (Wait, Pause workflow, Wait for signal, the ECS nodes). A simulation "
+            "can't hold a pause, so such a node otherwise finishes with an error the workflow routes on; with an "
+            "outcome here it finishes as given, without waiting or doing its work."
+        ),
+        title="Simulated Outcomes of Waiting Nodes",
+    )
+
+    @field_validator("simulated_node_outcomes")
+    @classmethod
+    def _one_outcome_per_node(cls, outcomes: List[SimulatedNodeOutcome]) -> List[SimulatedNodeOutcome]:
+        simulated_outcomes_by_node(outcomes)
+        return outcomes
+
 
 class SimulationCommand(str, Enum):
     DATA = "data"
     STOP = "stop"
+
 
 class SimulationInput(BaseModel):
     """
@@ -155,6 +176,7 @@ class SimulationInput(BaseModel):
         description="Configuration for the simulation",
         title="Simulation Configuration",
     )
+
 
 class SimulationEvent(BaseModel):
     """

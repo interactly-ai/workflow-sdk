@@ -2,14 +2,16 @@
 
 import json
 import keyword
+from collections.abc import Mapping
 from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Type, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
 
 from interactly_configs.auth import IntegrationAuthConfig
 from interactly_configs.prompt import StaticMessagesConfig
+from interactly_configs.secrets import SensitiveMap, SensitiveMapField
 
 #: Which arguments a registered inbuilt tool declares, keyed by ``tool_id``.
 #:
@@ -206,7 +208,7 @@ class ToolVariableArgument(BaseModel):
 
         if self.source != ToolVariableSource.LITERAL and not self.variable_path:
             raise ValueError(
-                f"variable_arguments['{self.argument_name}']: variable_path is required unless source " f"is 'literal'."
+                f"variable_arguments['{self.argument_name}']: variable_path is required unless source is 'literal'."
             )
 
         # Hidden AND non-overriding means nothing can ever provide this argument: the model cannot see
@@ -395,10 +397,7 @@ class BaseToolConfig(BaseModel):
     )
     args_schema: Optional[dict] = Field(
         default=None,
-        description=(
-            "Schema for the arguments that the tool accepts. "
-            "This should be a JSON schema dictionary."
-        ),
+        description=("Schema for the arguments that the tool accepts. This should be a JSON schema dictionary."),
         title="Tool Arguments Schema",
     )
     static_messages_config: Optional[StaticMessagesConfig] = Field(
@@ -536,7 +535,8 @@ class InbuiltFunctionToolConfig(BaseToolConfig):
         ),
         title="Configurable Tool Key",
     )
-    extra_config: Optional[dict] = Field(
+    extra_config: Optional[dict] = SensitiveMapField(
+        SensitiveMap.BODY,
         default=None,
         description="Tool-specific user configuration values. Schema is defined per configurable key.",
         title="Extra Configuration",
@@ -622,7 +622,8 @@ class CodebaseFunctionToolConfig(BaseToolConfig):
         ),
         title="Function",
     )
-    extra_config: Optional[dict] = Field(
+    extra_config: Optional[dict] = SensitiveMapField(
+        SensitiveMap.BODY,
         default=None,
         description=(
             "Author-supplied settings for this function, read at call time from the tool extra-config "
@@ -760,12 +761,14 @@ class ExternalAPIToolConfig(BaseToolConfig):
         description="HTTP method to use for the API call (e.g., GET, POST)",
         title="API Method",
     )
-    api_headers: Dict[str, str] = Field(
+    api_headers: dict[str, str] = SensitiveMapField(
+        SensitiveMap.HEADERS,
         default={},
         description="HTTP headers to include with the API request",
         title="API Headers",
     )
-    api_body: Optional[Union[dict, str]] = Field(
+    api_body: Optional[Union[dict, str]] = SensitiveMapField(
+        SensitiveMap.BODY,
         default=None,
         description="The request body payload for the API call.",
         title="API Request Body",
@@ -840,6 +843,16 @@ class ExternalAPIToolConfig(BaseToolConfig):
                 f"the placeholder where the value belongs, or drop the binding."
             )
         return self
+
+    @field_serializer("api_body")
+    def serialize_api_body(self, value: Optional[Union[dict, str]]) -> Optional[Union[dict, str]]:
+        """Write a string body back as the JSON text it was parsed from.
+
+        ``parse_api_body`` reads any string as JSON, so a body given as ``'"hello"'`` is held as ``hello``.
+        Dumped as is, that bare ``hello`` would fail ``parse_api_body`` on the way back in, and the config
+        could not be stored and reloaded. Dumping it as ``'"hello"'`` makes the round trip exact.
+        """
+        return json.dumps(value) if isinstance(value, str) else value
 
     @field_validator("api_body", mode="before")
     @classmethod
@@ -932,7 +945,8 @@ class MCPServerConfig(BaseModel):
         description="MCP server URL (e.g. 'https://mcp.example.com/mcp')",
         title="Server URL",
     )
-    api_headers: Optional[Dict[str, str]] = Field(
+    api_headers: Optional[dict[str, str]] = SensitiveMapField(
+        SensitiveMap.HEADERS,
         default=None,
         description="HTTP headers to include when connecting to the MCP server",
         title="API Headers",
@@ -958,4 +972,33 @@ class ToolsConfig(BaseModel):
         title="Tools Configuration",
     )
 
-    model_config = ConfigDict(title="Tools Configuration")
+    model_config = ConfigDict(
+        title="Tools Configuration",
+    )
+
+
+def global_tool_key(tool_config: Any) -> Optional[str]:
+    """The key a node names a workflow-level (global) tool by when it opts out of it.
+
+    ``tool_id`` comes first because attaching by reference is the common case, and the id is what survives
+    every re-save of the workflow. ``function_id`` next: a codebase function attached directly has no
+    ``tool_id``. ``logical_id`` last, for an inline tool with no other identity; it is minted when the
+    workflow config is first validated and stored with it from then on.
+
+    Never the tool's ``name``. A name can be edited or carry a ``[[...]]`` placeholder, and renaming a
+    global tool must not quietly hand it back to a node that opted out of it.
+
+    Anything that writes an exclusion (the dashboard's node editor, Copilot) must derive the key in this
+    same order, or what it writes will match nothing here.
+
+    Accepts a stored tool as a plain mapping too, so code that reads raw workflow documents (without
+    validating every version it touches) derives the same key from the same fields.
+    """
+    for attribute in ("tool_id", "function_id", "logical_id"):
+        if isinstance(tool_config, Mapping):
+            value = tool_config.get(attribute)
+        else:
+            value = getattr(tool_config, attribute, None)
+        if value:
+            return str(value)
+    return None

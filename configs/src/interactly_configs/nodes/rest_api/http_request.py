@@ -3,6 +3,7 @@ from typing import Literal, Optional
 
 from pydantic import ConfigDict, Field
 
+from interactly_configs.nodes.llm.llm import NodeRealtimeOverrides
 from interactly_configs.nodes.node import (
     BaseNodeConfig,
     BaseNodeRunInput,
@@ -10,6 +11,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
     NodeType,
 )
+from interactly_configs.secrets import SensitiveMap, SensitiveMapField
 
 
 class HttpMethodEnum(str, Enum):
@@ -21,16 +23,19 @@ class HttpMethodEnum(str, Enum):
     HEAD = "HEAD"
     OPTIONS = "OPTIONS"
 
+
 class BodyContentTypeEnum(str, Enum):
     JSON = "application/json"
     FORM = "application/x-www-form-urlencoded"
     MULTIPART = "multipart/form-data"
     TEXT = "text/plain"
 
+
 class ResponseFormatEnum(str, Enum):
     JSON = "json"
     TEXT = "text"
     BINARY = "binary"
+
 
 class HttpRequestNodeConfig(BaseNodeConfig):
     type: Literal["http_request"] = Field(
@@ -58,17 +63,20 @@ class HttpRequestNodeConfig(BaseNodeConfig):
         description="HTTP method to use (GET, POST, PUT, PATCH, DELETE, etc.)",
         title="HTTP Method",
     )
-    headers: Optional[dict] = Field(
+    headers: Optional[dict] = SensitiveMapField(
+        SensitiveMap.HEADERS,
         default=None,
         description="Optional HTTP headers as a dictionary",
         title="Headers",
     )
-    query_parameters: Optional[str] = Field(
+    query_parameters: Optional[str] = SensitiveMapField(
+        SensitiveMap.JSON_TEXT,
         default=None,
         description="Query parameters as a dictionary",
         title="Query Parameters",
     )
-    body_parameters: Optional[str] = Field(
+    body_parameters: Optional[str] = SensitiveMapField(
+        SensitiveMap.JSON_TEXT,
         default=None,
         description="Body parameters as a dictionary (for POST, PUT, PATCH)",
         title="Body Parameters",
@@ -95,10 +103,17 @@ class HttpRequestNodeConfig(BaseNodeConfig):
         description="Name of the runtime variable to store the result",
         title="Result Runtime Variable Name",
     )
+    # On an HTTP node only `hold_for_caller`, `hold_for_caller_ms` and `stt_keyterms_variable` are read.
+    realtime_overrides: Optional[NodeRealtimeOverrides] = Field(
+        default=None,
+        description="Realtime voice settings for this node. Ignored unless the call runs on a realtime voice.",
+        title="Realtime Overrides",
+    )
 
     model_config = ConfigDict(
         title="HTTP Request Node",
     )
+
 
 class HttpRequestNodeRunInput(BaseNodeRunInput):
     type: Literal["http_request"] = Field(
@@ -109,6 +124,7 @@ class HttpRequestNodeRunInput(BaseNodeRunInput):
         description="Override the URL for the HTTP request",
         title="Override URL",
     )
+
 
 class HttpRequestNodeRunOutput(BaseNodeRunOutput):
     type: Literal["http_request"] = Field(
