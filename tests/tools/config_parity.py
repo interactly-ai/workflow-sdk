@@ -145,6 +145,10 @@ KNOWN_HOISTED_NONMEMBERS: Dict[str, str] = {
     "GOOGLEModel.ALWAYS_THINKING_MODELS": "ALWAYS_THINKING_GOOGLE_MODELS",
     "GOOGLEModel.REJECTS_TRAILING_MODEL_TURN_MODELS": "REJECTS_TRAILING_MODEL_TURN_GOOGLE_MODELS",
     "OPENAIModel.AUDIO_INPUT_MODELS": "AUDIO_INPUT_OPENAI_MODELS",
+    "OPENAIModel.MODELS_WITHOUT_MINIMAL_REASONING_EFFORT": "MODELS_WITHOUT_MINIMAL_REASONING_EFFORT",
+    "OPENAIModel.MODELS_WITHOUT_NO_REASONING_EFFORT": "MODELS_WITHOUT_NO_REASONING_EFFORT",
+    "OPENAIModel.NO_REASONING_EFFORTS": "NO_REASONING_EFFORTS",
+    "OPENAIModel.DECISIONS_MODELS": "DECISIONS_OPENAI_MODELS",
     "BEDROCKModel.VISION_MODELS": "VISION_BEDROCK_MODELS",
     "XAIModel.VERTEX_GLOBAL_ONLY": "XAI_VERTEX_GLOBAL_ONLY",
     "GemmaModel.VERTEX_GLOBAL_ONLY": "GEMMA_VERTEX_GLOBAL_ONLY",
@@ -288,14 +292,27 @@ def _extract_module(path: Path, module_name: str) -> Dict[str, ClassInfo]:
     return out
 
 
+#: Calls that declare a field as `Field(...)` does, with how many leading positional arguments come before the
+#: default. Upstream's `secrets.py` wraps `Field` to add a dashboard annotation marking a credential (`SecretField`)
+#: or a map whose entries may be credentials (`SensitiveMapField`, whose first argument is the map's kind). Read as
+#: plain calls, every description or dropped annotation on such a field would count as a default mismatch.
+FIELD_DECLARING_CALLS: Dict[str, int] = {"Field": 0, "SecretField": 0, "SensitiveMapField": 1}
+
+
 def _is_field_call(value: Optional[ast.expr]) -> Optional[ast.Call]:
-    """The `Field(...)` call in `x: int = Field(default=5)`, or None if the RHS is a plain value."""
+    """The `Field(...)` call (or a wrapper of it) in `x: int = Field(default=5)`, or None for a plain value."""
     if isinstance(value, ast.Call):
         func = value.func
         name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
-        if name == "Field":
+        if name in FIELD_DECLARING_CALLS:
             return value
     return None
+
+
+def _default_position(call: ast.Call) -> int:
+    func = call.func
+    name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+    return FIELD_DECLARING_CALLS.get(name or "", 0)
 
 
 def _canonical_default(rendered: str) -> str:
@@ -334,8 +351,9 @@ def _extract_default(value: Optional[ast.expr]) -> str:
             return _canonical_default(ast.unparse(keyword.value))
         if keyword.arg == "default_factory":
             return _canonical_default(f"factory:{ast.unparse(keyword.value)}")
-    if call.args:
-        rendered = ast.unparse(call.args[0])
+    position = _default_position(call)
+    if len(call.args) > position:
+        rendered = ast.unparse(call.args[position])
         return REQUIRED if rendered == "..." else _canonical_default(rendered)
     return REQUIRED
 

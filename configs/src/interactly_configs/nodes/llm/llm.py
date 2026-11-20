@@ -68,6 +68,34 @@ class NodeRealtimeOverrides(BaseModel):
         ),
         title="Turn Detection",
     )
+    stt_keyterms_variable: Optional[str] = Field(
+        default=None,
+        description=(
+            "The runtime variable holding words the caller's speech recognizer should listen for while this node "
+            "is active (a list of strings, or one comma-separated string), such as the medications on the "
+            "patient's chart. Sent when the node starts and again when a tool changes the list. Leave empty to "
+            "keep whatever list is already in use; a variable holding an empty list clears it."
+        ),
+        title="Speech Recognizer Keyterms Variable",
+    )
+    hold_for_caller: bool = Field(
+        default=False,
+        description=(
+            "For a node that runs without speaking, such as one that saves a request: when the caller has started "
+            "speaking, or another route is already waiting, the node waits for the caller's words before it runs. "
+            "If words come, it does not run on this pass, and the caller's words are judged first. Only applies "
+            "when the assistant runs silent nodes in one step."
+        ),
+        title="Hold For Caller",
+    )
+    hold_for_caller_ms: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=5000,
+        description="How long a node with Hold For Caller waits for the caller's words, in milliseconds, 5000 at "
+        "most. Empty: 1200.",
+        title="Hold For Caller (ms)",
+    )
 
     model_config = ConfigDict(title="Realtime Overrides")
 
@@ -101,6 +129,28 @@ class BaseLLMNodeConfig(BaseNodeConfig):
         default=None,
         description="List of tools available for this node",
         title="Tools Configuration",
+    )
+    # The node editor shows both in one picker, rendered for `excluded_global_tools` by its field type. The
+    # switch stays hidden from the generic form, because on its own it would be a lone checkbox far from the
+    # tools it turns off; the picker writes it.
+    ignore_global_tools: bool = Field(
+        default=False,
+        description=(
+            "If true, none of the workflow's global tools are offered to this node. The node's own tools "
+            "are unaffected."
+        ),
+        title="Ignore Global Tools",
+    )
+    # `default=[]` rather than `default_factory=list`: only a literal default reaches the JSON Schema the
+    # dashboard seeds its forms from, and Pydantic copies a mutable default per instance either way.
+    excluded_global_tools: List[str] = Field(
+        default=[],
+        description=(
+            "Global tools that are not offered to this node, each named by its key: the tool's tool_id, "
+            "else its function_id, else its logical_id. A key that matches no global tool is ignored, so a "
+            "node copied from another workflow keeps working. The node's own tools are never excluded."
+        ),
+        title="Excluded Global Tools",
     )
     self_loop: bool = Field(
         default=False,
@@ -156,6 +206,7 @@ class BaseLLMNodeConfig(BaseNodeConfig):
         title="Realtime Overrides",
     )
 
+
 EXAMPLE_STRUCTURED_SCHEMA = """
 {
         "name": "SearchQuery",
@@ -179,6 +230,7 @@ EXAMPLE_STRUCTURED_SCHEMA = """
         }
     }
 """
+
 
 class WorkerLLMNodeConfig(BaseLLMNodeConfig):
     type: Literal["worker_llm"] = Field(
@@ -206,6 +258,7 @@ class WorkerLLMNodeConfig(BaseLLMNodeConfig):
         title="Worker LLM Node",
     )
 
+
 class SayLLMNodeConfig(BaseLLMNodeConfig):
     type: Literal["say_llm"] = Field(
         default=NodeType.SAY_LLM.value,
@@ -232,6 +285,7 @@ class SayLLMNodeConfig(BaseLLMNodeConfig):
         title="LLM Node",
     )
 
+
 class LLMNodeRunInput(BaseNodeRunInput):
     type: Literal["llm"] = Field(default="llm", description="Discriminator field which must always be 'llm'")
     messages: List[Any] = Field(
@@ -239,6 +293,7 @@ class LLMNodeRunInput(BaseNodeRunInput):
         description="Input user messages to be processed by the LLM node",
         title="Input User Messages",
     )
+
 
 class SayLLMNodeRunOutput(BaseNodeRunOutput):
     type: Literal["say_llm"] = Field(
@@ -249,6 +304,7 @@ class SayLLMNodeRunOutput(BaseNodeRunOutput):
         description="Structured output from the say node",
         title="Structured Output",
     )
+
 
 class WorkerLLMNodeRunOutput(BaseNodeRunOutput):
     type: Literal["worker_llm"] = Field(

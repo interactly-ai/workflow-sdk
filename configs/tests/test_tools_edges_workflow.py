@@ -161,25 +161,16 @@ class TestCompanionLifetime:
         assert ic.edge_companion_stops_with_main_thread(edge) is expected
 
 
-class TestVoicePersona:
-    def test_too_long_is_rejected(self):
-        with pytest.raises(ValidationError):
-            ic.WorkflowConfig(voice_persona="x" * (ic.VOICE_PERSONA_MAX_LENGTH + 1))
+class TestVoicePersonaRemoved:
+    """A GPT-Live call takes its voice persona from the assistant placing it, so workflows no longer carry one."""
 
-    @pytest.mark.parametrize(
-        "written, generated, expected",
-        [
-            ("You are Ada.", "You are Bo.", ("You are Ada.", "workflow")),  # hand-written wins
-            (None, "You are Bo.", ("You are Bo.", "generated")),
-            ("   ", "You are Bo.", ("You are Bo.", "generated")),  # whitespace is not a persona
-            (None, None, (None, None)),
-        ],
-    )
-    def test_resolution_order(self, written, generated, expected):
-        hydrated = ic.WorkflowConfigFullyHydrated(
-            workflow_config=ic.WorkflowConfig(voice_persona=written), generated_voice_persona=generated
+    def test_a_stored_workflow_that_still_carries_one_loads_and_sheds_it(self):
+        hydrated = ic.WorkflowConfigFullyHydrated.model_validate(
+            {"workflow_config": {"name": "w", "voice_persona": "You are Ada."}, "generated_voice_persona": "You are Bo."}
         )
-        assert hydrated.resolved_voice_persona() == expected
+        dumped = hydrated.model_dump()
+        assert "voice_persona" not in dumped["workflow_config"]
+        assert "generated_voice_persona" not in dumped
 
 
 class TestDynamicVariableExtraction:

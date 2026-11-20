@@ -11,6 +11,14 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+# Readable labels for a choice field's values, keyed by value. The workflow editors' forms show them instead of the
+# raw values.
+INPUT_FIELD_ENUM_TITLES_STRING = "x-enumTitles"
+
+# The integration provider an integrations-selection field accepts, such as "aws". The workflow editors list only
+# that provider's integrations in its picker.
+INPUT_FIELD_INTEGRATION_PROVIDER_STRING = "ui_integration_provider"
+
 
 class UILoginRole(str, Enum):
     """
@@ -21,6 +29,7 @@ class UILoginRole(str, Enum):
     ADMIN = "admin"
     DEVELOPER = "developer"
     USER = "user"
+    VIEWER = "viewer"
 
 
 class UISpecialFieldTypes(str, Enum):
@@ -70,20 +79,27 @@ class UISpecialFieldTypes(str, Enum):
     # fails quietly.
     VARIABLE_ARGUMENTS_EDITOR = "variable_arguments_editor"
     RESULT_VARIABLE_MAPPINGS_EDITOR = "result_variable_mappings_editor"
+    # A node's opt-out from the workflow's global tools. Stored as a list of tool keys, but the generic
+    # string-list renderer would ask an author to type ids they cannot see; the picker lists the
+    # workflow's global tools by name and writes the keys itself.
+    GLOBAL_TOOL_EXCLUSION = "global_tool_exclusion"
 
 
 class AccessControlLevel(str, Enum):
     """
     Enum representing different access control levels.
     """
+
     PERSONAL = "personal"
     TEAM = "team"
     SYSTEM = "system"
+
 
 class AccessControlLevelConfig(BaseModel):
     """
     Access control configuration for an entity.
     """
+
     access_level: Optional[AccessControlLevel] = Field(
         default=AccessControlLevel.PERSONAL,
         description="Access level for the entity",

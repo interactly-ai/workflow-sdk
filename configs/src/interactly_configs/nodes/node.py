@@ -48,6 +48,31 @@ class NodeType(str, Enum):
     # Utility nodes
     NO_OP = "no_op"
 
+    # Control nodes: they pause the run or end it. Hidden from authoring unless the deployment enables them
+    # (configs/nodes/gating.py).
+    PAUSE_WORKFLOW = "pause_workflow"
+    WAIT = "wait"
+    WAIT_FOR_SIGNAL = "wait_for_signal"
+    TERMINATE_WORKFLOW = "terminate_workflow"
+
+    # AWS nodes: they run work in a team's AWS account through its AWS connection. Hidden from authoring unless the
+    # deployment enables them (configs/nodes/gating.py).
+    AWS_ECS_RUN_TASK = "aws_ecs_run_task"
+    AWS_ECS_START_TASK = "aws_ecs_start_task"
+    AWS_ECS_GET_TASK_STATUS = "aws_ecs_get_task_status"
+    AWS_ECS_STOP_TASK = "aws_ecs_stop_task"
+    AWS_ECS_WAIT_FOR_TASKS = "aws_ecs_wait_for_tasks"
+    AWS_ECS_GET_TASK_LOGS = "aws_ecs_get_task_logs"
+
+    # Analysis nodes: Store Analysis saves only in post-call analysis runs (dry run elsewhere)
+    CONVERSATION_FETCH = "conversation_fetch"
+    ANALYSIS_LLM = "analysis_llm"
+    STORE_ANALYSIS = "store_analysis"
+
+    # Typed questions answered by a model; runs as a worker
+    DECISIONS = "decisions"
+
+
 class NodeCategory(str, Enum):
     """
     Enum representing different categories of nodes.
@@ -63,6 +88,7 @@ class NodeCategory(str, Enum):
     EHR = "EHR"
     ATHENA = "Athena"
     DATA_TRANSFORMATION = "Data Transformation"
+    ANALYSIS = "Analysis"
 
     # Secondary categories
     CONVERSATION = "Conversation"
@@ -72,15 +98,20 @@ class NodeCategory(str, Enum):
     HTTP_REQUEST = "HTTP Request"
     EHR_INTEGRATIONS = "EHR Integrations"
     EVALUATION = "Evaluation"
-    UTILITY = "Utility"
     TOOL = "Tool"
     DEDUPLICATION = "Deduplication"
     EXTRACTION = "Extraction"
+    UTILITY = "Utility"
+    CONTROL = "Control"
+    AWS = "AWS"
+    ECS = "ECS"
+
 
 class GlobalConditionEdgeEvaluationMethod(str, Enum):
     WORKFLOW_DEFAULT = "workflow_default"
     TOOL_CALL = "tool_call"
     INDEPENDENT_LLM_EVALUATIONS = "independent_llm_evaluations"
+
 
 class GlobalNodeConfig(BaseModel):
     is_global: bool = Field(
@@ -108,6 +139,16 @@ class GlobalNodeConfig(BaseModel):
         ),
         title="Reverse Conditional Edge",
     )
+
+
+class NodeFailurePolicy(str, Enum):
+    """What the run does when a node fails, by raising an error or by reporting ``success`` false in its output."""
+
+    #: Handle it as before: a reported failure follows the node's edges, and an error counts against the error limits.
+    ROUTE = "route"
+    #: End the whole run at once, as failed.
+    ABORT_WORKFLOW = "abort_workflow"
+
 
 class SelfLoopConfig(BaseModel):
     """
@@ -224,6 +265,33 @@ class BaseNodeConfig(BaseEntityConfig):
         description="Bounded self-loop / retry policy for this node.",
         title="Self Loop",
     )
+    on_failure: NodeFailurePolicy = Field(
+        default=NodeFailurePolicy.ROUTE,
+        description=(
+            "What happens when this node fails, by raising an error or by reporting success = false. 'route' handles "
+            "it as before: a reported failure follows the node's edges, and an error counts against the workflow's "
+            "error limits. 'abort_workflow' ends the whole run at once as failed: every other node still running is "
+            "stopped and every thread ends. It cannot be combined with an enabled self loop; to fail the run once the "
+            "loop's retries are spent, route its exhausted edge to a Terminate workflow node."
+        ),
+        title="On Failure",
+    )
+
+    @model_validator(mode="after")
+    def _refuse_abort_with_bounded_self_loop(self):
+        # A bounded self loop runs the node again until it reaches its exit, so a failed attempt is one it means to
+        # retry. Aborting the run on that attempt would leave nothing to retry.
+        if (
+            self.on_failure == NodeFailurePolicy.ABORT_WORKFLOW
+            and self.self_loop_config is not None
+            and self.self_loop_config.enabled
+        ):
+            raise ValueError(
+                f"Node {self.name or self.logical_id}: on_failure 'abort_workflow' cannot be combined with an enabled "
+                "self loop. To fail the run once the loop's retries are spent, route its exhausted edge to a Terminate "
+                "workflow node."
+            )
+        return self
 
 
 class BaseNodeRunInput(BaseRunInput):
@@ -236,6 +304,7 @@ class BaseNodeRunInput(BaseRunInput):
         description="Logical ID of the node this run input is for",
         title="Node Logical ID",
     )
+
 
 class BaseNodeRunOutput(BaseRunOutput):
     type: Literal["base_node"] = Field(

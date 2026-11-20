@@ -24,6 +24,7 @@ class WorkflowCommand(str, Enum):
     PAUSE = "pause"
     STOP = "stop"
 
+
 class WorkflowStatus(str, Enum):
     NOT_STARTED = "not_started"
     STARTED = "started"
@@ -32,6 +33,11 @@ class WorkflowStatus(str, Enum):
     COMPLETED = "completed"
     PAUSED = "paused"
     WAITING_FOR_USER_INPUT = "waiting_for_user_input"
+    # Parked on something that will wake the run without anyone acting: an external job finishing, a timer, or a
+    # signal from another system. Unlike PAUSED, nobody needs to resume it; unlike WAITING_FOR_USER_INPUT, it is not
+    # waiting for a conversation partner. Every service that reads runs must know this value before anything writes
+    # it, because the run model validates the status strictly.
+    WAITING = "waiting"
     CANCELLED = "cancelled"
     ABORTED_LOOPING_RISK = "aborted_looping_risk"
 
@@ -44,12 +50,10 @@ class WorkflowStatus(str, Enum):
             WorkflowStatus.ABORTED_LOOPING_RISK,
         }
 
-    # Statuses that could represent workflows that are stuck and need to be reaped by the stale run reaper.
-    @staticmethod
-    def is_active_run_status(status: WorkflowStatus | None) -> bool:
-        return status in {WorkflowStatus.STARTED, WorkflowStatus.RUNNING, WorkflowStatus.WAITING_FOR_USER_INPUT}
-        # We are ignoring PAUSED runs because they are intentionally paused and not necessarily stale.
-        # The reaper will not mark them as failed.
+    # Which non-terminal statuses the stale-run reaper may fail, and which hold a concurrency slot, are defined only
+    # by REAPABLE_RUN_STATUSES and CONCURRENCY_COUNTED_RUN_STATUSES in workflow_service/src/models/workflow_runs.py.
+    # The two answers differ for WAITING, so there is deliberately no single "is active" helper here.
+
 
 class WorkflowRunInput(BaseRunInput):
     """
@@ -109,7 +113,7 @@ class WorkflowRunInput(BaseRunInput):
     )
     welcome_message: Optional[str] = Field(
         default=None,
-        description="Voice-engine opening line, seeded as the first assistant message on the first run only.",
+        description="A line spoken before the workflow first ran, seeded as the first assistant message on the first run only.",
         title="Welcome Message",
     )
 
@@ -124,6 +128,7 @@ class WorkflowRunOutput(BaseRunOutput):
         description="Mapping of thread IDs to lists of node outputs",
         title="Thread to Node Outputs",
     )
+
 
 class WorkflowRunInputOutputPair(BaseModel):
     """
@@ -181,6 +186,11 @@ class LLMTokenUsage(BaseModel):
         default=None, description="Breakdown of token usage by LLM model and provider"
     )
     _in_progress_llm_response_ids: Set[str] = PrivateAttr(default_factory=set)
+    # Responses whose prompt tokens are already counted. Apart from the set above because a streamed
+    # response reports its prompt on its last message, not its first.
+    _prompt_counted_llm_response_ids: Set[str] = PrivateAttr(default_factory=set)
+    _completion_counted_llm_response_ids: Set[str] = PrivateAttr(default_factory=set)
+
 
 class LLMTokenUsageByModel(BaseModel):
     """
@@ -200,6 +210,7 @@ class LLMTokenUsageByModel(BaseModel):
     )
     call_count: Optional[int] = Field(default=0, description="The number of LLM calls")
 
+
 class LLMLatencyStatsByModel(BaseModel):
     """
     Latency stats by LLM model and provider.
@@ -214,6 +225,7 @@ class LLMLatencyStatsByModel(BaseModel):
     average_latency_milliseconds: Optional[float] = Field(
         default=0.0, description="The average latency per call in milliseconds"
     )
+
 
 class LLMLatencyStats(BaseModel):
     """
@@ -231,6 +243,7 @@ class LLMLatencyStats(BaseModel):
         default=None, description="Breakdown of latency stats by LLM model and provider"
     )
     _processed_llm_response_ids: Set[str] = PrivateAttr(default_factory=set)
+
 
 class WorkflowRun(BaseModel):
     """

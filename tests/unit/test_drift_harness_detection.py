@@ -157,6 +157,70 @@ class TestDefaultsKeepLiteralAndFactoryApart:
         assert report.default_mismatches == []
 
 
+class TestFieldWrappersDeclareFields:
+    """Upstream wraps `Field` to mark credentials (`SecretField`, `SensitiveMapField`). Their default is compared,
+    not the whole call: the mirror drops the dashboard annotation they add, and a description may differ."""
+
+    @staticmethod
+    def _field(declaration: str) -> str:
+        return f"""
+            from typing import Dict, Optional
+            from pydantic import BaseModel
+            from secrets_module import SecretField, SensitiveMap, SensitiveMapField
+            class Cfg(BaseModel):
+                value: Optional[Dict[str, str]] = {declaration}
+        """
+
+    def test_a_dropped_annotation_and_a_new_description_are_not_differences(self, tmp_path):
+        # Arrange
+        upstream = self._field(
+            "SensitiveMapField(SensitiveMap.HEADERS, default={}, description='a', json_schema_extra={'k': 1})"
+        )
+        mirror = self._field("SensitiveMapField(SensitiveMap.HEADERS, default={}, description='b')")
+
+        # Act
+        report = _parity(tmp_path, {"m.py": upstream}, {"m.py": mirror})
+
+        # Assert
+        assert report.default_mismatches == []
+
+    def test_a_changed_default_is_reported(self, tmp_path):
+        # Arrange / Act
+        report = _parity(
+            tmp_path,
+            {"m.py": self._field("SensitiveMapField(SensitiveMap.HEADERS, default=None)")},
+            {"m.py": self._field("SensitiveMapField(SensitiveMap.HEADERS, default={})")},
+        )
+
+        # Assert
+        assert report.default_mismatches == [("Cfg", "value", "None", "{}")]
+
+    def test_a_sensitive_map_reads_its_positional_default_after_the_kind(self, tmp_path):
+        # Arrange / Act
+        report = _parity(
+            tmp_path,
+            {"m.py": self._field("SensitiveMapField(SensitiveMap.BODY, None, description='x')")},
+            {"m.py": self._field("SensitiveMapField(SensitiveMap.BODY, default=None)")},
+        )
+
+        # Assert: the kind is not mistaken for the default
+        assert report.default_mismatches == []
+
+    @pytest.mark.parametrize(
+        "upstream, mirror, mismatches",
+        [
+            ("SecretField(None, description='key')", "SecretField(default=None)", []),
+            ("SecretField('x')", "SecretField(None)", [("Cfg", "value", "'x'", "None")]),
+        ],
+    )
+    def test_a_secret_field_reads_its_default_as_field_does(self, tmp_path, upstream, mirror, mismatches):
+        # Act
+        report = _parity(tmp_path, {"m.py": self._field(upstream)}, {"m.py": self._field(mirror)})
+
+        # Assert
+        assert report.default_mismatches == mismatches
+
+
 _UPSTREAM_ENUM = """
     from enum import Enum, nonmember
 

@@ -5,7 +5,11 @@ from pydantic import BaseModel
 
 from interactly_configs.workflow import WorkflowConfig, WorkflowConfigFullyHydrated
 
-_WORKFLOW_SETTINGS_MISC_KEY_DYNAMIC_VARIABLES = "default_dynamic_variables"
+# Where a workflow keeps the defaults for its dynamic variables, under `workflow_config.miscellaneous`.
+# Read by the dashboard (through `derive_dynamic_variables`) to pre-fill its variables field, and by the
+# runtime when a run starts, for every variable the caller did not supply.
+WORKFLOW_SETTINGS_MISC_KEY_DYNAMIC_VARIABLES = "default_dynamic_variables"
+_WORKFLOW_SETTINGS_MISC_KEY_DYNAMIC_VARIABLES = WORKFLOW_SETTINGS_MISC_KEY_DYNAMIC_VARIABLES
 
 # Matches variables in double curly braces: {{name}}, {{user.name}}, {{items[0]}}.
 _DYNAMIC_VARIABLE_PATTERN = r"\{\{([^}]+)\}\}"
@@ -61,6 +65,7 @@ def derive_dynamic_variables(workflow_config: WorkflowConfig | WorkflowConfigFul
         empty_dynamic_variables[key] = value
     return empty_dynamic_variables
 
+
 def _build_dynamic_variables_structure(variable_expressions: set) -> dict:
     """
     Build nested dict/list structures from variable expressions.
@@ -82,6 +87,7 @@ def _build_dynamic_variables_structure(variable_expressions: set) -> dict:
 
     return result
 
+
 def _parse_and_merge_variable(expr: str, result: dict) -> None:
     """
     Parse a variable expression and merge it into the result dictionary.
@@ -101,6 +107,7 @@ def _parse_and_merge_variable(expr: str, result: dict) -> None:
 
     # Start from the root
     _merge_tokens_into_result(tokens, result)
+
 
 def _tokenize_expression(expr: str) -> list:
     """
@@ -144,6 +151,7 @@ def _tokenize_expression(expr: str) -> list:
         tokens.append(current_token)
 
     return tokens
+
 
 def _merge_tokens_into_result(tokens: list, result: dict) -> None:
     """

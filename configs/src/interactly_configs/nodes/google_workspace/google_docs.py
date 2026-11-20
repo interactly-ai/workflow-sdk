@@ -9,6 +9,7 @@ from interactly_configs.nodes.node import (
     NodeCategory,
     NodeType,
 )
+from interactly_configs.secrets import SecretField
 
 
 class GoogleWorkspaceOAuth2Credentials(BaseModel):
@@ -29,7 +30,7 @@ class GoogleWorkspaceOAuth2Credentials(BaseModel):
         description="Client ID for Google Workspace. If not provided, the default value at os.environ['GOOGLE_CLIENT_ID'] will be used.",
         title="Client ID",
     )
-    client_secret: Optional[str] = Field(
+    client_secret: Optional[str] = SecretField(
         None,
         description="Client Secret for Google Workspace. If not provided, the default value at os.environ['GOOGLE_CLIENT_SECRET'] will be used.",
         title="Client Secret",
@@ -38,6 +39,7 @@ class GoogleWorkspaceOAuth2Credentials(BaseModel):
     model_config = ConfigDict(
         title="OAuth2 Credentials",
     )
+
 
 class GoogleWorkspaceServiceAccountCredentials(BaseModel):
     """Configuration for Google Workspace service account credentials."""
@@ -52,12 +54,12 @@ class GoogleWorkspaceServiceAccountCredentials(BaseModel):
         description="Service account email for Google Workspace. If not provided, the default value at os.environ['GOOGLE_SERVICE_ACCOUNT_EMAIL'] will be used.",
         title="Service Account Email",
     )
-    private_key_id: Optional[str] = Field(
+    private_key_id: Optional[str] = SecretField(
         None,
         description="Private key ID for Google Workspace. If not provided, the default value at os.environ['GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_ID'] will be used.",
         title="Private Key ID",
     )
-    private_key: Optional[str] = Field(
+    private_key: Optional[str] = SecretField(
         None,
         description="Private key for Google Workspace. If not provided, the default value at os.environ['GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY'] will be used.",
         title="Private Key",
@@ -72,6 +74,7 @@ class GoogleWorkspaceServiceAccountCredentials(BaseModel):
         title="Service Account Credentials",
     )
 
+
 class GoogleWorkspaceAPIKeyCredentials(BaseModel):
     """Configuration for Google Workspace API Key credentials."""
 
@@ -80,7 +83,7 @@ class GoogleWorkspaceAPIKeyCredentials(BaseModel):
         description="Type of the credentials. Must be 'google_workspace_api_key'",
         title="Credentials Type",
     )
-    api_key: Optional[str] = Field(
+    api_key: Optional[str] = SecretField(
         None,
         description="API Key for Google Workspace, used to access public APIs. If not provided, the default value at os.environ['GOOGLE_API_KEY'] will be used.",
         title="API Key",
@@ -90,12 +93,14 @@ class GoogleWorkspaceAPIKeyCredentials(BaseModel):
         title="API Key Credentials",
     )
 
+
 GoogleWorkspaceCredentials = Annotated[
     GoogleWorkspaceOAuth2Credentials | GoogleWorkspaceServiceAccountCredentials | GoogleWorkspaceAPIKeyCredentials,
     Field(discriminator="type"),
 ]
 
 ### Google Docs CREATE ###
+
 
 class GoogleDocsCreateDocumentConfig(BaseModel):
     """Configuration for creating a Google Docs document."""
@@ -125,6 +130,7 @@ class GoogleDocsCreateDocumentConfig(BaseModel):
         title="Google Docs Create Document Node",
     )
 
+
 class GoogleDocsCreateDocumentNodeRunInput(BaseModel):
     """Run input for creating a Google Docs document."""
 
@@ -133,6 +139,7 @@ class GoogleDocsCreateDocumentNodeRunInput(BaseModel):
         description="Type of the node. Must be 'google_docs_create_document'",
         title="Node Type",
     )
+
 
 class GoogleDocsCreateDocumentNodeRunOutput(BaseModel):
     """Run output for creating a Google Docs document."""
@@ -153,7 +160,9 @@ class GoogleDocsCreateDocumentNodeRunOutput(BaseModel):
         title="Document URL",
     )
 
+
 ### Google Docs GET ###
+
 
 class GoogleDocsGetDocumentConfig(BaseModel):
     """Configuration for getting a Google Docs document."""
@@ -178,6 +187,7 @@ class GoogleDocsGetDocumentConfig(BaseModel):
         title="Google Docs Get Document Node",
     )
 
+
 class GoogleDocsGetDocumentNodeRunInput(BaseModel):
     """Run input for getting a Google Docs document."""
 
@@ -186,6 +196,7 @@ class GoogleDocsGetDocumentNodeRunInput(BaseModel):
         description="Type of the node. Must be 'google_docs_get_document'",
         title="Node Type",
     )
+
 
 class GoogleDocsGetDocumentNodeRunOutput(BaseModel):
     """Run output for getting a Google Docs document."""
@@ -201,7 +212,9 @@ class GoogleDocsGetDocumentNodeRunOutput(BaseModel):
         title="Document Content",
     )
 
+
 ### Google Docs UPDATE ###
+
 
 class GoogleDocsUpdateWithTextConfig(BaseModel):
     """Configuration for updating a Google Docs document with text."""
@@ -226,7 +239,9 @@ class GoogleDocsUpdateWithTextConfig(BaseModel):
         title="Google Docs Update With Text Node",
     )
 
+
 GoogleDocsUpdateObject = Annotated[GoogleDocsUpdateWithTextConfig, Field(discriminator="type")]
+
 
 class GoogleDocsUpdateDocumentConfig(BaseModel):
     """Configuration for updating a Google Docs document."""
@@ -251,6 +266,7 @@ class GoogleDocsUpdateDocumentConfig(BaseModel):
         title="Google Docs Update Document Node",
     )
 
+
 class GoogleDocsUpdateDocumentNodeRunInput(BaseModel):
     """Run input for updating a Google Docs document."""
 
@@ -259,6 +275,7 @@ class GoogleDocsUpdateDocumentNodeRunInput(BaseModel):
         description="Type of the node. Must be 'google_docs_update_document'",
         title="Node Type",
     )
+
 
 class GoogleDocsUpdateDocumentNodeRunOutput(BaseModel):
     """Run output for updating a Google Docs document."""
@@ -279,12 +296,14 @@ class GoogleDocsUpdateDocumentNodeRunOutput(BaseModel):
         title="Document URL",
     )
 
+
 ##################################################
 
 GoogleDocsOperateDocumentConfig = Annotated[
     GoogleDocsCreateDocumentConfig | GoogleDocsGetDocumentConfig | GoogleDocsUpdateDocumentConfig,
     Field(discriminator="type"),
 ]
+
 
 class GoogleDocsNodeConfig(BaseNodeConfig):
     type: Literal["google_docs"] = Field(
@@ -317,10 +336,12 @@ class GoogleDocsNodeConfig(BaseNodeConfig):
         title="Google Docs Node",
     )
 
+
 GoogleDocsOperateRunInput = Annotated[
     GoogleDocsCreateDocumentNodeRunInput | GoogleDocsGetDocumentNodeRunInput | GoogleDocsUpdateDocumentNodeRunInput,
     Field(discriminator="type"),
 ]
+
 
 class GoogleDocsNodeRunInput(BaseNodeRunInput):
     """Run input for Google Docs node."""
@@ -340,10 +361,12 @@ class GoogleDocsNodeRunInput(BaseNodeRunInput):
         title="Google Docs Node",
     )
 
+
 GoogleDocsOperateRunOutput = Annotated[
     GoogleDocsCreateDocumentNodeRunOutput | GoogleDocsGetDocumentNodeRunOutput | GoogleDocsUpdateDocumentNodeRunOutput,
     Field(discriminator="type"),
 ]
+
 
 class GoogleDocsNodeRunOutput(BaseNodeRunOutput):
     """Run output for Google Docs node."""

@@ -106,9 +106,7 @@ KNOWN_SERIALIZER_DROPPED_DEFAULTS: Dict[str, str] = {
 #: exact field. The mirror tracks source, so it can run ahead of a deploy; the integration guard fails as
 #: soon as an entry stops suppressing anything, which is the signal that the deploy landed and the entry
 #: should go.
-KNOWN_NOT_YET_DEPLOYED: Dict[str, str] = {
-    "CompanionThreadConfig.stop_with_main_thread": "upstream 310a9a8ec (2026-10-01); not on dev as of 2026-10-02",
-}
+KNOWN_NOT_YET_DEPLOYED: Dict[str, str] = {}
 
 KNOWN_SERVER_ONLY_DEFS: Dict[str, str] = {
     # LangChain message and tool-call types, embedded through `WorkflowRun`'s message history. The mirror

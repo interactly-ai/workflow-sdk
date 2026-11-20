@@ -9,7 +9,7 @@ as plain dicts and round-trip cleanly.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Annotated, Any, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, TypeAdapter, computed_field
@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field, TypeAdapter, computed_field
 from interactly_configs.comment import CommentConfig
 from interactly_configs.edge import COMPANION_THREAD_DELIMITER
 from interactly_configs.nodes.node_unions import NodeRunInput, NodeRunOutput
+from interactly_configs.pauses import PauseEntry, WakeCondition, WakeKind
+from interactly_configs.workflow_outcome import WorkflowOutcome, WorkflowTerminationCause
 from interactly_configs.workflow_run import WorkflowRunInputOutputPair
 
 
@@ -187,6 +189,11 @@ class EndWorkflowEvent(WorkflowEvent):
     type: Literal["end_workflow"] = Field(default="end_workflow")
     llm_token_usage: Optional[dict] = Field(default=None)
     llm_latency_stats: Optional[dict] = Field(default=None)
+    # How the workflow ended itself, when a node ended it; absent when it ran out of nodes to run.
+    outcome: Optional[WorkflowOutcome] = Field(default=None)
+    reason: Optional[str] = Field(default=None)
+    # What made a node end the workflow: a Terminate workflow node, or a failure it aborts on.
+    cause: Optional[WorkflowTerminationCause] = Field(default=None)
 
 
 class EndWorkflowIterationEvent(WorkflowEvent):
@@ -262,7 +269,12 @@ class StartThreadEvent(WorkflowEvent):
 
 class PauseThreadEvent(WorkflowEvent):
     type: Literal["pause_thread"] = Field(default="pause_thread")
+    # The node the thread is paused at: the node that paused it, or, for a pause of the whole run taken between
+    # nodes, the node it runs next when resumed.
     last_node_logical_id: Optional[str] = Field(default=None)
+    # The durable pause this thread is held by, and what kind of wake ends it, if durable.
+    pause_id: Optional[str] = Field(default=None)
+    wake_kind: Optional[WakeKind] = Field(default=None)
 
 
 class EndThreadEvent(WorkflowEvent):
@@ -468,7 +480,35 @@ class BusyWaitForUserMessageEvent(BusyWaitEvent, NodeEvent):
 
 
 class PauseEvent(NodeEvent):
+    """A node is to be paused.
+
+    The optional fields describe a durable pause; an event without ``wake`` is a manual pause, which is all a
+    pause meant before durable pauses existed. It never carries a resume token: events are streamed, stored and
+    logged.
+    """
+
     type: Literal["pause_event"] = Field(default="pause_event")
+    wake: Optional[WakeCondition] = Field(default=None)
+    pause_id: Optional[str] = Field(default=None)
+    entry: Optional[PauseEntry] = Field(default=None)
+    deadline_at: Optional[datetime] = Field(default=None)
+    # References a UI can show while the pause lasts, for example a job's console link.
+    display_refs: Optional[Dict[str, str]] = Field(default=None)
+
+
+class TerminateWorkflowEvent(NodeEvent):
+    """A node ends the whole run at once, with an outcome.
+
+    The runtime stops every node still running, ends every thread, paused and waiting ones included, and ends the
+    workflow with this outcome and reason.
+    """
+
+    type: Literal["terminate_workflow"] = Field(default="terminate_workflow")
+    outcome: WorkflowOutcome
+    reason: Optional[str] = Field(default=None)
+    # 'terminate_node' for a Terminate workflow node, 'on_failure' for a node that failed and aborts on failure.
+    # Read as 'terminate_node' when absent.
+    cause: Optional[WorkflowTerminationCause] = Field(default=None)
 
 
 class ForceTransferToNodeEvent(NodeEvent):
@@ -505,6 +545,9 @@ class WorkflowErrorEvent(BaseEvent):
     stack_trace: Optional[str] = Field(default=None)
     llm_token_usage: Optional[dict] = Field(default=None)
     llm_latency_stats: Optional[dict] = Field(default=None)
+    # True when the workflow cannot carry on whatever its error limits say, such as a run killed for looping or a
+    # turn sent to a thread that has ended. A driver must not keep the conversation open.
+    fatal: bool = Field(default=False)
 
 
 class WorkflowShowStateEvent(BaseEvent):
@@ -581,7 +624,51 @@ class AthenaNodeEvent(NodeEvent):
 
 
 Event = Annotated[
-    StartWorkflowEvent | EndWorkflowEvent | EndWorkflowIterationEvent | WorkflowReadyForInputEvent | CompanionStepBoundaryEvent | WaitingEvaluationBoundaryEvent | StartThreadEvent | PauseThreadEvent | EndThreadEvent | StartRunNodeEvent | EndRunNodeEvent | UserMessagesEvent | BusyWaitForUserMessageEvent | PauseEvent | ForceTransferToNodeEvent | WorkerLLMNodeEvent | SayLLMNodeEvent | ConditionEvaluatorLLMNodeEvent | DiscardedMainLLMNodeEvent | SayStaticMessageNodeEvent | AssistantResponseEvent | WorkflowDebugLogEvent | WorkflowNavigationEvent | WorkflowWarningEvent | WorkflowErrorEvent | WorkflowShowStateEvent | StartConversationNodeEvent | EndConversationNodeEvent | SendSMSNodeEvent | GoogleDocsCreateDocumentNodeEvent | GoogleDocsGetDocumentNodeEvent | GoogleDocsUpdateDocumentNodeEvent | HttpRequestNodeEvent | AthenaNodeEvent | DirectEdgeEvent | SelfLoopEdgeEvent | SelfLoopDelayEvent | SelfLoopExhaustedEvent | NodeExpiredEvent | ReverseConditionalEdgeEvent | ConditionalEdgeEvent | WaitingConditionMatchedEvent | CompanionEdgeEvent | GuardrailEscalationEdgeEvent,
+    StartWorkflowEvent
+    | EndWorkflowEvent
+    | EndWorkflowIterationEvent
+    | WorkflowReadyForInputEvent
+    | CompanionStepBoundaryEvent
+    | WaitingEvaluationBoundaryEvent
+    | StartThreadEvent
+    | PauseThreadEvent
+    | EndThreadEvent
+    | StartRunNodeEvent
+    | EndRunNodeEvent
+    | UserMessagesEvent
+    | BusyWaitForUserMessageEvent
+    | PauseEvent
+    | TerminateWorkflowEvent
+    | ForceTransferToNodeEvent
+    | WorkerLLMNodeEvent
+    | SayLLMNodeEvent
+    | ConditionEvaluatorLLMNodeEvent
+    | DiscardedMainLLMNodeEvent
+    | SayStaticMessageNodeEvent
+    | AssistantResponseEvent
+    | WorkflowDebugLogEvent
+    | WorkflowNavigationEvent
+    | WorkflowWarningEvent
+    | WorkflowErrorEvent
+    | WorkflowShowStateEvent
+    | StartConversationNodeEvent
+    | EndConversationNodeEvent
+    | SendSMSNodeEvent
+    | GoogleDocsCreateDocumentNodeEvent
+    | GoogleDocsGetDocumentNodeEvent
+    | GoogleDocsUpdateDocumentNodeEvent
+    | HttpRequestNodeEvent
+    | AthenaNodeEvent
+    | DirectEdgeEvent
+    | SelfLoopEdgeEvent
+    | SelfLoopDelayEvent
+    | SelfLoopExhaustedEvent
+    | NodeExpiredEvent
+    | ReverseConditionalEdgeEvent
+    | ConditionalEdgeEvent
+    | WaitingConditionMatchedEvent
+    | CompanionEdgeEvent
+    | GuardrailEscalationEdgeEvent,
     Field(discriminator="type"),
 ]
 
