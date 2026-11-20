@@ -73,7 +73,14 @@ from interactly.types.nodes.params import NodeCreateParams, NodeListParams, Node
 from interactly.types.runs.interactive_run import InteractiveRunResponse
 from interactly.types.runs.params import RunCommentParams, RunExecuteParams, RunListParams, RunStreamParams
 from interactly.types.runs.run import Run, RunComment, RunEvaluationResult
-from interactly.types.runs.run_control import RunControlResult, RunExternalJob, RunPause, RunSignal, SignalResult
+from interactly.types.runs.run_control import (
+    BackgroundRunStarted,
+    RunControlResult,
+    RunExternalJob,
+    RunPause,
+    RunSignal,
+    SignalResult,
+)
 from interactly.types.runs.run_event import RunEvent
 from interactly.types.schedules.params import ScheduleCreateParams, ScheduleListParams, ScheduleUpdateParams
 from interactly.types.schedules.schedule import Schedule, ScheduleStatus
@@ -177,6 +184,7 @@ __all__ = [
     # Run models
     "Run",
     "RunComment",
+    "BackgroundRunStarted",
     "RunControlResult",
     "RunExternalJob",
     "RunPause",

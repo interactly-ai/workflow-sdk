@@ -1,0 +1,21 @@
+{
+  "started": {
+    "status": 202,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f710000",
+      "status": "started"
+    }
+  },
+  "unknown_workflow": {
+    "status": 404,
+    "body": {
+      "message": "Sorry! We haven't found this route or not implemented yet!"
+    }
+  },
+  "unknown_version": {
+    "status": 404,
+    "body": {
+      "message": "Sorry! We haven't found this route or not implemented yet!"
+    }
+  }
+}

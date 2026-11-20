@@ -15,7 +15,15 @@ from pydantic import Field
 
 from interactly._models import BaseAPIModel
 
-__all__ = ["RunControlResult", "RunExternalJob", "RunPause", "RunSignal", "SignalResult"]
+__all__ = ["BackgroundRunStarted", "RunControlResult", "RunExternalJob", "RunPause", "RunSignal", "SignalResult"]
+
+
+class BackgroundRunStarted(BaseAPIModel):
+    """A background run that was started: durable, with no user and no socket. Follow it with ``client.runs.get``."""
+
+    workflow_run_id: str
+    #: Its status when it was started (``started``). Its first turn runs after the answer, in the background.
+    status: Optional[str] = None
 
 
 class RunControlResult(BaseAPIModel):
