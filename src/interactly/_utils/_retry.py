@@ -45,15 +45,23 @@ IDEMPOTENT_METHODS: frozenset[str] = frozenset({"GET", "HEAD", "OPTIONS", "DELET
 _NON_IDEMPOTENT_RETRY_STATUS_CODES: frozenset[int] = frozenset({429})
 
 
-def should_retry(method: str, response: httpx.Response) -> bool:
+def should_retry(
+    method: str, response: httpx.Response, retry_when_told: frozenset[int] = frozenset()
+) -> bool:
     """
     Return True if the response indicates a safe retry for the given method.
+
+    ``retry_when_told`` names further statuses that are retried, whatever the method, only when the response carries
+    ``Retry-After``: an endpoint that answers one of them with that header is saying the request was not recorded and
+    may be sent again (the run-control routes' 409 when the run kept changing).
 
     Idempotent methods retry on the full RETRY_STATUS_CODES set. Non-idempotent
     methods (POST/PATCH) only retry on 429 — a 5xx may mean the write already
     committed, so auto-replaying it risks duplicate side effects.
     """
     status = response.status_code
+    if status in retry_when_told and response.headers.get("Retry-After"):
+        return True
     if method.upper() in IDEMPOTENT_METHODS:
         return status in RETRY_STATUS_CODES
     return status in _NON_IDEMPOTENT_RETRY_STATUS_CODES
@@ -115,6 +123,7 @@ def with_retry(
     send: Callable[[], httpx.Response],
     max_retries: int,
     method: str,
+    retry_when_told: frozenset[int] = frozenset(),
 ) -> httpx.Response:
     """
     Wrap a synchronous send callable with retry logic.
@@ -123,13 +132,14 @@ def with_retry(
         send:        A zero-argument callable that returns an httpx.Response.
         max_retries: Maximum number of additional attempts (0 = no retry).
         method:      The HTTP method, used to decide whether a 5xx is retryable.
+        retry_when_told: Statuses also retried when the response carries ``Retry-After`` (see ``should_retry``).
 
     Returns:
         The final httpx.Response after all retry attempts.
     """
     for attempt in range(max_retries + 1):
         response = send()
-        if attempt == max_retries or not should_retry(method, response):
+        if attempt == max_retries or not should_retry(method, response, retry_when_told):
             return response
         delay = _retry_delay(attempt, response)
         logger.debug(
@@ -149,13 +159,14 @@ async def with_retry_async(
     send: Callable[[], Coroutine[Any, Any, httpx.Response]],
     max_retries: int,
     method: str,
+    retry_when_told: frozenset[int] = frozenset(),
 ) -> httpx.Response:
     """
     Async variant of `with_retry`.
     """
     for attempt in range(max_retries + 1):
         response = await send()
-        if attempt == max_retries or not should_retry(method, response):
+        if attempt == max_retries or not should_retry(method, response, retry_when_told):
             return response
         delay = _retry_delay(attempt, response)
         logger.debug(

@@ -39,6 +39,7 @@ Focused how-tos for each part of the API. Reach for these once you know the basi
 - [Self-loops & retries](guides/self_loops.md) — bounded re-execution of a node
 - [Re-runs](guides/reruns.md) — replay a finished run from any turn
 - [Run feedback](guides/run_feedback.md) — ratings and comments on finished runs
+- [Run control](guides/run_control.md) — pause, resume, approve, cancel and signal durable runs
 
 ## Reference & topics
 

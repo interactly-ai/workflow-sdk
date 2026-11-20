@@ -108,6 +108,32 @@ parameter list for each `list` method.
 
 ---
 
+## Cursor pages
+
+A run's pauses, signals and external jobs (`list_pauses`, `list_signals`, `list_external_jobs`) are paged by cursor:
+the server sends no total, and the next page is the one `after` this page's last row. They come back as
+`SyncCursorPage[T]` / `AsyncCursorPage[T]`, which iterate and collect like the pages above:
+
+```python
+page = await client.runs.list_pauses(run_id, limit=100)
+async for pause in page:          # this page only
+    ...
+everything = await page.list_all()  # every page
+```
+
+| Method / Attribute | Description |
+|--------------------|-------------|
+| `page.items` | `List[T]` — rows on the current page. |
+| `page.limit` | `int` — the most rows a page holds. |
+| `page.next_after` | `str` — the cursor of the next page (this page's last row id); `None` on an empty page. |
+| `page.has_next_page` | `bool` — `True` when this page is full. A full page may be followed by an empty one. |
+| `await page.next_page()` | Fetch the next page; raises `NoMorePagesError` on the last page. |
+| `await page.list_all()` | Collect every page into a flat `List[T]`. |
+
+There is no `total`, `page` or `pages`.
+
+---
+
 ## Synchronous alternative
 
 The synchronous `WorkflowClient` mirrors the async API exactly — drop the `await`

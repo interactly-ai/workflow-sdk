@@ -1,0 +1,193 @@
+{
+  "pause": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700000",
+      "outcome": "applied",
+      "status": "paused",
+      "made_ready": []
+    }
+  },
+  "pause_again": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700000",
+      "outcome": "already_requested",
+      "status": "paused",
+      "made_ready": []
+    }
+  },
+  "resume_run": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700000",
+      "outcome": "applied",
+      "status": "waiting",
+      "made_ready": []
+    }
+  },
+  "resume_nothing": {
+    "status": 409,
+    "body": {
+      "message": "Nothing in this run is paused or waiting for a person to resume it."
+    }
+  },
+  "cancel": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700000",
+      "outcome": "applied",
+      "status": "cancelled",
+      "made_ready": []
+    }
+  },
+  "pause_ended": {
+    "status": 409,
+    "body": {
+      "message": "The run has ended, or is being cancelled."
+    }
+  },
+  "list_pauses": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "pauses": [
+        {
+          "pause_id": "665f1c0a2b3c4d5e6f700002",
+          "thread_id": "0_companion_approval",
+          "node_id": "approve",
+          "pause_key": "node_pause:665f1c0a2b3c4d5e6f700001:0_companion_approval:approve:1:1",
+          "wake": {
+            "kind": "manual",
+            "reason": "Approve the refill",
+            "notify": true
+          },
+          "entry": "reenter",
+          "state": "armed",
+          "delivery_attempts": 0,
+          "created_at": "2026-11-20T09:17:28.939000Z",
+          "updated_at": "2026-11-20T09:17:28.939000Z"
+        },
+        {
+          "pause_id": "665f1c0a2b3c4d5e6f700003",
+          "thread_id": "0",
+          "node_id": "wait_lab",
+          "pause_key": "node_pause:665f1c0a2b3c4d5e6f700001:0:wait_lab:1:1",
+          "wake": {
+            "kind": "signal",
+            "signal_key": "lab.result"
+          },
+          "entry": "reenter",
+          "state": "armed",
+          "delivery_attempts": 0,
+          "created_at": "2026-11-20T09:17:28.939000Z",
+          "updated_at": "2026-11-20T09:17:28.939000Z"
+        }
+      ]
+    }
+  },
+  "resume_unknown_pause": {
+    "status": 400,
+    "body": {
+      "message": "Not an open pause of this run waiting for a person: 665f1c0a2b3c4d5e6f700004"
+    }
+  },
+  "resume_pauses": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "outcome": "applied",
+      "status": "waiting",
+      "made_ready": [
+        "665f1c0a2b3c4d5e6f700002"
+      ]
+    }
+  },
+  "signal_delivered": {
+    "status": 202,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "signal_key": "lab.result",
+      "outcome": "delivered",
+      "replayed": false
+    }
+  },
+  "signal_stored": {
+    "status": 202,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "signal_key": "approval.done",
+      "outcome": "stored",
+      "replayed": false
+    }
+  },
+  "signal_replayed": {
+    "status": 202,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "signal_key": "approval.done",
+      "outcome": "stored",
+      "replayed": true
+    }
+  },
+  "signal_already_received": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "signal_key": "approval.done",
+      "outcome": "already_received",
+      "replayed": false
+    }
+  },
+  "signal_other_body": {
+    "status": 409,
+    "body": {
+      "message": "A different signal already waits under this key, not yet taken; it stands."
+    }
+  },
+  "signal_bad_key": {
+    "status": 400,
+    "body": {
+      "message": "A signal key is 1 to 128 letters, digits, _ . : or -."
+    }
+  },
+  "list_signals": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "signals": [
+        {
+          "signal_id": "665f1c0a2b3c4d5e6f700005",
+          "signal_key": "approval.done",
+          "received_at": "2026-11-20T09:21:29.043000Z",
+          "consumed": false,
+          "consumed_by_pause_key": null,
+          "rejected_reason": null,
+          "idempotency_key": "c8-stored"
+        },
+        {
+          "signal_id": "665f1c0a2b3c4d5e6f700006",
+          "signal_key": "lab.result",
+          "received_at": "2026-11-20T09:21:29.030000Z",
+          "consumed": true,
+          "consumed_by_pause_key": "node_pause:665f1c0a2b3c4d5e6f700001:0:wait_lab:1:1",
+          "rejected_reason": null,
+          "idempotency_key": "c8-delivered"
+        }
+      ]
+    }
+  },
+  "list_external_jobs": {
+    "status": 200,
+    "body": {
+      "workflow_run_id": "665f1c0a2b3c4d5e6f700001",
+      "external_jobs": []
+    }
+  },
+  "signal_fails_schema": {
+    "status": 422,
+    "body": {
+      "message": "The signal body fails its wait's schema: 'name' is a required property"
+    }
+  }
+}

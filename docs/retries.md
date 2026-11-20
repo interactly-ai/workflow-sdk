@@ -8,7 +8,8 @@ jitter**. Retries are attempted for:
 | Scenario | Default Behaviour |
 |----------|-------------------|
 | `429 Too Many Requests` | Retry with backoff, honouring `Retry-After` header if present. |
-| `500 / 502 / 503 / 504` server errors | Retry with backoff. |
+| `500 / 502 / 503 / 504` server errors | Retry with backoff for GET, PUT and DELETE. A POST or PATCH may already have taken effect, so it is retried only on 429. |
+| `409` with `Retry-After` on a run-control request | Retry after the given delay: the run kept changing while the request was recorded, so nothing was. See [Run control](guides/run_control.md#when-the-server-says-try-again). |
 | `APIConnectionError` (network failure) | Retry immediately, then with backoff. |
 | `APITimeoutError` | Retry with backoff. |
 
@@ -107,6 +108,9 @@ The workflow execution endpoint (`POST /v1/workflows/{id}/execute`) is **not
 idempotent** — each call creates a new run. If you retry an execute call after a
 network failure, you may create duplicate runs. Use `await client.runs.list()` to
 check for in-progress or recently completed runs before retrying.
+
+`client.runs.send_signal()` is safe to retry: every post carries an `Idempotency-Key` (one per call, or yours), and a
+repeat gets the first post's answer.
 
 ---
 

@@ -252,11 +252,14 @@ class SyncAPIClient:
         path: str,
         *,
         params: dict[str, Any] | None = None,
-        json_body: dict[str, Any] | None = None,
+        json_body: Any = None,
+        headers: dict[str, str] | None = None,
+        retry_when_told: frozenset[int] = frozenset(),
         cast_to: Type[ModelT] | None,
     ) -> ModelT:
+        # ``json_body`` is any JSON value (a signal body may be a list, a string or a number); None sends no body.
         url = _build_url(self._base_url, path)
-        headers = self._headers()
+        headers = {**self._headers(), **(headers or {})}
 
         def _send() -> httpx.Response:
             # NB: never log json_body — request bodies may carry PII/PHI.
@@ -285,7 +288,7 @@ class SyncAPIClient:
                     request=_safe_request(exc),
                 ) from exc
 
-        response = with_retry(_send, self._max_retries, method)
+        response = with_retry(_send, self._max_retries, method, retry_when_told)
         return APIResponse(http_response=response, cast_to=cast_to).parse()
 
     # ---------------------------------------------------------------------- #
@@ -305,11 +308,22 @@ class SyncAPIClient:
         self,
         path: str,
         *,
-        body: dict[str, Any] | None = None,
+        body: Any = None,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        retry_when_told: frozenset[int] = frozenset(),
         cast_to: Type[ModelT],
     ) -> ModelT:
-        return self._request("POST", path, params=params, json_body=build_body(body), cast_to=cast_to)
+        """POST ``body``: a dict is cleaned of unset values first; any other JSON value is sent as it is."""
+        return self._request(
+            "POST",
+            path,
+            params=params,
+            json_body=build_body(body) if isinstance(body, dict) else body,
+            headers=headers,
+            retry_when_told=retry_when_told,
+            cast_to=cast_to,
+        )
 
     def put(
         self,
@@ -431,11 +445,14 @@ class AsyncAPIClient:
         path: str,
         *,
         params: dict[str, Any] | None = None,
-        json_body: dict[str, Any] | None = None,
+        json_body: Any = None,
+        headers: dict[str, str] | None = None,
+        retry_when_told: frozenset[int] = frozenset(),
         cast_to: Type[ModelT] | None,
     ) -> ModelT:
+        # ``json_body`` is any JSON value (a signal body may be a list, a string or a number); None sends no body.
         url = _build_url(self._base_url, path)
-        headers = self._headers()
+        headers = {**self._headers(), **(headers or {})}
 
         async def _send() -> httpx.Response:
             # NB: never log json_body — request bodies may carry PII/PHI.
@@ -464,7 +481,7 @@ class AsyncAPIClient:
                     request=_safe_request(exc),
                 ) from exc
 
-        response = await with_retry_async(_send, self._max_retries, method)
+        response = await with_retry_async(_send, self._max_retries, method, retry_when_told)
         return APIResponse(http_response=response, cast_to=cast_to).parse()
 
     async def get(self, path: str, *, params: dict[str, Any] | None = None, cast_to: Type[ModelT]) -> ModelT:
@@ -474,11 +491,22 @@ class AsyncAPIClient:
         self,
         path: str,
         *,
-        body: dict[str, Any] | None = None,
+        body: Any = None,
         params: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        retry_when_told: frozenset[int] = frozenset(),
         cast_to: Type[ModelT],
     ) -> ModelT:
-        return await self._request("POST", path, params=params, json_body=build_body(body), cast_to=cast_to)
+        """POST ``body``: a dict is cleaned of unset values first; any other JSON value is sent as it is."""
+        return await self._request(
+            "POST",
+            path,
+            params=params,
+            json_body=build_body(body) if isinstance(body, dict) else body,
+            headers=headers,
+            retry_when_told=retry_when_told,
+            cast_to=cast_to,
+        )
 
     async def put(
         self,

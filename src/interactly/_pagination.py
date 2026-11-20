@@ -12,6 +12,9 @@ The backend returns list results as:
 
 SyncPage / AsyncPage implement the iterator protocol and provide a
 ``list_all()`` / ``alist_all()`` convenience that auto-pages until exhausted.
+
+Some lists page by cursor instead: no total, and the next page is asked for ``after`` the last item of this one.
+SyncCursorPage / AsyncCursorPage serve those, with the same iteration and ``list_all()``.
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from interactly._models import BaseAPIModel
 
 ItemT = TypeVar("ItemT")
 
-__all__ = ["SyncPage", "AsyncPage"]
+__all__ = ["SyncPage", "AsyncPage", "SyncCursorPage", "AsyncCursorPage"]
 
 
 class PageMetadata(BaseAPIModel):
@@ -292,6 +295,113 @@ class AsyncPage(Generic[ItemT]):
     async def list_all(self) -> list[ItemT]:
         result: list[ItemT] = []
         page: AsyncPage[ItemT] = self
+        while True:
+            result.extend(page.items)
+            if not page.has_next_page:
+                break
+            page = await page.next_page()
+        return result
+
+
+class SyncCursorPage(Generic[ItemT]):
+    """
+    A page of a list the server pages by cursor: it sends no total, and the next page is the one ``after`` this page's
+    last item. A page holding fewer items than were asked for is the last; a full page may be followed by an empty one.
+
+    Iterate it for this page's items, or use ``iter_pages()`` / ``list_all()`` to go through every page.
+    """
+
+    def __init__(
+        self,
+        *,
+        items: list[ItemT],
+        limit: int,
+        next_after: Optional[str],
+        fetch_after: Callable[[str], "SyncCursorPage[ItemT]"],
+    ) -> None:
+        self.items = items
+        self.limit = limit
+        #: The cursor of the next page: this page's last item's id. None on an empty page.
+        self.next_after = next_after
+        self._fetch_after = fetch_after
+
+    def __iter__(self) -> Iterator[ItemT]:
+        return iter(self.items)
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    @property
+    def has_next_page(self) -> bool:
+        return self.next_after is not None and len(self.items) >= self.limit
+
+    def next_page(self) -> "SyncCursorPage[ItemT]":
+        """Fetch the next page. Raises ``NoMorePagesError`` on the last page."""
+        if not self.has_next_page or self.next_after is None:
+            raise NoMorePagesError("No more pages")
+        return self._fetch_after(self.next_after)
+
+    def iter_pages(self) -> Iterator["SyncCursorPage[ItemT]"]:
+        """Yield this page and all subsequent pages."""
+        page: SyncCursorPage[ItemT] = self
+        while True:
+            yield page
+            if not page.has_next_page:
+                break
+            page = page.next_page()
+
+    def list_all(self) -> list[ItemT]:
+        """Collect all items across all pages into a single list."""
+        result: list[ItemT] = []
+        for page in self.iter_pages():
+            result.extend(page.items)
+        return result
+
+
+class AsyncCursorPage(Generic[ItemT]):
+    """Async variant of SyncCursorPage. Use ``async for item in page:`` or ``await page.list_all()``."""
+
+    def __init__(
+        self,
+        *,
+        items: list[ItemT],
+        limit: int,
+        next_after: Optional[str],
+        fetch_after: Callable[[str], Awaitable["AsyncCursorPage[ItemT]"]],
+    ) -> None:
+        self.items = items
+        self.limit = limit
+        self.next_after = next_after
+        self._fetch_after = fetch_after
+
+    def __aiter__(self) -> "AsyncCursorPage[ItemT]":
+        self._iter_index = 0
+        return self
+
+    async def __anext__(self) -> ItemT:
+        if self._iter_index >= len(self.items):
+            raise StopAsyncIteration
+        item = self.items[self._iter_index]
+        self._iter_index += 1
+        return item
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    @property
+    def has_next_page(self) -> bool:
+        return self.next_after is not None and len(self.items) >= self.limit
+
+    async def next_page(self) -> "AsyncCursorPage[ItemT]":
+        """Fetch the next page. Raises ``NoMorePagesError`` on the last page."""
+        if not self.has_next_page or self.next_after is None:
+            raise NoMorePagesError("No more pages")
+        return await self._fetch_after(self.next_after)
+
+    async def list_all(self) -> list[ItemT]:
+        """Collect all items across all pages into a single list."""
+        result: list[ItemT] = []
+        page: AsyncCursorPage[ItemT] = self
         while True:
             result.extend(page.items)
             if not page.has_next_page:
