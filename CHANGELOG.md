@@ -9,6 +9,22 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Background runs and the approval example
+#### Added
+- **`client.workflows.start_background_run(workflow_id, version_number=None, dynamic_variables=None, run_by=None)`**
+  starts a workflow now as a durable run, with no user and no socket, so its nodes can wait on a timer, a signal, an
+  external job or a person. Returns a `BackgroundRunStarted` with the run's id.
+- **`tests/integration/test_run_control_e2e.py`**: the approval flow and a pause, signal and cancel against a live
+  server. Each test skips where the server doesn't enable the Pause Workflow node.
+
+#### Changed
+- **Example 19 is now an approval flow** ("Approvals: a run that pauses for a person"): a Pause Workflow node holds a
+  background run until a manager approves it through `list_pauses` and `resume(pause_ids=...)`. It replaces the
+  WorkflowCommand walkthrough, which described pausing a run with `WorkflowCommand.PAUSE`, which no server reads.
+  Script, walkthrough and notebook are all rewritten; the example needs no LLM.
+- **`tests/integration/test_examples_upload.py` skips an example whose node type the server has not enabled**, naming
+  it, instead of failing.
+
 ### Run control
 #### Added
 - **`client.runs.pause()`, `resume()` and `cancel()`** for durable runs (scheduled runs, re-runs, background runs).

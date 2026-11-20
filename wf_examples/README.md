@@ -70,7 +70,7 @@ _Compose sub-workflows, evaluate past runs, and control the run lifecycle._
 |---|---|---|---|
 | 17 | [Composing workflows (super nodes)](./wf_example_progression_17.md) | Embed a reusable sub-workflow inside a parent workflow as a single super node. | SuperNodeConfig, encapsulated_workflow_config, workflow composition |
 | 18 | [Evaluation workflows](./wf_example_progression_18.md) | Fetch a completed run and score it with an evaluator LLM — a non-conversational, one-shot workflow. | WorkflowRunFetchNodeConfig, WorkflowRunEvalLLMNodeConfig, one-shot (non-conversational) runs |
-| 19 | [Run lifecycle & commands](./wf_example_progression_19.md) | Drive the run lifecycle explicitly with WorkflowCommand and observe lifecycle events. | WorkflowCommand (START / DATA / …), lifecycle events, per-turn run control |
+| 19 | [Approvals: a run that pauses for a person](./wf_example_progression_19.md) | Start a durable background run that stops for a manager's approval, then approve it through the API. | PauseWorkflowNodeConfig, background runs, `list_pauses` / `resume(pause_ids=...)` |
 | 20 | [The full event catalog](./wf_example_progression_20.md) | A reference that handles every event type the runtime can emit. | complete event taxonomy, exhaustive event handling |
 | 21 | [Advanced conditions & global escalation](./wf_example_progression_21.md) | Use structured condition arguments and a global escalation node with a reverse edge. | ConditionConfig args_schema, global_condition_evaluation_method, reverse_conditional_edge |
 | 22 | [Backchannels](./wf_example_progression_22.md) | Emit natural filler while the main model is still thinking, using a backchannel group. | LLMGroupWithBackchannelConfig, SEQUENTIAL_WITH_PROACTIVE |

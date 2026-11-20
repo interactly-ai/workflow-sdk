@@ -24,7 +24,7 @@ from typing import List
 
 import pytest
 
-from interactly import AsyncWorkflowClient
+from interactly import AsyncWorkflowClient, BadRequestError
 from interactly.configs import WorkflowConfigFullyHydrated
 
 pytestmark = [
@@ -46,6 +46,11 @@ def _example_modules() -> List[str]:
 
 
 _MODULES = _example_modules()
+
+#: How a server refuses a node type it has not enabled (the control nodes, such as example 19's Pause Workflow node,
+#: and the ECS nodes are switched on per deployment). Such an example is skipped there, not failed: the config is
+#: fine, the server just doesn't offer the node.
+_NOT_ENABLED_HERE = "is not enabled in this deployment"
 
 
 def test_the_curriculum_was_discovered():
@@ -96,7 +101,12 @@ async def test_example_config_is_accepted_by_the_server(module_name: str, _examp
     client = AsyncWorkflowClient()
     workflow_id = None
     try:
-        workflow = await client.workflows.create_from_config(config, name=name)
+        try:
+            workflow = await client.workflows.create_from_config(config, name=name)
+        except BadRequestError as error:
+            if _NOT_ENABLED_HERE in str(error):
+                pytest.skip(f"{module_name} uses a node type this server has not enabled: {error}")
+            raise
         workflow_id = workflow.id
         assert workflow_id, "the server accepted the config but returned no id"
     finally:

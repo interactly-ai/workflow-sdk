@@ -21,6 +21,24 @@ signals and jobs. A call from a lower role raises `PermissionDeniedError`.
 
 ---
 
+## Starting a background run
+
+A workflow whose nodes wait (a Pause Workflow node, a Wait or Wait for signal node, an ECS task) needs a durable run.
+Start one now, in the background, with no user and no socket:
+
+```python
+started = await client.workflows.start_background_run(
+    workflow_id,
+    dynamic_variables={"patient_name": "Ada Lovelace"},
+    run_by="nightly refill check",   # shown in Execution History
+)
+run_id = started.workflow_run_id     # its first turn runs after this answer
+```
+
+`version_number` picks a version; the active one runs by default. A turn that ends waiting for a user's message fails
+the run, since nobody would answer it. [Example 19](../../wf_examples/wf_example_progression_19.md) runs this whole
+flow: start, wait for the pause, approve, follow the run to the end.
+
 ## What a run is waiting on
 
 ```python
@@ -138,6 +156,8 @@ client.runs.cancel(run_id)
 ## Gotchas
 
 - **Only durable runs.** A voice call, a chat session or a streamed run can't be paused or signalled: 409.
+- **The waiting nodes are enabled per server.** Where `CONTROL_WAIT_NODES_ENABLED` is off, a workflow holding one is
+  refused on save with a 400 that names the flag.
 - **Resuming the run does not approve steps.** Lifting a person's pause leaves Pause Workflow nodes waiting; approve
   them with `pause_ids` or `all_waiting_for_person`.
 - **A repeated resume is a 409.** Once nothing is paused in that scope, there is nothing to resume.

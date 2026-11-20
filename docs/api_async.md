@@ -40,6 +40,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'AsyncPage[Workflow]'` |  |
 | `realtime_compatibility` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, model: 'Optional[str]' = None) -> 'RealtimeCompatibilityReport'` | Whether this workflow can run on a realtime model. See the sync counterpart. |
 | `schema` | `() -> 'Dict[str, Any]'` |  |
+| `start_background_run` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, run_by: 'Optional[str]' = None) -> 'BackgroundRunStarted'` | Start the workflow now as a durable run in the background, with no user and no socket. |
 | `unfavorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Remove a workflow from the requesting user's favorites. |
 | `update` | `(workflow_id: 'str', *, name: 'NotGivenOr[str]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'Workflow'` |  |
 | `update_concurrency` | `(workflow_id: 'str', *, max_concurrent_runs: 'int') -> 'Dict[str, Any]'` | Set the maximum number of simultaneous runs for a workflow. |

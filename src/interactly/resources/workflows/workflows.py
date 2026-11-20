@@ -17,6 +17,7 @@ Endpoints implemented:
     GET    /v1/workflows/{id}/realtime-compatibility → realtime_compatibility
     GET    /v1/workflows/{id}/counter-workflow      → counter_workflow
     POST   /v1/workflows/{id}/counter-workflow/generate → generate_counter_workflow
+    POST   /v1/workflows/{id}/background-runs       → start_background_run
 
 Sub-resource (versions) is exposed as ``resource.versions``.
 """
@@ -31,6 +32,7 @@ from interactly._types import NOT_GIVEN, NotGivenOr, is_given
 from interactly._utils._serialise import serialise_config
 from interactly.resources.workflows.versions import AsyncWorkflowVersionsResource, WorkflowVersionsResource
 from interactly.types._config_types import WorkflowConfigOrDict
+from interactly.types.runs.run_control import BackgroundRunStarted
 from interactly.types.workflows.analysis import (
     CounterGenerationState,
     CounterWorkflowStatus,
@@ -503,6 +505,45 @@ class WorkflowsResource(SyncAPIResource):
             dynamic_variables=dynamic_variables,
         )
 
+    def start_background_run(
+        self,
+        workflow_id: str,
+        *,
+        version_number: Optional[int] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
+        run_by: Optional[str] = None,
+    ) -> BackgroundRunStarted:
+        """Start the workflow now as a durable run in the background, with no user and no socket.
+
+        It runs as a scheduled run does, so its nodes can wait on a timer, a signal, an external job or a person, and
+        it can be paused, resumed, cancelled and signalled through ``client.runs``. The answer comes once the run
+        exists; its first turn runs after it. A turn that ends waiting for a user's message fails the run: nothing
+        would answer it.
+
+        Args:
+            version_number:    The version to run; the workflow's active version when unset.
+            dynamic_variables: The run's dynamic variables, over the team's global variables.
+            run_by:            Who started it, as Execution History shows it.
+
+        Raises:
+            NotFoundError: no such workflow, or version, in the team.
+            ConflictError: durable runs aren't available on this server; nothing was started.
+            RateLimitError: the workflow or team is at its concurrency limit.
+        """
+        return self._client.post(
+            f"{_PATH}/{workflow_id}/background-runs",
+            body={
+                name: value
+                for name, value in {
+                    "version_number": version_number,
+                    "dynamic_variables": dynamic_variables,
+                    "run_by": run_by,
+                }.items()
+                if value is not None
+            },
+            cast_to=BackgroundRunStarted,
+        )
+
     def favorite(self, workflow_id: str) -> Dict[str, Any]:
         """Mark a workflow as a favorite for the requesting user (idempotent)."""
         return self._client.post(f"{_PATH}/{workflow_id}/favorite", cast_to=dict)
@@ -759,6 +800,45 @@ class AsyncWorkflowsResource(AsyncAPIResource):
             workflow_id=workflow_id,
             config=config,
             dynamic_variables=dynamic_variables,
+        )
+
+    async def start_background_run(
+        self,
+        workflow_id: str,
+        *,
+        version_number: Optional[int] = None,
+        dynamic_variables: Optional[Dict[str, Any]] = None,
+        run_by: Optional[str] = None,
+    ) -> BackgroundRunStarted:
+        """Start the workflow now as a durable run in the background, with no user and no socket.
+
+        It runs as a scheduled run does, so its nodes can wait on a timer, a signal, an external job or a person, and
+        it can be paused, resumed, cancelled and signalled through ``client.runs``. The answer comes once the run
+        exists; its first turn runs after it. A turn that ends waiting for a user's message fails the run: nothing
+        would answer it.
+
+        Args:
+            version_number:    The version to run; the workflow's active version when unset.
+            dynamic_variables: The run's dynamic variables, over the team's global variables.
+            run_by:            Who started it, as Execution History shows it.
+
+        Raises:
+            NotFoundError: no such workflow, or version, in the team.
+            ConflictError: durable runs aren't available on this server; nothing was started.
+            RateLimitError: the workflow or team is at its concurrency limit.
+        """
+        return await self._client.post(
+            f"{_PATH}/{workflow_id}/background-runs",
+            body={
+                name: value
+                for name, value in {
+                    "version_number": version_number,
+                    "dynamic_variables": dynamic_variables,
+                    "run_by": run_by,
+                }.items()
+                if value is not None
+            },
+            cast_to=BackgroundRunStarted,
         )
 
     async def favorite(self, workflow_id: str) -> Dict[str, Any]:

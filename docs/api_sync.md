@@ -40,6 +40,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'SyncPage[Workflow]'` | List workflows for the authenticated team (paginated). |
 | `realtime_compatibility` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, model: 'Optional[str]' = None) -> 'RealtimeCompatibilityReport'` | Whether this workflow can run its voice calls on a realtime (speech-to-speech) model. |
 | `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for valid workflow configuration. |
+| `start_background_run` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, run_by: 'Optional[str]' = None) -> 'BackgroundRunStarted'` | Start the workflow now as a durable run in the background, with no user and no socket. |
 | `unfavorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Remove a workflow from the requesting user's favorites. |
 | `update` | `(workflow_id: 'str', *, name: 'NotGivenOr[str]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'Workflow'` | Partially update a workflow.  Only supplied fields are sent. |
 | `update_concurrency` | `(workflow_id: 'str', *, max_concurrent_runs: 'int') -> 'Dict[str, Any]'` | Set the maximum number of simultaneous runs for a workflow. |
