@@ -151,17 +151,15 @@ for rating in result.ratings:
 an access path to the user directory. Ids that no longer resolve are simply absent from the map, so
 look them up with `.get()` rather than `[]`.
 
-`Run.feedback_users` exists on the model, but:
-
-> **⚠️ Verified on dev, 2026-08-07:** `client.runs.get(...)` returns `feedback_users` **empty**
-> even when the run carries ratings and comments. It defaults to `{}`, so this fails silently
-> rather than raising. Resolve author names from the **write** response, or from your own
-> directory.
+A fetched run carries the same map, for its feedback authors and for whoever paused it:
 
 ```python
 run = await client.runs.get(run_id)
-run.feedback_users        # {} today — see above
+run.feedback_users        # {user_id: FeedbackUser}
 ```
+
+The server has always sent it, beside the run record; SDK versions before this one dropped it, so
+`run.feedback_users` read `{}` there.
 
 ---
 
@@ -232,7 +230,6 @@ client.runs.delete_turn_rating(run_id, 2)
 - **Re-rating replaces**; it does not append. There is no duplicate to clean up.
 - **Blank comments are refused**, and content is trimmed before storage.
 - **`feedback_users` can miss an id** if the user no longer resolves. Use `.get()`.
-- **`feedback_users` is empty on a fetched run** today — read it off the write response.
 - **`add_comment` / `add_event_comment` return a single `RunComment`**, not the full list.
 - **Turn index, not turn id.** `turn_index` is the 0-based position in `input_output_pairs`.
 - **Ratings are per user.** `result.ratings` is everyone's, not just yours — filter by `createdBy` if

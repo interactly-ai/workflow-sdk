@@ -35,6 +35,9 @@ class RunStatus(str, Enum):
     STARTED = "started"
     RUNNING = "running"
     PAUSED = "paused"
+    #: A durable run parked between turns until a timer, a signal or an external job wakes it. A run waiting for a
+    #: person to approve it is PAUSED instead.
+    WAITING = "waiting"
     WAITING_FOR_USER_INPUT = "waiting_for_user_input"
     COMPLETED = "completed"
     FAILED = "failed"
