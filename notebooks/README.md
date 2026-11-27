@@ -72,6 +72,7 @@ Suggested order is top to bottom.
 | 19 | [companion threads](19_companion_threads.ipynb) | Fork a background thread that keeps working while the caller talks |
 | 20 | [waiting conditions](20_waiting_conditions.ipynb) | Let an edge fire while its source node is parked — no user message |
 | 21 | [run feedback](21_run_feedback.ipynb) | Ratings and comments at run, turn, and event level |
+| 22 | [evaluation workflows](22_evaluation_workflows.ipynb) | Templates, analysis nodes, `workflow_type`, and naming an evaluator |
 
 ### `wf_example_notebooks/`
 

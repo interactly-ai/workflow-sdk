@@ -393,6 +393,21 @@ allow-list with its reason, so it fails when one goes away or a new route appear
 - **Checked, and correct as written:** rerun `message_appends` take role `"user"` / `"assistant"`.
 
 ### Notebooks
+- **New: `22_evaluation_workflows`.** Templates and analysis-node presets, the analysis node types offered only for
+  `workflow_type="evaluation"`, creating one from a template and finding it in both lists, and naming it as a
+  standard workflow's evaluator, seen through `usage()`. It runs nothing and calls no LLM.
+- **Updated for this release:**
+  - `03_workflow_versions`: `versions.get()` and `update_config()`; export with the secrets cleared and import
+    with them supplied again (and without them, left empty with a warning); `workflows.usage()`.
+  - `09_simulations`: pause, resume and stop a run group, with each run's role and outcome; the list filters, and
+    why a stopped simulation still lists as `running`.
+  - `10_llm_configs`: the credentials an update keeps, a failed test's `error_category`, export and import, and
+    `usage()`. The new cells use a gateway at a host that can never resolve, so they call no provider.
+  - `14_pagination_and_filtering`: page metadata, `needs_attention`, one version's runs and nodes,
+    `workflow_type`, simulation date windows, and deduplicating rows that share a timestamp.
+  - `15_websocket_streaming_events`: a two-turn conversation on one stream with `send()` and `stop()` (two short
+    `gpt-5.4-nano` replies), the `run_paused` / `run_resumed` frames, and every close code with its exception.
+  - `19_companion_threads`: `workflow_ready_for_input` is sent only while companions run.
 - **`10_llm_configs` no longer leaves the team without a default LLM config.** It creates its demo config
   with `override_default=True`, which takes the default flag from the config that held it, and then
   deletes the demo config. It now records the team's default first and restores it in Cleanup.
