@@ -35,6 +35,25 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Evaluation workflows and `workflow_type`
+#### Added
+- **`client.evaluation_workflows`**, sync and async: `templates()`, `node_presets()`, `create_from_template(
+  template_id=, name=)` and `list()`. An evaluation workflow analyses a finished conversation (a summary, a success
+  verdict, structured data) and stores what it finds; it never runs on a live call. Once created it is an ordinary
+  workflow to `client.workflows`. New types: `EvaluationTemplate`, `AnalysisNodePreset`, `EvaluationWorkflow`,
+  `EvaluationWorkflowVersion`.
+- **`WorkflowType`** (`standard`, `evaluation`), and `workflow_type=` on `workflows.list()`,
+  `workflows.versions.list_active()` and `nodes.types()`. The server lists standard workflows unless asked for
+  evaluation ones, and offers the analysis nodes only for evaluation workflows.
+- **`workflows.list()` filters:** `logical_id`, `categories`, `created_by` and `favorites`.
+- **`workflows.versions.get(workflow_id, version_number)`**: one version's snapshot.
+- **`workflows.get_fully_hydrated(..., version_number=)`** and **`workflows.realtime_compatibility(..., backend=)`**
+  (the assistant's Gemini backend, `vertex` or `ai_studio`, so the check agrees with the call's own about tool names).
+
+#### Changed
+- **`workflows.get()` asks for the workflow with its active version** (`find_active_version=true`). The answer is the
+  same; the server no longer logs the read as one relying on its old default.
+
 ### Lists page past their first page
 #### Fixed
 - **Every list stopped after its first page.** The list routes send the rows and the total, but not the page or page

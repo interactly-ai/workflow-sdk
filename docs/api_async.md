@@ -31,14 +31,14 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `export` | `(workflow_id: 'str', *, version_numbers: 'List[int]', active_version_number: 'int', include_secrets: 'bool' = False) -> 'Dict[str, Any]'` | Export a workflow as a portable bundle dict; see :meth:`WorkflowsResource.export`. |
 | `favorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Mark a workflow as a favorite for the requesting user (idempotent). |
 | `generate_counter_workflow` | `(workflow_id: 'str', *, num_cases: 'int' = 10, instructions: 'Optional[str]' = None, version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None, new_workflow: 'bool' = False, provider: 'Optional[str]' = None) -> 'CounterGenerationState'` | Start generating a counter workflow; returns immediately. See the sync counterpart. |
-| `get` | `(workflow_id: 'str') -> 'Workflow'` |  |
-| `get_fully_hydrated` | `(workflow_id: 'str') -> "'WorkflowConfigFullyHydrated'"` | Async variant of :meth:`WorkflowsResource.get_fully_hydrated`. |
+| `get` | `(workflow_id: 'str') -> 'Workflow'` | Retrieve a single workflow by ID; see :meth:`WorkflowsResource.get`. |
+| `get_fully_hydrated` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> "'WorkflowConfigFullyHydrated'"` | Async variant of :meth:`WorkflowsResource.get_fully_hydrated`. |
 | `global_node_config_schema` | `() -> 'Dict[str, Any]'` |  |
 | `handle` | `(workflow_id: 'str', *, dynamic_variables: 'Optional[Dict[str, Any]]' = None) -> "'AsyncWorkflowHandle'"` | Async variant of :meth:`WorkflowsResource.handle`. |
 | `import_bundle` | `(bundle: 'Dict[str, Any]', *, versions_to_import: 'Optional[List[int]]' = None, active_version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None, secret_overrides: 'Optional[Dict[str, str]]' = None) -> 'Workflow'` | Import a previously exported workflow bundle; see :meth:`WorkflowsResource.import_bundle`. |
 | `lints` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'WorkflowLintReport'` | Every advisory lint for a stored workflow, run against the whole graph. See the sync counterpart. |
-| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'AsyncPage[Workflow]'` |  |
-| `realtime_compatibility` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, model: 'Optional[str]' = None) -> 'RealtimeCompatibilityReport'` | Whether this workflow can run on a realtime model. See the sync counterpart. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, workflow_type: 'Union[WorkflowType, str, None]' = None, logical_id: 'Optional[str]' = None, categories: 'Optional[List[str]]' = None, created_by: 'Optional[List[str]]' = None, favorites: 'Optional[bool]' = None) -> 'AsyncPage[Workflow]'` | List workflows for the authenticated team; the filters are :meth:`WorkflowsResource.list`'s. |
+| `realtime_compatibility` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, model: 'Optional[str]' = None, backend: 'Optional[str]' = None) -> 'RealtimeCompatibilityReport'` | Whether this workflow can run on a realtime model. See the sync counterpart. |
 | `schema` | `() -> 'Dict[str, Any]'` |  |
 | `start_background_run` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, dynamic_variables: 'Optional[Dict[str, Any]]' = None, run_by: 'Optional[str]' = None) -> 'BackgroundRunStarted'` | Start the workflow now as a durable run in the background, with no user and no socket. |
 | `unfavorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Remove a workflow from the requesting user's favorites. |
@@ -54,8 +54,9 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `create` | `(workflow_id: 'str', *, version_name: 'str', mark_as_active: 'bool' = False, source_version_number: 'Optional[int]' = None) -> 'WorkflowVersion'` | Create a new version of the workflow; see :meth:`WorkflowVersionsResource.create`. |
 | `delete` | `(workflow_id: 'str', version_number: 'int') -> 'None'` |  |
 | `diff` | `(workflow_id: 'str', version1: 'int', version2: 'int') -> 'VersionDiff'` | Compare two workflow versions and return a structured diff. |
+| `get` | `(workflow_id: 'str', version_number: 'int') -> 'WorkflowVersion'` | Retrieve one version of a workflow; see :meth:`WorkflowVersionsResource.get`. |
 | `list` | `(workflow_id: 'str') -> 'List[WorkflowVersion]'` | Return all versions for the given workflow. |
-| `list_active` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, favorites: 'Optional[bool]' = None, categories: 'Optional[List[str]]' = None, created_by: 'Optional[List[str]]' = None, logical_id: 'Optional[str]' = None) -> 'AsyncPage[WorkflowVersion]'` | List every workflow's active version across the team (paginated). |
+| `list_active` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, favorites: 'Optional[bool]' = None, categories: 'Optional[List[str]]' = None, created_by: 'Optional[List[str]]' = None, logical_id: 'Optional[str]' = None, workflow_type: 'Union[WorkflowType, str, None]' = None) -> 'AsyncPage[WorkflowVersion]'` | List every workflow's active version across the team (paginated). |
 | `update` | `(workflow_id: 'str', version_number: 'int', *, version_name: 'str') -> 'WorkflowVersion'` |  |
 | `update_config` | `(workflow_id: 'str', version_number: 'int', *, config: 'WorkflowConfigOrDict') -> 'WorkflowVersion'` | Update a version's workflow-level settings; see :meth:`WorkflowVersionsResource.update_config`. |
 
@@ -71,7 +72,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `get` | `(node_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Node'` | Retrieve a single node by ID. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, node_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None, logical_id: 'Optional[str]' = None, version_number: 'Optional[int]' = None) -> 'AsyncPage[Node]'` | List nodes. |
 | `schema` | `(node_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific node type. |
-| `types` | `() -> 'List[Dict[str, Any]]'` | Retrieve all available node types with their categories. |
+| `types` | `(*, workflow_type: 'Union[WorkflowType, str, None]' = None) -> 'List[Dict[str, Any]]'` | Retrieve the node types this server offers; see :meth:`NodesResource.types`. |
 | `update` | `(node_id: 'str', *, node_config: 'NotGivenOr[Optional[NodeConfigOrDict]]' = NOT_GIVEN, version_number: 'Optional[int]' = None) -> 'Node'` | Update a node's config. |
 
 ## Edges
@@ -216,6 +217,18 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `schema` | `() -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a simulation configuration. |
 | `stop_run` | `(run_id: 'str') -> 'SimulationGroup'` | Stop a simulation run group, for good; see :meth:`SimulationsResource.stop_run`. |
 | `update` | `(simulation_id: 'str', *, updates: 'Dict[str, Any]') -> 'Simulation'` | Partially update a simulation configuration (dict or typed Pydantic model). |
+
+## Evaluation workflows
+
+`client.evaluation_workflows`
+
+
+| Method | Signature | Description |
+|---|---|---|
+| `create_from_template` | `(*, template_id: 'str', name: 'str') -> 'Workflow'` | Create an evaluation workflow from a template; see :meth:`EvaluationWorkflowsResource.create_from_template`. |
+| `list` | `() -> 'List[EvaluationWorkflow]'` | The team's evaluation workflows, by name, each with its versions. Not paged. |
+| `node_presets` | `() -> 'List[AnalysisNodePreset]'` | The ready-made analysis nodes, in the order a workflow usually uses them. |
+| `templates` | `() -> 'List[EvaluationTemplate]'` | The templates a new evaluation workflow can start from. |
 
 ## Global variables
 

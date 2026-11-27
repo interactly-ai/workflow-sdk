@@ -13,7 +13,8 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, cast
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -21,6 +22,7 @@ from interactly._types import NOT_GIVEN, NotGivenOr
 from interactly._utils._serialise import serialise_config
 from interactly.types._config_types import NodeConfigOrDict
 from interactly.types.nodes.node import Node
+from interactly.types.shared import WorkflowType
 
 __all__ = ["NodesResource", "AsyncNodesResource"]
 
@@ -30,14 +32,18 @@ _PATH = "/v1/nodes"
 class NodesResource(SyncAPIResource):
     """Synchronous interface to the Nodes API."""
 
-    def types(self) -> List[Dict[str, Any]]:
+    def types(self, *, workflow_type: Union[WorkflowType, str, None] = None) -> List[Dict[str, Any]]:
         """
-        Retrieve all available node types with their categories.
+        Retrieve the node types this server offers, with their categories.
+
+        Args:
+            workflow_type: The kind of workflow the nodes are for. The analysis nodes (``conversation_fetch``,
+                           ``analysis_llm``, ``store_analysis``) are listed only for ``evaluation``.
 
         Returns:
             A list of dicts with ``type``, ``primary_category``, ``secondary_category``.
         """
-        raw: Dict[str, Any] = self._client.get(f"{_PATH}/types", cast_to=dict)
+        raw: Dict[str, Any] = self._client.get(f"{_PATH}/types", params=_types_params(workflow_type), cast_to=dict)
         return cast(List[Dict[str, Any]], raw.get("node_types", []))
 
     def schema(self, node_type: str) -> Dict[str, Any]:
@@ -169,9 +175,9 @@ class NodesResource(SyncAPIResource):
 class AsyncNodesResource(AsyncAPIResource):
     """Asynchronous interface to the Nodes API."""
 
-    async def types(self) -> List[Dict[str, Any]]:
-        """Retrieve all available node types with their categories."""
-        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/types", cast_to=dict)
+    async def types(self, *, workflow_type: Union[WorkflowType, str, None] = None) -> List[Dict[str, Any]]:
+        """Retrieve the node types this server offers; see :meth:`NodesResource.types`."""
+        raw: Dict[str, Any] = await self._client.get(f"{_PATH}/types", params=_types_params(workflow_type), cast_to=dict)
         return cast(List[Dict[str, Any]], raw.get("node_types", []))
 
     async def schema(self, node_type: str) -> Dict[str, Any]:
@@ -239,3 +245,9 @@ class AsyncNodesResource(AsyncAPIResource):
 
 def _version_params(version_number: Optional[int]) -> Dict[str, Any]:
     return {} if version_number is None else {"version_number": version_number}
+
+
+def _types_params(workflow_type: Union[WorkflowType, str, None]) -> Dict[str, Any]:
+    if workflow_type is None:
+        return {}
+    return {"workflow_type": workflow_type.value if isinstance(workflow_type, Enum) else workflow_type}

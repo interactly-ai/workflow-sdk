@@ -40,6 +40,10 @@ import httpx
 from interactly._base_client import AsyncAPIClient, SyncAPIClient
 from interactly.resources.categories.categories import AsyncCategoriesResource, CategoriesResource
 from interactly.resources.edges.edges import AsyncEdgesResource, EdgesResource
+from interactly.resources.evaluation_workflows.evaluation_workflows import (
+    AsyncEvaluationWorkflowsResource,
+    EvaluationWorkflowsResource,
+)
 from interactly.resources.global_variables.global_variables import AsyncGlobalVariablesResource, GlobalVariablesResource
 from interactly.resources.llm_configs.llm_configs import AsyncLLMConfigsResource, LLMConfigsResource
 from interactly.resources.node_libraries.node_libraries import AsyncNodeLibrariesResource, NodeLibrariesResource
@@ -89,6 +93,7 @@ class WorkflowClient(SyncAPIClient):
         global_variables: :class:`GlobalVariablesResource` — manage team-scoped global variables.
         node_libraries:   :class:`NodeLibrariesResource` — manage node library packages.
         simulations:      :class:`SimulationsResource` — manage simulation configs and runs.
+        evaluation_workflows: :class:`EvaluationWorkflowsResource` — post-call analysis workflows from templates.
         llm_configs:      :class:`LLMConfigsResource` — manage saved (named) LLM configs.
         runtime:          :class:`RuntimeAccessor` — ``runtime.from_config(config)``.
     """
@@ -107,6 +112,7 @@ class WorkflowClient(SyncAPIClient):
     global_variables: GlobalVariablesResource
     node_libraries: NodeLibrariesResource
     simulations: SimulationsResource
+    evaluation_workflows: EvaluationWorkflowsResource
     llm_configs: LLMConfigsResource
     runtime: RuntimeAccessor
 
@@ -143,6 +149,7 @@ class WorkflowClient(SyncAPIClient):
         self.global_variables = GlobalVariablesResource(self)
         self.node_libraries = NodeLibrariesResource(self)
         self.simulations = SimulationsResource(self)
+        self.evaluation_workflows = EvaluationWorkflowsResource(self)
         self.llm_configs = LLMConfigsResource(self)
         # Framework-shaped runtime: client.runtime.from_config(config) / client.runtime(config)
         self.runtime = RuntimeAccessor(self)
@@ -174,6 +181,7 @@ class AsyncWorkflowClient(AsyncAPIClient):
         global_variables: :class:`AsyncGlobalVariablesResource` — manage team-scoped global variables.
         node_libraries:   :class:`AsyncNodeLibrariesResource` — manage node library packages.
         simulations:      :class:`AsyncSimulationsResource` — manage simulation configs and runs.
+        evaluation_workflows: :class:`AsyncEvaluationWorkflowsResource` — post-call analysis workflows.
         llm_configs:      :class:`AsyncLLMConfigsResource` — manage saved (named) LLM configs.
         runtime:          :class:`AsyncRuntimeAccessor` — ``await runtime.from_config(config)``.
     """
@@ -192,6 +200,7 @@ class AsyncWorkflowClient(AsyncAPIClient):
     global_variables: AsyncGlobalVariablesResource
     node_libraries: AsyncNodeLibrariesResource
     simulations: AsyncSimulationsResource
+    evaluation_workflows: AsyncEvaluationWorkflowsResource
     llm_configs: AsyncLLMConfigsResource
     runtime: AsyncRuntimeAccessor
 
@@ -228,6 +237,7 @@ class AsyncWorkflowClient(AsyncAPIClient):
         self.global_variables = AsyncGlobalVariablesResource(self)
         self.node_libraries = AsyncNodeLibrariesResource(self)
         self.simulations = AsyncSimulationsResource(self)
+        self.evaluation_workflows = AsyncEvaluationWorkflowsResource(self)
         self.llm_configs = AsyncLLMConfigsResource(self)
         # Framework-shaped runtime: await client.runtime.from_config(config)
         self.runtime = AsyncRuntimeAccessor(self)

@@ -3,6 +3,7 @@ WorkflowVersionsResource — sub-resource of WorkflowsResource.
 
 Provides CRUD + activation for a specific workflow's versions:
     client.workflows.versions.create(workflow_id, ...)
+    client.workflows.versions.get(workflow_id, version_number)
     client.workflows.versions.list(workflow_id)
     client.workflows.versions.activate(workflow_id, version_number)
     client.workflows.versions.update(workflow_id, version_number, ...)
@@ -12,12 +13,14 @@ Provides CRUD + activation for a specific workflow's versions:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._utils._serialise import serialise_config
 from interactly.types._config_types import WorkflowConfigOrDict
+from interactly.types.shared import WorkflowType
 from interactly.types.workflows.version_diff import VersionDiff
 from interactly.types.workflows.workflow import Workflow, WorkflowVersion
 
@@ -35,8 +38,11 @@ def _build_active_params(
     categories: Optional[List[str]],
     created_by: Optional[List[str]],
     logical_id: Optional[str],
+    workflow_type: Union[WorkflowType, str, None],
 ) -> Dict[str, Any]:
     params: Dict[str, Any] = {"page": page, "size": size}
+    if workflow_type is not None:
+        params["workflow_type"] = workflow_type.value if isinstance(workflow_type, Enum) else workflow_type
     if search is not None:
         params["search"] = search
     if favorites is not None:
@@ -82,6 +88,15 @@ class WorkflowVersionsResource(SyncAPIResource):
         if mark_as_active:
             version.is_active = True
         return version
+
+    def get(self, workflow_id: str, version_number: int) -> WorkflowVersion:
+        """Retrieve one version of a workflow: its name and its settings snapshot (``config``).
+
+        Raises:
+            NotFoundError: no such workflow, or no such version of it.
+        """
+        raw = self._client.get(f"/v1/workflows/{workflow_id}", params={"version_number": version_number}, cast_to=dict)
+        return _version_from_get(raw, version_number)
 
     def list(self, workflow_id: str) -> List[WorkflowVersion]:
         """Return all versions for the given workflow.
@@ -192,6 +207,7 @@ class WorkflowVersionsResource(SyncAPIResource):
         categories: Optional[List[str]] = None,
         created_by: Optional[List[str]] = None,
         logical_id: Optional[str] = None,
+        workflow_type: Union[WorkflowType, str, None] = None,
     ) -> SyncPage[WorkflowVersion]:
         """
         List every workflow's active version across the team (paginated).
@@ -208,6 +224,8 @@ class WorkflowVersionsResource(SyncAPIResource):
             created_by: Only workflows created by one of these users (user ids). For your own, pass your user id;
                         with an API key that is the id of the member who created the key.
             logical_id: Filter by workflow logical ID.
+            workflow_type: ``standard`` or ``evaluation``; the server lists standard workflows unless asked for
+                        evaluation ones.
 
         Returns:
             A :class:`SyncPage` of :class:`WorkflowVersion` objects.
@@ -220,6 +238,7 @@ class WorkflowVersionsResource(SyncAPIResource):
             categories=categories,
             created_by=created_by,
             logical_id=logical_id,
+            workflow_type=workflow_type,
         )
         raw = self._client.get(_ACTIVE_PATH, cast_to=dict, params=params)
         return SyncPage._from_response(
@@ -233,6 +252,7 @@ class WorkflowVersionsResource(SyncAPIResource):
                 categories=categories,
                 created_by=created_by,
                 logical_id=logical_id,
+                workflow_type=workflow_type,
             ),
             page=page,
             size=size,
@@ -263,6 +283,13 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
         if mark_as_active:
             version.is_active = True
         return version
+
+    async def get(self, workflow_id: str, version_number: int) -> WorkflowVersion:
+        """Retrieve one version of a workflow; see :meth:`WorkflowVersionsResource.get`."""
+        raw = await self._client.get(
+            f"/v1/workflows/{workflow_id}", params={"version_number": version_number}, cast_to=dict
+        )
+        return _version_from_get(raw, version_number)
 
     async def list(self, workflow_id: str) -> List[WorkflowVersion]:
         """Return all versions for the given workflow.
@@ -353,6 +380,7 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
         categories: Optional[List[str]] = None,
         created_by: Optional[List[str]] = None,
         logical_id: Optional[str] = None,
+        workflow_type: Union[WorkflowType, str, None] = None,
     ) -> AsyncPage[WorkflowVersion]:
         """List every workflow's active version across the team (paginated)."""
         params = _build_active_params(
@@ -363,6 +391,7 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
             categories=categories,
             created_by=created_by,
             logical_id=logical_id,
+            workflow_type=workflow_type,
         )
         raw = await self._client.get(_ACTIVE_PATH, cast_to=dict, params=params)
         return AsyncPage._from_response(
@@ -376,6 +405,7 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
                 categories=categories,
                 created_by=created_by,
                 logical_id=logical_id,
+                workflow_type=workflow_type,
             ),
             page=page,
             size=size,
@@ -405,3 +435,19 @@ def _settings_body(config: WorkflowConfigOrDict) -> Dict[str, Any]:
             "change nodes and edges through client.nodes and client.edges."
         )
     return settings
+
+
+def _version_from_get(raw: Dict[str, Any], version_number: int) -> WorkflowVersion:
+    """The version a workflow read by version number answered with.
+
+    A workflow from before versions were stored has no snapshot of version 0; the server then answers with the workflow
+    itself, whose settings are that version's.
+    """
+    workflow = raw.get("workflow")
+    if "version" not in raw and isinstance(workflow, dict):
+        raw = {
+            "version_number": version_number,
+            "config": workflow.get("workflow_config"),
+            "is_active": workflow.get("active_version_number", 0) == version_number,
+        }
+    return WorkflowVersion.model_validate(raw)

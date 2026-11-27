@@ -1,0 +1,363 @@
+{
+  "templates": {
+    "status": 200,
+    "body": {
+      "templates": [
+        {
+          "template_id": "default_framework",
+          "name": "Default framework",
+          "description": "Load the call; mask PHI, summary, success, structured analysis, DND and callback run side by side; store them all."
+        },
+        {
+          "template_id": "custom",
+          "name": "Custom",
+          "description": "Load the call; mask PHI and one custom analysis side by side; add your own steps to run beside them."
+        }
+      ]
+    }
+  },
+  "node_presets": {
+    "status": 200,
+    "body": {
+      "presets": [
+        {
+          "preset_id": "conversation_fetch",
+          "label": "Conversation Fetch",
+          "description": "Loads the call: transcript with its tool calls, assistant prompt, call details and stored messages.",
+          "node_type": "conversation_fetch",
+          "config": {
+            "type": "conversation_fetch",
+            "name": "Conversation Fetch"
+          }
+        },
+        {
+          "preset_id": "store_analysis",
+          "label": "Store Analysis",
+          "description": "Stores chosen variables as the call's analysis fields.",
+          "node_type": "store_analysis",
+          "config": {
+            "type": "store_analysis",
+            "name": "Store Analysis"
+          }
+        }
+      ]
+    }
+  },
+  "from_template": {
+    "status": 200,
+    "body": {
+      "workflow_id": "665f1c0a2b3c4d5e6f750000",
+      "workflow": {
+        "team_id": "665f1c0a2b3c4d5e6f750001",
+        "created_by": "665f1c0a2b3c4d5e6f750002",
+        "updated_by": "665f1c0a2b3c4d5e6f750002",
+        "created_at": "2026-11-27T06:45:11.176Z",
+        "updated_at": "2026-11-27T06:45:11.176Z",
+        "_id": "665f1c0a2b3c4d5e6f750000",
+        "workflow_config": {
+          "logical_id": "workflow_60b6b6fd-64a0-47c1-9f44-64df5caef6a6",
+          "name": "SDK_E2E evaluation",
+          "description": "Load the call; mask PHI, summary, success, structured analysis, DND and callback run side by side; store them all.",
+          "category": "User Created",
+          "workflow_type": "evaluation",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_c2e312bc-11ac-4233-a7e7-84030844d7cb",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "google",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "model": "gemini-3.7-flash",
+            "type": "google_llm",
+            "thinking_budget": 0,
+            "thinking_level": null,
+            "backend": null
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f750003",
+            "665f1c0a2b3c4d5e6f750004",
+            "665f1c0a2b3c4d5e6f750005",
+            "665f1c0a2b3c4d5e6f750006",
+            "665f1c0a2b3c4d5e6f750007",
+            "665f1c0a2b3c4d5e6f750008",
+            "665f1c0a2b3c4d5e6f750009",
+            "665f1c0a2b3c4d5e6f75000a",
+            "665f1c0a2b3c4d5e6f75000b"
+          ],
+          "edges": [
+            "665f1c0a2b3c4d5e6f75000c",
+            "665f1c0a2b3c4d5e6f75000d",
+            "665f1c0a2b3c4d5e6f75000e",
+            "665f1c0a2b3c4d5e6f75000f",
+            "665f1c0a2b3c4d5e6f750010",
+            "665f1c0a2b3c4d5e6f750011",
+            "665f1c0a2b3c4d5e6f750012",
+            "665f1c0a2b3c4d5e6f750013"
+          ],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        },
+        "active_version_number": 0,
+        "max_concurrent_runs": null
+      }
+    }
+  },
+  "from_unknown_template": {
+    "status": 404,
+    "body": {
+      "message": "Unknown template 'no_such_template'."
+    }
+  },
+  "list": {
+    "status": 200,
+    "body": {
+      "workflows": [
+        {
+          "workflow_id": "665f1c0a2b3c4d5e6f750000",
+          "name": "SDK_E2E evaluation",
+          "active_version_number": 0,
+          "versions": [
+            {
+              "version_number": 0,
+              "version_name": "Default framework",
+              "has_phi_masking": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "get_find_active": {
+    "status": 200,
+    "body": {
+      "workflow": {
+        "team_id": "665f1c0a2b3c4d5e6f750001",
+        "created_by": "665f1c0a2b3c4d5e6f750002",
+        "updated_by": "665f1c0a2b3c4d5e6f750002",
+        "created_at": "2026-11-27T06:45:11.176Z",
+        "updated_at": "2026-11-27T06:45:11.176Z",
+        "_id": "665f1c0a2b3c4d5e6f750000",
+        "workflow_config": {
+          "logical_id": "workflow_60b6b6fd-64a0-47c1-9f44-64df5caef6a6",
+          "name": "SDK_E2E evaluation",
+          "description": "Load the call; mask PHI, summary, success, structured analysis, DND and callback run side by side; store them all.",
+          "category": "User Created",
+          "workflow_type": "evaluation",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_c2e312bc-11ac-4233-a7e7-84030844d7cb",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "google",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "model": "gemini-3.7-flash",
+            "type": "google_llm",
+            "thinking_budget": 0,
+            "thinking_level": null,
+            "backend": null
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f750003",
+            "665f1c0a2b3c4d5e6f750004",
+            "665f1c0a2b3c4d5e6f750005",
+            "665f1c0a2b3c4d5e6f750006",
+            "665f1c0a2b3c4d5e6f750007",
+            "665f1c0a2b3c4d5e6f750008",
+            "665f1c0a2b3c4d5e6f750009",
+            "665f1c0a2b3c4d5e6f75000a",
+            "665f1c0a2b3c4d5e6f75000b"
+          ],
+          "edges": [
+            "665f1c0a2b3c4d5e6f75000c",
+            "665f1c0a2b3c4d5e6f75000d",
+            "665f1c0a2b3c4d5e6f75000e",
+            "665f1c0a2b3c4d5e6f75000f",
+            "665f1c0a2b3c4d5e6f750010",
+            "665f1c0a2b3c4d5e6f750011",
+            "665f1c0a2b3c4d5e6f750012",
+            "665f1c0a2b3c4d5e6f750013"
+          ],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        },
+        "active_version_number": 0,
+        "max_concurrent_runs": null
+      },
+      "execution_url": "/workflows/v1/workflows/665f1c0a2b3c4d5e6f750000/execute",
+      "warnings": [],
+      "pruned_global_tool_exclusions": {}
+    }
+  },
+  "get_version_0": {
+    "status": 200,
+    "body": {
+      "version": {
+        "team_id": "665f1c0a2b3c4d5e6f750001",
+        "created_by": "665f1c0a2b3c4d5e6f750002",
+        "updated_by": "665f1c0a2b3c4d5e6f750002",
+        "created_at": "2026-11-27T06:45:11.276Z",
+        "updated_at": "2026-11-27T06:45:11.276Z",
+        "_id": "665f1c0a2b3c4d5e6f750014",
+        "workflow_id": "665f1c0a2b3c4d5e6f750000",
+        "version_number": 0,
+        "version_name": "Default framework",
+        "workflow_config": {
+          "logical_id": "workflow_60b6b6fd-64a0-47c1-9f44-64df5caef6a6",
+          "name": "SDK_E2E evaluation",
+          "description": "Load the call; mask PHI, summary, success, structured analysis, DND and callback run side by side; store them all.",
+          "category": "User Created",
+          "workflow_type": "evaluation",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_c2e312bc-11ac-4233-a7e7-84030844d7cb",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "google",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "model": "gemini-3.7-flash",
+            "type": "google_llm",
+            "thinking_budget": 0,
+            "thinking_level": null,
+            "backend": null
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f750003",
+            "665f1c0a2b3c4d5e6f750004",
+            "665f1c0a2b3c4d5e6f750005",
+            "665f1c0a2b3c4d5e6f750006",
+            "665f1c0a2b3c4d5e6f750007",
+            "665f1c0a2b3c4d5e6f750008",
+            "665f1c0a2b3c4d5e6f750009",
+            "665f1c0a2b3c4d5e6f75000a",
+            "665f1c0a2b3c4d5e6f75000b"
+          ],
+          "edges": [
+            "665f1c0a2b3c4d5e6f75000c",
+            "665f1c0a2b3c4d5e6f75000d",
+            "665f1c0a2b3c4d5e6f75000e",
+            "665f1c0a2b3c4d5e6f75000f",
+            "665f1c0a2b3c4d5e6f750010",
+            "665f1c0a2b3c4d5e6f750011",
+            "665f1c0a2b3c4d5e6f750012",
+            "665f1c0a2b3c4d5e6f750013"
+          ],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        }
+      },
+      "warnings": [],
+      "pruned_global_tool_exclusions": {},
+      "parent_active_version": 0
+    }
+  },
+  "get_version_missing": {
+    "status": 404,
+    "body": {
+      "message": "Version 7 not found for this workflow."
+    }
+  },
+  "realtime_vertex": {
+    "status": 200,
+    "body": {
+      "workflow_id": "665f1c0a2b3c4d5e6f750015",
+      "version_number": null,
+      "model": "gemini-2.5-flash-native-audio",
+      "super_nodes_expanded": true,
+      "supported": true,
+      "summary": "Realtime-ready with 2 warning(s).",
+      "blockers": [],
+      "warnings": [
+        {
+          "code": "max_consecutive_tool_calls",
+          "severity": "warning",
+          "message": "max_consecutive_tool_calls is 3. The realtime session runs its own tool loop and this limit is not applied to it, so the model may call more tools in a turn than this allows.",
+          "description": "max_consecutive_tool_calls is 3. The realtime session runs its own tool loop and this limit is not applied to it, so the model may call more tools in a turn than this allows. (at Benefit-information and Pharmacy Details)",
+          "node_logical_id": "node_3af6ae72-2270-469e-8fec-03f71d7a3f70",
+          "node_name": "Benefit-information and Pharmacy Details",
+          "edge_logical_id": null,
+          "super_node_path": null
+        },
+        {
+          "code": "max_consecutive_tool_calls",
+          "severity": "warning",
+          "message": "max_consecutive_tool_calls is 2. The realtime session runs its own tool loop and this limit is not applied to it, so the model may call more tools in a turn than this allows.",
+          "description": "max_consecutive_tool_calls is 2. The realtime session runs its own tool loop and this limit is not applied to it, so the model may call more tools in a turn than this allows. (at identity verification)",
+          "node_logical_id": "node_0f4b8a9a-7f03-47b3-9861-2beb3b88fa87",
+          "node_name": "identity verification",
+          "edge_logical_id": null,
+          "super_node_path": null
+        }
+      ],
+      "indeterminate": []
+    }
+  }
+}

@@ -25,7 +25,8 @@ Sub-resource (versions) is exposed as ``resource.versions``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
@@ -34,6 +35,7 @@ from interactly._utils._serialise import serialise_config
 from interactly.resources.workflows.versions import AsyncWorkflowVersionsResource, WorkflowVersionsResource
 from interactly.types._config_types import WorkflowConfigOrDict
 from interactly.types.runs.run_control import BackgroundRunStarted
+from interactly.types.shared import WorkflowType
 from interactly.types.usage import UsageReport
 from interactly.types.workflows.analysis import (
     CounterGenerationState,
@@ -53,12 +55,16 @@ __all__ = ["WorkflowsResource", "AsyncWorkflowsResource"]
 _PATH = "/v1/workflows"
 
 
-def _version_and_model_params(version_number: Optional[int], model: Optional[str] = None) -> Dict[str, Any]:
+def _version_and_model_params(
+    version_number: Optional[int], model: Optional[str] = None, backend: Optional[str] = None
+) -> Dict[str, Any]:
     params: Dict[str, Any] = {}
     if version_number is not None:
         params["version_number"] = version_number
     if model is not None:
         params["model"] = model
+    if backend is not None:
+        params["backend"] = backend
     return params
 
 
@@ -190,8 +196,11 @@ class WorkflowsResource(SyncAPIResource):
         return self._client.post(_PATH, body=body, cast_to=Workflow)
 
     def get(self, workflow_id: str) -> Workflow:
-        """Retrieve a single workflow by ID."""
-        return self._client.get(f"{_PATH}/{workflow_id}", cast_to=Workflow)
+        """Retrieve a single workflow by ID, with its ``active_version_number``. For one version's snapshot, use
+        :meth:`WorkflowVersionsResource.get`."""
+        # The workflow comes back either way; naming find_active_version keeps the server from logging the read as one
+        # that relies on its old default.
+        return self._client.get(f"{_PATH}/{workflow_id}", params={"find_active_version": True}, cast_to=Workflow)
 
     def update(
         self,
@@ -227,26 +236,43 @@ class WorkflowsResource(SyncAPIResource):
         page: int = 1,
         size: int = 20,
         search: Optional[str] = None,
+        workflow_type: Union[WorkflowType, str, None] = None,
+        logical_id: Optional[str] = None,
+        categories: Optional[List[str]] = None,
+        created_by: Optional[List[str]] = None,
+        favorites: Optional[bool] = None,
     ) -> SyncPage[Workflow]:
         """
-        List workflows for the authenticated team (paginated).
+        List workflows for the authenticated team (paginated). Every filter given must match.
 
         Args:
-            page:   Page number (1-based).
-            size:   Items per page.
-            search: Keyword filter applied to workflow name/description.
+            page:          Page number (1-based).
+            size:          Items per page.
+            search:        Keyword filter applied to workflow name/description.
+            workflow_type: ``standard`` workflows (the ones that run calls), or ``evaluation`` workflows (post-call
+                           analysis). The server lists standard ones unless ``evaluation`` is asked for.
+            logical_id:    Only the workflow with this logical id.
+            categories:    Only workflows in one of these categories; ``"User Created"`` also matches workflows with
+                           no category.
+            created_by:    Only workflows created by one of these users (user ids; with an API key, the id of the
+                           member who created the key).
+            favorites:     Only the workflows the calling user marked as favourites.
 
         Returns:
             SyncPage[Workflow] — call ``.list_all()`` to collect all pages.
         """
-        params: dict[str, Any] = {"page": page, "size": size}
-        if search is not None:
-            params["search"] = search
-
-        raw = self._client.get(_PATH, params=params, cast_to=dict)
+        filters: Dict[str, Any] = dict(
+            search=search,
+            workflow_type=workflow_type,
+            logical_id=logical_id,
+            categories=categories,
+            created_by=created_by,
+            favorites=favorites,
+        )
+        raw = self._client.get(_PATH, params=_list_params(page=page, size=size, **filters), cast_to=dict)
 
         def fetch_page(p: int) -> SyncPage[Workflow]:
-            return self.list(page=p, size=size, search=search)
+            return self.list(page=p, size=size, **filters)
 
         return SyncPage._from_response(raw, Workflow, fetch_page, page=page, size=size)
 
@@ -421,18 +447,26 @@ class WorkflowsResource(SyncAPIResource):
         )
 
     def realtime_compatibility(
-        self, workflow_id: str, *, version_number: Optional[int] = None, model: Optional[str] = None
+        self,
+        workflow_id: str,
+        *,
+        version_number: Optional[int] = None,
+        model: Optional[str] = None,
+        backend: Optional[str] = None,
     ) -> RealtimeCompatibilityReport:
         """Whether this workflow can run its voice calls on a realtime (speech-to-speech) model.
 
         Pass the realtime ``model`` the call would use to sharpen the verdict: the two realtime protocols
         differ enough that a workflow can be ready on one and not the other. Without it, the findings
         describe what holds on either.
+
+        For a Gemini model, ``backend`` is the assistant's Gemini backend (``vertex`` or ``ai_studio``). The
+        check then agrees with the one a call makes as it starts about which tool names collide.
         """
         return self._client.get(
             f"{_PATH}/{workflow_id}/realtime-compatibility",
             cast_to=RealtimeCompatibilityReport,
-            params=_version_and_model_params(version_number, model),
+            params=_version_and_model_params(version_number, model, backend),
         )
 
     def counter_workflow(self, workflow_id: str) -> CounterWorkflowStatus:
@@ -511,20 +545,24 @@ class WorkflowsResource(SyncAPIResource):
         _apply_hydrated_name(body, name=name, description=description)
         return self._client.post(_PATH, body=body, cast_to=Workflow)
 
-    def get_fully_hydrated(self, workflow_id: str) -> "WorkflowConfigFullyHydrated":
+    def get_fully_hydrated(
+        self, workflow_id: str, *, version_number: Optional[int] = None
+    ) -> "WorkflowConfigFullyHydrated":
         """Fetch a workflow as a typed ``WorkflowConfigFullyHydrated`` instance.
 
         Issues ``GET /v1/workflows/{id}?fully_hydrate=true``, unwraps the
         ``WorkflowsResponse`` envelope, and validates the result with
         :class:`WorkflowConfigFullyHydrated`.
 
+        Args:
+            workflow_id:    ObjectId of the workflow.
+            version_number: The version to hydrate. Without it, the server hydrates the workflow's own record.
+
         Requires the ``[configs]`` extra to be installed.
         """
         from interactly.configs import WorkflowConfigFullyHydrated
 
-        raw = self._client.get(
-            f"{_PATH}/{workflow_id}", params={"fully_hydrate": True}, cast_to=dict
-        )
+        raw = self._client.get(f"{_PATH}/{workflow_id}", params=_hydrate_params(version_number), cast_to=dict)
         return WorkflowConfigFullyHydrated.model_validate(_extract_hydrated_config(raw))
 
     def handle(
@@ -627,7 +665,8 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         return await self._client.post(_PATH, body=body, cast_to=Workflow)
 
     async def get(self, workflow_id: str) -> Workflow:
-        return await self._client.get(f"{_PATH}/{workflow_id}", cast_to=Workflow)
+        """Retrieve a single workflow by ID; see :meth:`WorkflowsResource.get`."""
+        return await self._client.get(f"{_PATH}/{workflow_id}", params={"find_active_version": True}, cast_to=Workflow)
 
     async def update(
         self,
@@ -652,15 +691,25 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         page: int = 1,
         size: int = 20,
         search: Optional[str] = None,
+        workflow_type: Union[WorkflowType, str, None] = None,
+        logical_id: Optional[str] = None,
+        categories: Optional[List[str]] = None,
+        created_by: Optional[List[str]] = None,
+        favorites: Optional[bool] = None,
     ) -> AsyncPage[Workflow]:
-        params: dict[str, Any] = {"page": page, "size": size}
-        if search is not None:
-            params["search"] = search
-
-        raw = await self._client.get(_PATH, params=params, cast_to=dict)
+        """List workflows for the authenticated team; the filters are :meth:`WorkflowsResource.list`'s."""
+        filters: Dict[str, Any] = dict(
+            search=search,
+            workflow_type=workflow_type,
+            logical_id=logical_id,
+            categories=categories,
+            created_by=created_by,
+            favorites=favorites,
+        )
+        raw = await self._client.get(_PATH, params=_list_params(page=page, size=size, **filters), cast_to=dict)
 
         async def fetch_page(p: int) -> AsyncPage[Workflow]:
-            return await self.list(page=p, size=size, search=search)
+            return await self.list(page=p, size=size, **filters)
 
         return AsyncPage._from_response(raw, Workflow, fetch_page, page=page, size=size)
 
@@ -764,13 +813,18 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         )
 
     async def realtime_compatibility(
-        self, workflow_id: str, *, version_number: Optional[int] = None, model: Optional[str] = None
+        self,
+        workflow_id: str,
+        *,
+        version_number: Optional[int] = None,
+        model: Optional[str] = None,
+        backend: Optional[str] = None,
     ) -> RealtimeCompatibilityReport:
         """Whether this workflow can run on a realtime model. See the sync counterpart."""
         return await self._client.get(
             f"{_PATH}/{workflow_id}/realtime-compatibility",
             cast_to=RealtimeCompatibilityReport,
-            params=_version_and_model_params(version_number, model),
+            params=_version_and_model_params(version_number, model, backend),
         )
 
     async def counter_workflow(self, workflow_id: str) -> CounterWorkflowStatus:
@@ -818,13 +872,13 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         _apply_hydrated_name(body, name=name, description=description)
         return await self._client.post(_PATH, body=body, cast_to=Workflow)
 
-    async def get_fully_hydrated(self, workflow_id: str) -> "WorkflowConfigFullyHydrated":
+    async def get_fully_hydrated(
+        self, workflow_id: str, *, version_number: Optional[int] = None
+    ) -> "WorkflowConfigFullyHydrated":
         """Async variant of :meth:`WorkflowsResource.get_fully_hydrated`."""
         from interactly.configs import WorkflowConfigFullyHydrated
 
-        raw = await self._client.get(
-            f"{_PATH}/{workflow_id}", params={"fully_hydrate": True}, cast_to=dict
-        )
+        raw = await self._client.get(f"{_PATH}/{workflow_id}", params=_hydrate_params(version_number), cast_to=dict)
         return WorkflowConfigFullyHydrated.model_validate(_extract_hydrated_config(raw))
 
     async def handle(
@@ -917,3 +971,15 @@ def _import_body(
     if secret_overrides:
         body["secret_overrides"] = secret_overrides
     return body
+
+
+def _list_params(**params: Any) -> Dict[str, Any]:
+    """A list's query: the parameters given, enums as their values."""
+    return {name: (value.value if isinstance(value, Enum) else value) for name, value in params.items() if value is not None}
+
+
+def _hydrate_params(version_number: Optional[int]) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"fully_hydrate": True}
+    if version_number is not None:
+        params["version_number"] = version_number
+    return params
