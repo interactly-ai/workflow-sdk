@@ -95,7 +95,14 @@ from interactly.types.runs.run_event import RunEvent
 from interactly.types.schedules.params import ScheduleCreateParams, ScheduleListParams, ScheduleUpdateParams
 from interactly.types.schedules.schedule import Schedule, ScheduleStatus
 from interactly.types.shared import RunStatus, WorkflowCommand, WorkflowStatus
-from interactly.types.simulations.simulation import Simulation, SimulationGroup, SimulationRun, SimulationStatus
+from interactly.types.simulations.simulation import (
+    Simulation,
+    SimulationGroup,
+    SimulationRun,
+    SimulationRunControlOutcome,
+    SimulationRunControlResult,
+    SimulationStatus,
+)
 from interactly.types.super_nodes.super_node import SuperNodeDetail, SuperNodeSummary
 from interactly.types.templates.template import Template
 from interactly.types.tools.codebase_function import CodebaseFunction, CodebaseFunctionCatalogue
@@ -273,6 +280,8 @@ __all__ = [
     "Simulation",
     "SimulationGroup",
     "SimulationRun",
+    "SimulationRunControlOutcome",
+    "SimulationRunControlResult",
     "SimulationStatus",
     # LLM config types
     "LLMConfig",

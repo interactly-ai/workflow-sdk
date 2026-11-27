@@ -204,13 +204,15 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `evaluation_summary` | `(simulation_id: 'str', *, group_id: 'Optional[str]' = None) -> 'Dict[str, Any]'` | Get aggregated evaluation results for a simulation. |
 | `get` | `(simulation_id: 'str') -> 'Simulation'` | Retrieve a simulation configuration by ID. |
 | `get_run` | `(run_id: 'str') -> 'SimulationGroup'` | Get details of a specific simulation run group. |
-| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'AsyncPage[Simulation]'` | List simulation configurations for the team. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, logical_id: 'Optional[str]' = None, selected_workflow_id: 'Optional[str]' = None, counter_workflow_id: 'Optional[str]' = None, selected_version_number: 'Optional[int]' = None, counter_version_number: 'Optional[int]' = None, status: 'Union[SimulationStatus, str, None]' = None, start: 'Optional[datetime]' = None, end: 'Optional[datetime]' = None) -> 'AsyncPage[Simulation]'` | List simulation configurations for the team, newest first; the filters are |
 | `list_detailed_executions` | `(run_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'List[Dict[str, Any]]'` | List individual executions with hydrated workflow run details. |
 | `list_executions` | `(run_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'AsyncPage[SimulationRun]'` | List individual executions within a simulation run group. |
 | `list_runs` | `(simulation_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'AsyncPage[SimulationGroup]'` | List all run groups for a simulation configuration. |
+| `pause_run` | `(run_id: 'str', *, reason: 'Optional[str]' = None) -> 'SimulationRunControlResult'` | Pause a simulation run group until :meth:`resume_run`; see :meth:`SimulationsResource.pause_run`. |
+| `resume_run` | `(run_id: 'str') -> 'SimulationRunControlResult'` | Resume a paused simulation run group; see :meth:`SimulationsResource.resume_run`. |
 | `run` | `(simulation_id: 'str', *, runner_name: 'Optional[str]' = None) -> 'SimulationGroup'` | Trigger a new simulation batch run. |
 | `schema` | `() -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a simulation configuration. |
-| `stop_run` | `(run_id: 'str') -> 'SimulationGroup'` | Cancel a simulation run group. |
+| `stop_run` | `(run_id: 'str') -> 'SimulationGroup'` | Stop a simulation run group, for good; see :meth:`SimulationsResource.stop_run`. |
 | `update` | `(simulation_id: 'str', *, updates: 'Dict[str, Any]') -> 'Simulation'` | Partially update a simulation configuration (dict or typed Pydantic model). |
 
 ## Global variables

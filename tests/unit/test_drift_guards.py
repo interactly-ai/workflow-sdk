@@ -151,19 +151,19 @@ class TestRouteCoverage:
     gained was found by hand, a sync late.
     """
 
-    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **87**.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **68**.
     #:
-    #: * 11 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export, import and
-    #:   usage; simulation-group pause and resume; workflow and tool usage.
-    #: * 73 query fields no SDK method can send: the date window (``start``/``end``, 30) and ``search`` (6) that
-    #:   every paginated list reads; ``version_number`` on node, edge and super-node routes (14); ``logical_id``
-    #:   on six lists; ``workflow_type`` (3); the workflow, simulation, template and tool list filters;
+    #: * 9 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export, import and
+    #:   usage; workflow and tool usage.
+    #: * 56 query fields no SDK method can send: the date window (``start``/``end``, 22) and ``search`` (3) that
+    #:   most paginated lists read; ``version_number`` on node, edge and super-node routes (13); ``logical_id``
+    #:   on five lists; ``workflow_type`` (3); the workflow, template and tool list filters;
     #:   ``find_active_version``; ``backend``; ``dry_run``.
     #: * 3 query keys the SDK sends that the server does not read, so the filter silently does nothing:
     #:   ``workflow_id`` on the tool list; ``category`` and ``created_by_me`` on the active-versions list.
     #:
     #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
-    KNOWN_ROUTE_DEBT = 87
+    KNOWN_ROUTE_DEBT = 68
 
     @staticmethod
     def _report():
@@ -231,10 +231,8 @@ class TestRouteCoverage:
 class TestWireValues:
     """Values `src/interactly/` restates by hand from the server, which no other harness compares."""
 
-    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **1**.
-    #:
-    #: * ``SimulationStatus`` (``interactly.types``) lacks ``paused`` (upstream since 2026-11-23).
-    KNOWN_WIRE_DEBT = 1
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **0**.
+    KNOWN_WIRE_DEBT = 0
 
     @staticmethod
     def _report():

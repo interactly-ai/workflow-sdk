@@ -744,6 +744,26 @@ class TestSdkCoverageIsReported:
         assert unrenderable == []
         assert [(c.method, c.path, c.query) for c in calls] == [("POST", "/v1/things/run", {"version"})]
 
+    def test_a_dict_spread_into_a_params_helper_is_read(self, tmp_path):
+        source = """
+            _PATH = "/v1/things"
+
+            def _list_params(**params):
+                return {name: value for name, value in params.items() if value is not None}
+
+            class Things:
+                def list(self, page=1, colour=None, shade=None):
+                    filters = dict(colour=colour, shade=shade)
+                    return self._client.get(_PATH, params=_list_params(page=page, **filters))
+
+                def mystery(self, page=1, **filters):
+                    return self._client.get(_PATH, params=_list_params(page=page, **filters))
+        """
+        calls, unrenderable = rc.extract_sdk_calls(_write(tmp_path / "resources", {"things.py": source}))
+        assert {c.location: c.query for c in calls}["things.py:list"] == {"page", "colour", "shade"}
+        # A spread of a parameter says nothing about its keys, so the call is reported, not taken as sending `page` only.
+        assert unrenderable == [("things.py:mystery", "params `_list_params(page=page, **filters)`")]
+
     def test_params_the_harness_cannot_read_are_reported_not_assumed_empty(self, route_report):
         assert route_report.unrenderable_calls == [("things/things.py:mystery", "params `params`")]
 

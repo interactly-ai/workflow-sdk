@@ -72,6 +72,19 @@ async def test_a_developer_key_reaches_run_control(developer_client):
             await client.runs.pause(_NO_SUCH_NODE, reason="role check")
 
 
+async def test_a_viewer_key_is_refused_a_simulation_groups_pause(viewer_client):
+    # A group's pause pauses its workflow runs, so it takes run control's role.
+    async with viewer_client as client:
+        with pytest.raises(PermissionDeniedError):
+            await client.simulations.pause_run(_NO_SUCH_NODE, reason="role check")
+
+
+async def test_a_developer_key_reaches_a_simulation_groups_pause(developer_client):
+    async with developer_client as client:
+        with pytest.raises(NotFoundError):
+            await client.simulations.pause_run(_NO_SUCH_NODE, reason="role check")
+
+
 def _credentials_shown(config: Any) -> List[str]:
     """Where ``config`` still carries a credential, as dotted paths; group members are walked too.
 
