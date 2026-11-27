@@ -9,6 +9,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### LLM configs: a credential header a header map leaves out is kept
+#### Changed
+- **`llm_configs.update(..., preserve_credentials=True)` carries a stored credential header that the new
+  `default_headers` leaves out**, as it already carried one the map sends blank or a config with no map at all.
+  - **Before:** a map built in code with only the header it meant to change deleted the gateway's `Authorization`.
+    That held for every role, since the server deletes a credential header an update leaves out.
+  - **Now:** an admin's update carries the stored value. One below admin sends the header by name, blank, which the
+    server keeps.
+  - **Unchanged:** names match ignoring case, a header you fill in keeps your value, and a plain header the new map
+    leaves out is still dropped.
+- **To drop one credential header and keep the others, pass `preserve_credentials=False`** and send the credentials
+  you keep.
+
 ### A node failure the server tolerates ends only its turn
 #### Changed
 - **`RunEvent.is_terminal()` is False for a `workflow_error` the server tolerated.**

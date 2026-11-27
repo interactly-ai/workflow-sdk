@@ -123,9 +123,10 @@ def _carry_stored_credentials(new_config: Any, old_config: Any) -> None:
     - each credential field (``api_key``, Bedrock's ``aws_access_key_id`` and ``aws_secret_access_key``) that the
       outgoing config leaves unset;
     - each credential header of a header map (the custom gateway's ``default_headers``: ``Authorization``,
-      ``x-api-key`` and the like) that the outgoing map sends empty, matched by name exactly and then ignoring
-      case, as the server matches it. A header the caller filled in keeps its value. If the outgoing config has no
-      header map at all, the stored credential headers are carried into a new one; the other headers are not.
+      ``x-api-key`` and the like) that the outgoing map sends empty or leaves out, matched by name exactly and then
+      ignoring case, as the server matches it. A header the caller filled in keeps its value. If the outgoing config
+      has no header map at all, the stored credential headers are carried into a new one. Plain headers are the
+      caller's: one the outgoing map leaves out is not carried.
 
     Recurses into group members (paired by ``logical_id``) and backchannel sub-configs, as the server does. Mutates
     ``new_config`` in place.
@@ -152,11 +153,13 @@ def _carry_stored_credentials(new_config: Any, old_config: Any) -> None:
 
 
 def _carry_stored_headers(new_headers: Any, old_headers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The outgoing headers with each blank credential header given its stored value, or ``None`` to leave them.
+    """The outgoing headers with each stored credential header carried in, or ``None`` to leave them.
 
-    A stored credential header is carried by name even when it reads blank, as it does for every member below admin.
-    The server keeps a stored credential header that an update sends blank, but deletes one the update leaves out, so
-    a map left out entirely would delete a non-admin's headers without this.
+    A credential header the outgoing map sends blank gets its stored value. One the map leaves out, or every one when
+    there is no map, is added under its stored name, so a map built in code with only the headers it means to change
+    keeps the credentials it never mentions. Names match ignoring case, and a header the caller fills in keeps its
+    value. A stored credential header is carried even when it reads blank, as every one does below admin: the server
+    keeps one an update sends blank, but deletes one the update leaves out.
     """
     stored = {name: value for name, value in old_headers.items() if is_credential_header(name)}
     if new_headers is None:
@@ -170,6 +173,10 @@ def _carry_stored_headers(new_headers: Any, old_headers: Dict[str, Any]) -> Opti
             value = stored.get(name, stored_by_lower.get(str(name).lower()))
             if value:
                 restored[name] = value
+    named = {str(name).lower() for name in new_headers}
+    for name, value in stored.items():
+        if str(name).lower() not in named:
+            restored[name] = value or ""
     return restored
 
 
@@ -268,7 +275,8 @@ class LLMConfigsResource(SyncAPIResource):
         credential ``config`` leaves blank is carried over from it, in group members (paired by ``logical_id``) and
         backchannel configs too, and only onto a config of the same provider type. That costs one extra GET. Below
         admin the read returns the credentials blank and the server restores the credential fields itself, but it
-        deletes a credential header the update leaves out, so each stored one is sent by name, blank, to be kept.
+        deletes a credential header the update leaves out, so each stored one the outgoing map doesn't name is sent
+        by name, blank, to be kept.
 
         Args:
             preserve_credentials: Pass ``False`` to send ``config`` exactly as given. With an admin token, that is

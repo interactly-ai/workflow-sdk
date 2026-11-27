@@ -2,8 +2,8 @@
 
 The server clears these from what a non-admin reads, and puts back the ones an update leaves blank, but only for a
 non-admin: an admin is shown them, so for an admin a blank one means "delete it". A credential header an update leaves
-out of its header map is deleted for every role. ``llm_configs.update`` carries them across itself so that an update
-built in code doesn't delete what it never meant to touch.
+out of its header map is deleted for every role. ``llm_configs.update`` carries them across itself, blank or left
+out, so that an update built in code doesn't delete what it never meant to touch.
 
 The client can't read the server's declarations (the config mirror leaves the markers out, and the client must not
 need it), so the lists are restated here. ``tests/unit/test_drift_guards.py`` compares them with the server's source.
