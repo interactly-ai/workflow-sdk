@@ -13,18 +13,28 @@ Endpoints:
     GET    /v1/simulations/{id}/evaluation-summary             → evaluation_summary
     GET    /v1/simulation-runs/{run_id}                        → get_run
     POST   /v1/simulation-runs/{run_id}/stop                   → stop_run
+    POST   /v1/simulation-runs/{run_id}/pause                  → pause_run
+    POST   /v1/simulation-runs/{run_id}/resume                 → resume_run
     GET    /v1/simulation-runs/{run_id}/executions             → list_executions
     GET    /v1/simulation-runs/{run_id}/executions/detailed    → list_detailed_executions
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, cast
+from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union, cast
 
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._utils._serialise import serialise_config
-from interactly.types.simulations.simulation import Simulation, SimulationGroup, SimulationRun
+from interactly.types.simulations.simulation import (
+    Simulation,
+    SimulationGroup,
+    SimulationRun,
+    SimulationRunControlResult,
+    SimulationStatus,
+)
 
 __all__ = ["SimulationsResource", "AsyncSimulationsResource"]
 
@@ -66,28 +76,59 @@ class SimulationsResource(SyncAPIResource):
         page: int = 1,
         size: int = 20,
         search: Optional[str] = None,
+        logical_id: Optional[str] = None,
+        selected_workflow_id: Optional[str] = None,
+        counter_workflow_id: Optional[str] = None,
+        selected_version_number: Optional[int] = None,
+        counter_version_number: Optional[int] = None,
+        status: Union[SimulationStatus, str, None] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
     ) -> SyncPage[Simulation]:
         """
-        List simulation configurations for the team.
+        List simulation configurations for the team, newest first. Every filter given must match.
 
         Args:
-            page:   Page number (1-indexed, default 1).
-            size:   Items per page (default 20).
-            search: Fuzzy text filter.
+            page:                    Page number (1-indexed, default 1).
+            size:                    Items per page (default 20).
+            search:                  Text matched, ignoring case, against the description and the names of both
+                                     workflows.
+            logical_id:              The simulation's logical id (``simulation_config["logical_id"]``).
+            selected_workflow_id:    Only simulations of this workflow under test.
+            counter_workflow_id:     Only simulations whose user is played by this workflow.
+            selected_version_number: Only simulations naming this version of the workflow under test.
+            counter_version_number:  Only simulations naming this version of the counter workflow.
+            status:                  The status the configuration records for its latest group
+                                     (:attr:`Simulation.status`). A stopped or paused group is not recorded there:
+                                     filter groups with :meth:`list_runs` and their ``status`` instead.
+            start, end:              Only simulations created between these times. Give both or neither; the range
+                                     may span 31 days at most.
 
         Returns:
             A :class:`SyncPage` of :class:`Simulation` objects.
+
+        Raises:
+            ValueError:      only one of ``start`` and ``end`` is given.
+            BadRequestError: ``start`` and ``end`` are more than 31 days apart, or ``end`` is before ``start``.
         """
-        params: Dict[str, Any] = {"page": page, "size": size}
-        if search is not None:
-            params["search"] = search
-        raw = self._client.get(_PATH, cast_to=dict, params=params)
+        filters: Dict[str, Any] = dict(
+            search=search,
+            logical_id=logical_id,
+            selected_workflow_id=selected_workflow_id,
+            counter_workflow_id=counter_workflow_id,
+            selected_version_number=selected_version_number,
+            counter_version_number=counter_version_number,
+            status=status,
+            start=start,
+            end=end,
+        )
+        raw = self._client.get(_PATH, cast_to=dict, params=_list_params(page=page, size=size, **filters))
         items = [Simulation.model_validate(s) for s in raw.get("simulations", [])]
         total = raw.get("total", len(items))
         return SyncPage._from_response(
             {"items": items, "total": total, "page": page, "size": size},
             Simulation,
-            lambda p: self.list(page=p, size=size, search=search),
+            lambda p: self.list(page=p, size=size, **filters),
         )
 
     def get(self, simulation_id: str) -> Simulation:
@@ -219,19 +260,67 @@ class SimulationsResource(SyncAPIResource):
 
     def stop_run(self, run_id: str) -> SimulationGroup:
         """
-        Cancel a simulation run group.
+        Stop a simulation run group, for good.
 
-        The orchestrator will stop spawning new individual runs. Already-running
-        runs will complete naturally.
+        The group moves to ``cancelled``: no simulation of it starts, and each one running ends ``cancelled`` before
+        its next turn. Stopping a group that has already ended changes nothing. To hold a group and carry on later,
+        use :meth:`pause_run`.
 
         Args:
             run_id: ObjectId of the simulation group to stop.
 
         Returns:
-            The updated :class:`SimulationGroup` with status ``cancelled``.
+            The :class:`SimulationGroup`: ``cancelled``, or the status it ended with if it had already ended.
         """
         raw = self._client.post(f"{_RUNS_PATH}/{run_id}/stop", cast_to=dict)
         return SimulationGroup.model_validate(raw.get("simulation_group", raw))
+
+    def pause_run(self, run_id: str, *, reason: Optional[str] = None) -> SimulationRunControlResult:
+        """
+        Pause a simulation run group until :meth:`resume_run`.
+
+        A pending or running group moves to ``paused``; pausing a paused group changes nothing. No simulation of the
+        group starts or takes a turn while it is paused, and the workflow runs of each simulation running at that
+        moment are paused too. ``runs`` says what became of each: on a server whose simulation runs are not durable,
+        they answer ``not_durable`` and are held by their group alone.
+
+        Args:
+            run_id: ObjectId of the simulation group (:attr:`SimulationGroup.id`).
+            reason: Why, up to 1,000 characters; recorded on each workflow run paused.
+
+        Returns:
+            A :class:`SimulationRunControlResult`: the group, and what the pause did to each workflow run in flight.
+
+        Raises:
+            ConflictError:            the group has ended.
+            NotFoundError:            no such group in the team.
+            PermissionDeniedError:    the caller's role is below Developer.
+            UnprocessableEntityError: a reason over 1,000 characters.
+        """
+        return self._client.post(
+            f"{_RUNS_PATH}/{run_id}/pause", body=_pause_body(reason), cast_to=SimulationRunControlResult
+        )
+
+    def resume_run(self, run_id: str) -> SimulationRunControlResult:
+        """
+        Resume a paused simulation run group.
+
+        The group moves back to ``running``: its simulations carry on and the rest start. The pause of each workflow
+        run of its simulations in flight is lifted, however it was paused. On a group that is not paused, only those
+        runs' pauses are lifted.
+
+        Args:
+            run_id: ObjectId of the simulation group (:attr:`SimulationGroup.id`).
+
+        Returns:
+            A :class:`SimulationRunControlResult`: the group, and what the resume did to each workflow run in flight.
+
+        Raises:
+            ConflictError:         the group has ended.
+            NotFoundError:         no such group in the team.
+            PermissionDeniedError: the caller's role is below Developer.
+        """
+        return self._client.post(f"{_RUNS_PATH}/{run_id}/resume", cast_to=SimulationRunControlResult)
 
     def list_executions(
         self,
@@ -305,18 +394,35 @@ class AsyncSimulationsResource(AsyncAPIResource):
         page: int = 1,
         size: int = 20,
         search: Optional[str] = None,
+        logical_id: Optional[str] = None,
+        selected_workflow_id: Optional[str] = None,
+        counter_workflow_id: Optional[str] = None,
+        selected_version_number: Optional[int] = None,
+        counter_version_number: Optional[int] = None,
+        status: Union[SimulationStatus, str, None] = None,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
     ) -> AsyncPage[Simulation]:
-        """List simulation configurations for the team."""
-        params: Dict[str, Any] = {"page": page, "size": size}
-        if search is not None:
-            params["search"] = search
-        raw = await self._client.get(_PATH, cast_to=dict, params=params)
+        """List simulation configurations for the team, newest first; the filters are
+        :meth:`SimulationsResource.list`'s."""
+        filters: Dict[str, Any] = dict(
+            search=search,
+            logical_id=logical_id,
+            selected_workflow_id=selected_workflow_id,
+            counter_workflow_id=counter_workflow_id,
+            selected_version_number=selected_version_number,
+            counter_version_number=counter_version_number,
+            status=status,
+            start=start,
+            end=end,
+        )
+        raw = await self._client.get(_PATH, cast_to=dict, params=_list_params(page=page, size=size, **filters))
         items = [Simulation.model_validate(s) for s in raw.get("simulations", [])]
         total = raw.get("total", len(items))
         return AsyncPage._from_response(
             {"items": items, "total": total, "page": page, "size": size},
             Simulation,
-            lambda p: self.list(page=p, size=size, search=search),
+            lambda p: self.list(page=p, size=size, **filters),
         )
 
     async def get(self, simulation_id: str) -> Simulation:
@@ -384,9 +490,19 @@ class AsyncSimulationsResource(AsyncAPIResource):
         return SimulationGroup.model_validate(raw.get("simulation_group", raw))
 
     async def stop_run(self, run_id: str) -> SimulationGroup:
-        """Cancel a simulation run group."""
+        """Stop a simulation run group, for good; see :meth:`SimulationsResource.stop_run`."""
         raw = await self._client.post(f"{_RUNS_PATH}/{run_id}/stop", cast_to=dict)
         return SimulationGroup.model_validate(raw.get("simulation_group", raw))
+
+    async def pause_run(self, run_id: str, *, reason: Optional[str] = None) -> SimulationRunControlResult:
+        """Pause a simulation run group until :meth:`resume_run`; see :meth:`SimulationsResource.pause_run`."""
+        return await self._client.post(
+            f"{_RUNS_PATH}/{run_id}/pause", body=_pause_body(reason), cast_to=SimulationRunControlResult
+        )
+
+    async def resume_run(self, run_id: str) -> SimulationRunControlResult:
+        """Resume a paused simulation run group; see :meth:`SimulationsResource.resume_run`."""
+        return await self._client.post(f"{_RUNS_PATH}/{run_id}/resume", cast_to=SimulationRunControlResult)
 
     async def list_executions(
         self,
@@ -419,3 +535,25 @@ class AsyncSimulationsResource(AsyncAPIResource):
             f"{_RUNS_PATH}/{run_id}/executions/detailed", cast_to=dict, params=params
         )
         return cast(List[Dict[str, Any]], raw.get("individual_runs", []))
+
+
+def _list_params(**params: Any) -> Dict[str, Any]:
+    """A simulations page's query: the parameters given, with enums and times as the server reads them."""
+    if (params.get("start") is None) != (params.get("end") is None):
+        # The server filters by creation time only when it has both, and would ignore one alone.
+        raise ValueError("Pass start and end together: simulations are filtered by creation time only with both.")
+    query: Dict[str, Any] = {}
+    for name, value in params.items():
+        if value is None:
+            continue
+        if isinstance(value, Enum):
+            value = value.value
+        elif isinstance(value, datetime):
+            value = value.isoformat()
+        query[name] = value
+    return query
+
+
+def _pause_body(reason: Optional[str]) -> Dict[str, Any]:
+    """A pause's body: the reason when there is one, otherwise none at all."""
+    return {} if reason is None else {"reason": reason}

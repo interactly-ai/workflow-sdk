@@ -95,6 +95,16 @@ KNOWN_UNCOVERED_ROUTES: Dict[Tuple[str, str], str] = {
 KNOWN_UNCOVERED_QUERY_FIELDS: Dict[Tuple[str, str, str], str] = {
     ("GET", "/v1/workflow-runs", "copilot_runs_only"): "super-admin only: lists the copilot's own conversations, "
     "which the server refuses to every other role",
+    **{
+        (method, path, name): "declared by the shared pagination model, but this listing reads only page and size: "
+        "sending it would look like a filter and filter nothing"
+        for method, path in (
+            ("GET", "/v1/simulations/{}/runs"),
+            ("GET", "/v1/simulation-runs/{}/executions"),
+            ("GET", "/v1/simulation-runs/{}/executions/detailed"),
+        )
+        for name in ("search", "start", "end")
+    },
 }
 
 #: Query keys the SDK sends that upstream's route signatures do not declare, as (method, path, name) -> reason.
@@ -656,8 +666,17 @@ class _SdkModule:
             if callee is None:
                 return set(), False
             if callee.args.kwarg is not None:
-                # A `**params` helper (`_list_params(limit=..., after=...)`): the call site names the keys.
-                return {k.arg for k in expr.keywords if k.arg}, all(k.arg for k in expr.keywords)
+                # A `**params` helper (`_list_params(limit=..., after=...)`): the call site names the keys, directly
+                # or through a dict it spreads (`_list_params(page=page, **filters)`), which is read like `params=`.
+                keys, ok = set(), True
+                for keyword in expr.keywords:
+                    if keyword.arg:
+                        keys.add(keyword.arg)
+                        continue
+                    more, more_ok = self.param_keys(keyword.value, func, depth + 1, given)
+                    keys |= more
+                    ok = ok and more_ok
+                return keys, ok
             callee_given = _possibly_given(callee, expr)
             keys, ok = set(), bool(_returned(callee))
             for value in _returned(callee):

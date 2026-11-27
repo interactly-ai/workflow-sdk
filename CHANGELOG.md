@@ -35,6 +35,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Simulation groups: pause, resume and the list filters
+#### Added
+- **`simulations.pause_run(run_id, reason=None)` and `simulations.resume_run(run_id)`**, on both clients. A paused
+  group starts no simulation and none takes a turn until it is resumed; the workflow runs of each simulation in
+  flight are paused too. Both return a `SimulationRunControlResult`: the group, and per run its `role` (`selected`
+  or `counter`) and `outcome`. On a server whose simulation runs are not durable, a run answers `not_durable` and
+  is held by its group alone. An ended group raises `ConflictError`; a role below Developer, `PermissionDeniedError`.
+- **`SimulationStatus.PAUSED`**, the status of a paused group.
+- **`simulations.list()` filters:** `logical_id`, `selected_workflow_id`, `counter_workflow_id`,
+  `selected_version_number`, `counter_version_number`, `status`, and `start`/`end` (given together, at most 31 days
+  apart).
+- `SimulationRun.simulation_config_id` and `SimulationRun.result`, which the server sends.
+
+#### Fixed
+- **`Simulation.status` was always `None`.** The server keeps it inside `simulation_config`, not beside it; it is
+  now read from there. It is the status of the configuration's latest group as the configuration records it: a
+  stopped group leaves it `running`, and a paused one is not recorded there.
+- **`simulations.stop_run()` said running simulations complete naturally.** They end `cancelled` before their next
+  turn. Stopping a group that has already ended returns it unchanged.
+
 ### A whole conversation on one stream
 #### Added
 - **`stream.send()` and `stream.stop()`**, on `Stream` and `AsyncStream`, and **`stream.run_id`.** A stream used to

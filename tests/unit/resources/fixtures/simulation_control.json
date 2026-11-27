@@ -1,0 +1,208 @@
+{
+  "pause": {
+    "status": 200,
+    "body": {
+      "simulation_group": {
+        "team_id": "665f1c0a2b3c4d5e6f71000a",
+        "created_by": "665f1c0a2b3c4d5e6f71000b",
+        "updated_by": "665f1c0a2b3c4d5e6f71000b",
+        "created_at": "2026-11-27T05:24:17.913Z",
+        "updated_at": "2026-11-27T05:24:18.172Z",
+        "_id": "665f1c0a2b3c4d5e6f710000",
+        "simulation_config_id": "665f1c0a2b3c4d5e6f710001",
+        "status": "paused",
+        "total_runs": 40,
+        "completed_runs": 0,
+        "failed_runs": 1
+      },
+      "runs": []
+    }
+  },
+  "pause_again": {
+    "status": 200,
+    "body": {
+      "simulation_group": {
+        "team_id": "665f1c0a2b3c4d5e6f71000a",
+        "created_by": "665f1c0a2b3c4d5e6f71000b",
+        "updated_by": "665f1c0a2b3c4d5e6f71000b",
+        "created_at": "2026-11-27T05:24:17.913Z",
+        "updated_at": "2026-11-27T05:24:18.172Z",
+        "_id": "665f1c0a2b3c4d5e6f710000",
+        "simulation_config_id": "665f1c0a2b3c4d5e6f710001",
+        "status": "paused",
+        "total_runs": 40,
+        "completed_runs": 0,
+        "failed_runs": 1
+      },
+      "runs": [
+        {
+          "individual_run_id": "665f1c0a2b3c4d5e6f710002",
+          "workflow_run_id": "665f1c0a2b3c4d5e6f710003",
+          "role": "selected",
+          "outcome": "not_durable",
+          "status": "running"
+        },
+        {
+          "individual_run_id": "665f1c0a2b3c4d5e6f710002",
+          "workflow_run_id": "665f1c0a2b3c4d5e6f710004",
+          "role": "counter",
+          "outcome": "not_durable",
+          "status": "running"
+        }
+      ]
+    }
+  },
+  "resume": {
+    "status": 200,
+    "body": {
+      "simulation_group": {
+        "team_id": "665f1c0a2b3c4d5e6f71000a",
+        "created_by": "665f1c0a2b3c4d5e6f71000b",
+        "updated_by": "665f1c0a2b3c4d5e6f71000b",
+        "created_at": "2026-11-27T05:24:17.913Z",
+        "updated_at": "2026-11-27T05:24:25.030Z",
+        "_id": "665f1c0a2b3c4d5e6f710000",
+        "simulation_config_id": "665f1c0a2b3c4d5e6f710001",
+        "status": "running",
+        "total_runs": 40,
+        "completed_runs": 0,
+        "failed_runs": 1
+      },
+      "runs": [
+        {
+          "individual_run_id": "665f1c0a2b3c4d5e6f710002",
+          "workflow_run_id": "665f1c0a2b3c4d5e6f710003",
+          "role": "selected",
+          "outcome": "not_durable",
+          "status": "running"
+        },
+        {
+          "individual_run_id": "665f1c0a2b3c4d5e6f710002",
+          "workflow_run_id": "665f1c0a2b3c4d5e6f710004",
+          "role": "counter",
+          "outcome": "not_durable",
+          "status": "running"
+        }
+      ]
+    }
+  },
+  "resume_again": {
+    "status": 200,
+    "body": {
+      "simulation_group": {
+        "team_id": "665f1c0a2b3c4d5e6f71000a",
+        "created_by": "665f1c0a2b3c4d5e6f71000b",
+        "updated_by": "665f1c0a2b3c4d5e6f71000b",
+        "created_at": "2026-11-27T05:24:17.913Z",
+        "updated_at": "2026-11-27T05:24:25.030Z",
+        "_id": "665f1c0a2b3c4d5e6f710000",
+        "simulation_config_id": "665f1c0a2b3c4d5e6f710001",
+        "status": "running",
+        "total_runs": 40,
+        "completed_runs": 0,
+        "failed_runs": 1
+      },
+      "runs": [
+        {
+          "individual_run_id": "665f1c0a2b3c4d5e6f710002",
+          "workflow_run_id": "665f1c0a2b3c4d5e6f710003",
+          "role": "selected",
+          "outcome": "not_durable",
+          "status": "running"
+        },
+        {
+          "individual_run_id": "665f1c0a2b3c4d5e6f710002",
+          "workflow_run_id": "665f1c0a2b3c4d5e6f710004",
+          "role": "counter",
+          "outcome": "not_durable",
+          "status": "running"
+        }
+      ]
+    }
+  },
+  "stop": {
+    "status": 200,
+    "body": {
+      "simulation_group": {
+        "team_id": "665f1c0a2b3c4d5e6f71000a",
+        "created_by": "665f1c0a2b3c4d5e6f71000b",
+        "updated_by": "665f1c0a2b3c4d5e6f71000b",
+        "created_at": "2026-11-27T05:24:17.913Z",
+        "updated_at": "2026-11-27T05:24:28.406Z",
+        "_id": "665f1c0a2b3c4d5e6f710000",
+        "simulation_config_id": "665f1c0a2b3c4d5e6f710001",
+        "status": "cancelled",
+        "total_runs": 40,
+        "completed_runs": 0,
+        "failed_runs": 2
+      }
+    }
+  },
+  "pause_ended": {
+    "status": 409,
+    "body": {
+      "message": "The simulation run has already ended (cancelled)."
+    }
+  },
+  "resume_ended": {
+    "status": 409,
+    "body": {
+      "message": "The simulation run has already ended (cancelled)."
+    }
+  },
+  "stop_ended": {
+    "status": 200,
+    "body": {
+      "simulation_group": {
+        "team_id": "665f1c0a2b3c4d5e6f71000a",
+        "created_by": "665f1c0a2b3c4d5e6f71000b",
+        "updated_by": "665f1c0a2b3c4d5e6f71000b",
+        "created_at": "2026-11-27T05:24:17.913Z",
+        "updated_at": "2026-11-27T05:24:28.406Z",
+        "_id": "665f1c0a2b3c4d5e6f710000",
+        "simulation_config_id": "665f1c0a2b3c4d5e6f710001",
+        "status": "cancelled",
+        "total_runs": 40,
+        "completed_runs": 0,
+        "failed_runs": 3
+      }
+    }
+  },
+  "pause_unknown": {
+    "status": 404,
+    "body": {
+      "message": "Simulation run not found"
+    }
+  },
+  "pause_reason_too_long": {
+    "status": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "string_too_long",
+          "loc": [
+            "body",
+            "reason"
+          ],
+          "msg": "String should have at most 1000 characters",
+          "input": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "ctx": {
+            "max_length": 1000
+          }
+        }
+      ]
+    }
+  },
+  "pause_viewer": {
+    "status": 403,
+    "body": {
+      "message": "Your role, Viewer, can't run workflows. It needs Developer access or above. Ask an admin of your team if you need access."
+    }
+  },
+  "list_range_too_long": {
+    "status": 400,
+    "body": {
+      "message": "Date range should be less than or equal to 31 days"
+    }
+  }
+}
