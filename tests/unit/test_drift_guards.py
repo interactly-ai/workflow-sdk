@@ -52,9 +52,8 @@ class TestConfigParity:
             pytest.skip(f"no upstream config sources under {root}")
         return cp.build_report(root)
 
-    #: Differences that are known and attributed. **One**, measured 2026-11-26 against upstream ``main`` at
-    #: a87b31348: ``SimulationStatus.PAUSED`` (a simulation group a person paused), added upstream on
-    #: 2026-11-23. Lower this to zero in the change that mirrors it.
+    #: Differences that are known and attributed. **Zero**, measured 2026-11-26 against upstream ``main`` at
+    #: a87b31348. Keep it at zero by mirroring an upstream change in the same pull request that notices it.
     #:
     #: Held as a **ratchet rather than an ignore**: the guard fails if the total moves in either
     #: direction. Up is new drift; down is a closed gap whose number nobody lowered.
@@ -63,15 +62,14 @@ class TestConfigParity:
     #: than allow-listing the gaps: the allow-lists are for divergences that are *deliberate*, and an
     #: unfollowed upstream change is not. And do not leave the guard red instead: it once sat red at 40
     #: for weeks, and a red guard cannot tell you that a 41st difference just appeared.
-    KNOWN_UPSTREAM_DEBT = 1
+    KNOWN_UPSTREAM_DEBT = 0
 
     #: Class docstrings that differ between upstream and the mirror, counted apart from the total above
-    #: because prose and contract read badly in one number. Measured 2026-11-26: **84** — 38 classes
+    #: because prose and contract read badly in one number. Measured 2026-11-26: **78** — 38 classes
     #: documented upstream and not in the mirror (mostly event classes), 6 documented only in the mirror,
-    #: 40 documented differently on each side (among them six ECS node docstrings upstream rewrote on
-    #: 2026-11-23). A ratchet for the same reason as the one above: before it existed, upstream rewrote
-    #: docstrings and nothing said so.
-    KNOWN_DOCSTRING_DRIFT = 84
+    #: 34 documented differently on each side. A ratchet for the same reason as the one above: before it
+    #: existed, upstream rewrote six ECS node docstrings and nothing said so.
+    KNOWN_DOCSTRING_DRIFT = 78
 
     def test_no_new_drift_against_upstream(self):
         report = self._report()

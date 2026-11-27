@@ -7,7 +7,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from interactly_configs.llm import LLMConfig
+from interactly_configs.llm import LLMConfig, LLMConfigOrUnknown, UnknownLLMConfig
+from interactly_configs.unknown_types import unknown_type_serializer, unknown_type_validator
 
 
 class OperationMode(str, Enum):
@@ -57,7 +58,7 @@ class LLMGroupConfig(BaseModel):
         description="Unique identifier for the LLM Group",
         title="LLM Group Logical ID",
     )
-    llms: List[LLMConfig] = Field(
+    llms: List[LLMConfigOrUnknown] = Field(
         default_factory=list,
         description="List of LLM configurations, in preferred order of use.",
         title="LLM Group",
@@ -147,7 +148,12 @@ class LLMGroupWithBackchannelConfig(BaseModel):
     model_config = ConfigDict(title="Group of regular and backchanneling LLMs")
 
 
+# Upstream's alias is the discriminated union alone. The two extra entries let a provider newer than this package
+# arrive as an `UnknownLLMConfig` instead of failing the node that holds it; they change neither the union's members
+# nor its published schema.
 LLMOrGroupConfig = Annotated[
     LLMConfig | LLMGroupConfig | LLMGroupWithBackchannelConfig,
     Field(discriminator="type"),
+    unknown_type_validator(UnknownLLMConfig),
+    unknown_type_serializer(UnknownLLMConfig),
 ]

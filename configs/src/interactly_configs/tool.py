@@ -7,11 +7,12 @@ from enum import Enum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Type, Union
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator, model_serializer, model_validator
 
 from interactly_configs.auth import IntegrationAuthConfig
 from interactly_configs.prompt import StaticMessagesConfig
 from interactly_configs.secrets import SensitiveMap, SensitiveMapField
+from interactly_configs.unknown_types import fields_that_arrived, unknown_type_serializer, unknown_type_validator
 
 #: Which arguments a registered inbuilt tool declares, keyed by ``tool_id``.
 #:
@@ -955,6 +956,27 @@ class MCPServerConfig(BaseModel):
     model_config = ConfigDict(title="MCP Server Configuration")
 
 
+class UnknownToolConfig(BaseToolConfig):
+    """A tool config whose ``type`` this package does not know yet.
+
+    Held where a known tool's config would be. It reads the fields every tool config shares, so the checks that run
+    on any tool (variable bindings, result mappings) run on it too, keeps the rest as sent (``extra="allow"``), and is
+    written back with exactly the fields it arrived with. Mirror-only: see ``interactly_configs.unknown_types``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: str = Field(description="The tool type, as the server sent it.", title="Tool Type")
+
+    # No return annotation: pydantic would publish it as this class's serialization schema.
+    @model_serializer(mode="wrap")
+    def _write_back_what_arrived(self, handler):  # type: ignore[no-untyped-def]
+        return fields_that_arrived(self, handler(self))
+
+
+# Upstream's alias is the discriminated union alone. The two extra entries let a tool type newer than this package
+# arrive as an `UnknownToolConfig` instead of failing the node that holds it; they change neither the union's members
+# nor its published schema.
 ToolConfig = Annotated[
     InlinePythonToolConfig
     | InbuiltFunctionToolConfig
@@ -962,6 +984,8 @@ ToolConfig = Annotated[
     | KnowledgeBaseToolConfig
     | CodebaseFunctionToolConfig,
     Field(discriminator="type"),
+    unknown_type_validator(UnknownToolConfig),
+    unknown_type_serializer(UnknownToolConfig),
 ]
 
 
