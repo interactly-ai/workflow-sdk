@@ -212,6 +212,8 @@ class ClassInfo:
     nonmembers: Set[str] = field(default_factory=set)
     #: nonmember name -> the expression inside `nonmember(...)`, evaluated at comparison time
     nonmember_exprs: Dict[str, ast.expr] = field(default_factory=dict, repr=False, compare=False)
+    #: the class docstring with whitespace collapsed, or None when it has none
+    docstring: Optional[str] = None
 
     @property
     def is_enum(self) -> bool:
@@ -257,11 +259,13 @@ def _extract_module(path: Path, module_name: str) -> Dict[str, ClassInfo]:
     for node in ast.walk(tree):
         if not isinstance(node, ast.ClassDef):
             continue
+        docstring = ast.get_docstring(node)
         info = ClassInfo(
             name=node.name,
             module=module_name,
             bases=[ast.unparse(b) for b in node.bases],
             validators=_extract_validators(node),
+            docstring=" ".join(docstring.split()) if docstring else None,
         )
         for stmt in node.body:
             # Annotated field: `name: Type = Field(...)`
@@ -713,6 +717,10 @@ class ParityReport:
     #: (importing upstream module, imported module, class) — see find_unmirrored_dependencies
     unmirrored_dependencies: List[Tuple[str, str, str]] = field(default_factory=list)
     placement: List[Tuple[str, str, str]] = field(default_factory=list)       # cls, up module, mirror
+    #: (class, upstream docstring, mirror docstring), either side None when absent. Not counted in `total`:
+    #: the mirror is meant to carry upstream's text, but it has drifted in too many places for a count that
+    #: mixes prose with contract to stay readable. It has its own ratchet in the drift guards instead.
+    docstring_mismatches: List[Tuple[str, Optional[str], Optional[str]]] = field(default_factory=list)
 
     def counted_categories(self) -> List[Tuple[str, Sequence[object]]]:
         """Every category that counts towards `total`, labelled, in report order."""
@@ -786,6 +794,8 @@ def compare(
         expected_module = KNOWN_MODULE_MAPPING.get(up_info.module, up_info.module)
         if expected_module != mir_info.module:
             report.placement.append((name, up_info.module, mir_info.module))
+        if up_info.docstring != mir_info.docstring:
+            report.docstring_mismatches.append((name, up_info.docstring, mir_info.docstring))
 
         up_fields = resolve_fields(name, upstream)
         mir_fields = resolve_fields(mirror_name, mirror)
@@ -1067,6 +1077,12 @@ def render_markdown(report: ParityReport, upstream_roots: List[Path], mirror_roo
         "| Class | Upstream module | Mirror module |",
         "|---|---|---|",
     )
+    section(
+        "Class docstrings that differ (not counted in the total; ratcheted separately)",
+        [f"| `{c}` | {_excerpt(u)} | {_excerpt(m)} |" for c, u, m in report.docstring_mismatches],
+        "| Class | Upstream | Mirror |",
+        "|---|---|---|",
+    )
 
     if report.is_clean:
         lines.extend(["✅ **No structural differences.** The mirror is in parity with upstream.", ""])
@@ -1106,10 +1122,18 @@ def main() -> int:
         f"unions missing={len(report.missing_unions)} extra={len(report.extra_unions)} "
         f"members missing={len(report.missing_union_members)} extra={len(report.extra_union_members)} | "
         f"unmirrored-deps={len(report.unmirrored_dependencies)} | "
-        f"placement={len(report.placement)}"
+        f"placement={len(report.placement)} | docstrings-differ={len(report.docstring_mismatches)} (not counted)"
     )
     print(f"TOTAL DIFFERENCES: {report.total}")
     return 0 if report.is_clean else 1
+
+
+def _excerpt(docstring: Optional[str], limit: int = 90) -> str:
+    """A table cell for one side of a docstring difference."""
+    if docstring is None:
+        return "_(none)_"
+    text = docstring.replace("|", "\\|")
+    return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
 if __name__ == "__main__":
