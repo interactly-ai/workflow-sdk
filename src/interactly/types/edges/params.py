@@ -27,3 +27,5 @@ class EdgeListParams(TypedDict, total=False):
     search: str
     edge_type: Optional[str]
     workflow_id: Optional[str]
+    logical_id: Optional[str]
+    version_number: Optional[int]

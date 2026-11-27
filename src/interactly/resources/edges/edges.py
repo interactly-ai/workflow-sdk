@@ -72,6 +72,8 @@ class EdgesResource(SyncAPIResource):
         search: Optional[str] = None,
         edge_type: Optional[str] = None,
         workflow_id: Optional[str] = None,
+        logical_id: Optional[str] = None,
+        version_number: Optional[int] = None,
     ) -> SyncPage[Edge]:
         """
         List edges.
@@ -81,7 +83,11 @@ class EdgesResource(SyncAPIResource):
             size:        Items per page (default 20).
             search:      Fuzzy name filter.
             edge_type:   Filter by edge type.
-            workflow_id: Filter to edges belonging to a workflow.
+            workflow_id: Only edges of this workflow. Without ``version_number``, the server lists its active
+                         version's edges.
+            logical_id:  Only the edge with this logical id. Each version holds its own copy of a edge, all
+                         under one logical id: with ``workflow_id`` alone, this finds the active version's copy.
+            version_number: Only edges of this version of the workflow (with ``workflow_id``).
 
         Returns:
             A :class:`SyncPage` of :class:`Edge` objects.
@@ -93,15 +99,21 @@ class EdgesResource(SyncAPIResource):
             params["type"] = edge_type
         if workflow_id is not None:
             params["workflow_id"] = workflow_id
+        if logical_id is not None:
+            params["logical_id"] = logical_id
+        if version_number is not None:
+            params["version_number"] = version_number
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id))
+        return SyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id, logical_id=logical_id, version_number=version_number))
 
-    def get(self, edge_id: str) -> Edge:
+    def get(self, edge_id: str, *, version_number: Optional[int] = None) -> Edge:
         """
         Retrieve a single edge by ID.
 
         Args:
             edge_id: ObjectId of the edge.
+            version_number: Refuse with ``NotFoundError`` unless the edge belongs to this version of its
+                            workflow, so an id kept from another version can't reach this one.
 
         Returns:
             The :class:`Edge`.
@@ -109,13 +121,14 @@ class EdgesResource(SyncAPIResource):
         Raises:
             NotFoundError: If no edge with the given ID exists.
         """
-        return self._client.get(f"{_PATH}/{edge_id}", cast_to=Edge)
+        return self._client.get(f"{_PATH}/{edge_id}", params=_version_params(version_number), cast_to=Edge)
 
     def update(
         self,
         edge_id: str,
         *,
         edge_config: NotGivenOr[Optional[EdgeConfigOrDict]] = NOT_GIVEN,
+        version_number: Optional[int] = None,
     ) -> Edge:
         """
         Update an edge's config.
@@ -123,6 +136,8 @@ class EdgesResource(SyncAPIResource):
         Args:
             edge_id:     ObjectId of the edge.
             edge_config: Updated ``EdgeConfig`` compatible dict or typed ``EdgeConfig`` object.
+            version_number: Refuse with ``NotFoundError`` unless the edge belongs to this version of its
+                            workflow, so an id kept from another version can't reach this one.
 
         Returns:
             The updated :class:`Edge`.
@@ -135,16 +150,20 @@ class EdgesResource(SyncAPIResource):
             # preserves unspecified fields (e.g. the edge's existing logical_id)
             # instead of overwriting them with fresh config defaults.
             body = serialise_config(edge_config, exclude_unset=True)
-        return self._client.patch(f"{_PATH}/{edge_id}", body=body, cast_to=Edge)
+        return self._client.patch(
+            f"{_PATH}/{edge_id}", body=body, params=_version_params(version_number), cast_to=Edge
+        )
 
-    def delete(self, edge_id: str) -> None:
+    def delete(self, edge_id: str, *, version_number: Optional[int] = None) -> None:
         """
         Delete an edge.
 
         Args:
             edge_id: ObjectId of the edge to delete.
+            version_number: Refuse with ``NotFoundError`` unless the edge belongs to this version of its
+                            workflow, so an id kept from another version can't reach this one.
         """
-        self._client.delete(f"{_PATH}/{edge_id}", cast_to=type(None))
+        self._client.delete(f"{_PATH}/{edge_id}", params=_version_params(version_number), cast_to=type(None))
 
 
 class AsyncEdgesResource(AsyncAPIResource):
@@ -171,6 +190,8 @@ class AsyncEdgesResource(AsyncAPIResource):
         search: Optional[str] = None,
         edge_type: Optional[str] = None,
         workflow_id: Optional[str] = None,
+        logical_id: Optional[str] = None,
+        version_number: Optional[int] = None,
     ) -> AsyncPage[Edge]:
         """List edges."""
         params: Dict[str, Any] = {"page": page, "size": size}
@@ -180,18 +201,23 @@ class AsyncEdgesResource(AsyncAPIResource):
             params["type"] = edge_type
         if workflow_id is not None:
             params["workflow_id"] = workflow_id
+        if logical_id is not None:
+            params["logical_id"] = logical_id
+        if version_number is not None:
+            params["version_number"] = version_number
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id))
+        return AsyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id, logical_id=logical_id, version_number=version_number))
 
-    async def get(self, edge_id: str) -> Edge:
+    async def get(self, edge_id: str, *, version_number: Optional[int] = None) -> Edge:
         """Retrieve a single edge by ID."""
-        return await self._client.get(f"{_PATH}/{edge_id}", cast_to=Edge)
+        return await self._client.get(f"{_PATH}/{edge_id}", params=_version_params(version_number), cast_to=Edge)
 
     async def update(
         self,
         edge_id: str,
         *,
         edge_config: NotGivenOr[Optional[EdgeConfigOrDict]] = NOT_GIVEN,
+        version_number: Optional[int] = None,
     ) -> Edge:
         """Update an edge's config."""
         from interactly._types import is_given
@@ -202,8 +228,14 @@ class AsyncEdgesResource(AsyncAPIResource):
             # preserves unspecified fields (e.g. the edge's existing logical_id)
             # instead of overwriting them with fresh config defaults.
             body = serialise_config(edge_config, exclude_unset=True)
-        return await self._client.patch(f"{_PATH}/{edge_id}", body=body, cast_to=Edge)
+        return await self._client.patch(
+            f"{_PATH}/{edge_id}", body=body, params=_version_params(version_number), cast_to=Edge
+        )
 
-    async def delete(self, edge_id: str) -> None:
+    async def delete(self, edge_id: str, *, version_number: Optional[int] = None) -> None:
         """Delete an edge."""
-        await self._client.delete(f"{_PATH}/{edge_id}", cast_to=type(None))
+        await self._client.delete(f"{_PATH}/{edge_id}", params=_version_params(version_number), cast_to=type(None))
+
+
+def _version_params(version_number: Optional[int]) -> Dict[str, Any]:
+    return {} if version_number is None else {"version_number": version_number}

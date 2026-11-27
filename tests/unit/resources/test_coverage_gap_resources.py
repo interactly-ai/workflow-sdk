@@ -329,13 +329,13 @@ class TestListActiveVersions:
                 json={"versions": [{"version_number": 2, "is_active": True}], "total": 1, "page": 1, "size": 20},
             )
         )
-        page = client.workflows.versions.list_active(favorites=True, category="Sales")
+        page = client.workflows.versions.list_active(favorites=True, categories=["Sales"])
         assert len(page.items) == 1
         assert page.items[0].version_number == 2
         # filters serialised onto the query string
         params = route.calls.last.request.url.params
         assert params["favorites"] == "true"
-        assert params["category"] == "Sales"
+        assert params["categories"] == "Sales"
 
     @respx.mock
     async def test_async_list_active(self, async_client: AsyncWorkflowClient):

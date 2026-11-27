@@ -229,6 +229,7 @@ class WorkflowWebhooksResource(SyncAPIResource):
         workflow_id: Optional[str] = None,
         action: Optional[WebhookAction] = None,
         status: Optional[WebhookEventStatus] = None,
+        search: Optional[str] = None,
     ) -> SyncPage[WebhookEvent]:
         """
         List webhook delivery events for the team.
@@ -240,6 +241,7 @@ class WorkflowWebhooksResource(SyncAPIResource):
             workflow_id:     Filter by a specific workflow.
             action:          Filter by event action type.
             status:          Filter by delivery status.
+            search:          Text matched, ignoring case, against the event id and the workflow name.
 
         Returns:
             A :class:`SyncPage` of :class:`WebhookEvent` objects, newest first.
@@ -253,6 +255,8 @@ class WorkflowWebhooksResource(SyncAPIResource):
             params["action"] = action.value if isinstance(action, WebhookAction) else action
         if status is not None:
             params["status"] = status.value if isinstance(status, WebhookEventStatus) else status
+        if search is not None:
+            params["search"] = search
         raw = self._client.get(f"{_PATH}/events", cast_to=dict, params=params)
         items = [WebhookEvent.model_validate(e) for e in raw.get("events", [])]
         total = raw.get("total", len(items))
@@ -260,7 +264,7 @@ class WorkflowWebhooksResource(SyncAPIResource):
         def _next_page(p: int) -> "SyncPage[WebhookEvent]":
             return self.list_events(
                 page=p, size=size, subscription_id=subscription_id,
-                workflow_id=workflow_id, action=action, status=status,
+                workflow_id=workflow_id, action=action, status=status, search=search,
             )
 
         return SyncPage._from_response(
@@ -434,6 +438,7 @@ class AsyncWorkflowWebhooksResource(AsyncAPIResource):
         workflow_id: Optional[str] = None,
         action: Optional[WebhookAction] = None,
         status: Optional[WebhookEventStatus] = None,
+        search: Optional[str] = None,
     ) -> AsyncPage[WebhookEvent]:
         """List webhook delivery events for the team."""
         params: Dict[str, Any] = {"page": page, "size": size}
@@ -445,6 +450,8 @@ class AsyncWorkflowWebhooksResource(AsyncAPIResource):
             params["action"] = action.value if isinstance(action, WebhookAction) else action
         if status is not None:
             params["status"] = status.value if isinstance(status, WebhookEventStatus) else status
+        if search is not None:
+            params["search"] = search
         raw = await self._client.get(f"{_PATH}/events", cast_to=dict, params=params)
         items = [WebhookEvent.model_validate(e) for e in raw.get("events", [])]
         total = raw.get("total", len(items))
@@ -456,7 +463,7 @@ class AsyncWorkflowWebhooksResource(AsyncAPIResource):
             # handed a coroutine where the signature promised a page.
             return await self.list_events(
                 page=p, size=size, subscription_id=subscription_id,
-                workflow_id=workflow_id, action=action, status=status,
+                workflow_id=workflow_id, action=action, status=status, search=search,
             )
 
         return AsyncPage._from_response(

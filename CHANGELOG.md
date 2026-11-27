@@ -35,6 +35,28 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Version guards and the list filters the server reads
+#### Added
+- **`version_number` on nodes and edges.** `nodes.list()` and `edges.list()` take `version_number` and
+  `logical_id`; with only `workflow_id`, the server lists the active version's. `get()`, `update()` and `delete()`
+  take `version_number` as a guard: the server refuses (`NotFoundError`) unless the item belongs to that version, so
+  an id kept from another version can't reach this one.
+- **Super nodes:** `publish(..., version_number=)` publishes a version other than the active one;
+  `unpublish(..., dry_run=True)` changes nothing and lists the workflows referencing the super node;
+  `snapshot_status(..., version_number=)`.
+- **`workflows.dynamic_variables(..., version_number=)`.**
+- **List filters:** `tools.list(logical_id=, name=, category=)`; `workflows.versions.list_active(search=,
+  created_by=[...])`; `webhooks.list_events(search=)`.
+
+#### Removed
+- **Filters the server never read.** `tools.list(workflow_id=)`, and `category` and `created_by_me` on
+  `workflows.versions.list_active()`: each was sent and ignored, so it returned everything. Use `categories=[...]`
+  and `created_by=[...]` instead.
+
+#### Fixed
+- **`super_nodes.publish()` said it created a new version of the workflow.** It records the interface and a snapshot
+  of an existing version, and leaves the workflow as it is.
+
 ### Workflow bundles with their secrets, usage reports, and version settings
 #### Added
 - **`workflows.export(..., include_secrets=False)`.** By default the server clears a workflow's secrets from the

@@ -119,30 +119,36 @@ class ToolsResource(SyncAPIResource):
         size: int = 20,
         search: Optional[str] = None,
         tool_type: Optional[str] = None,
-        workflow_id: Optional[str] = None,
+        logical_id: Optional[str] = None,
+        name: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> SyncPage[Tool]:
         """
-        List tools.
+        List the team's saved tools, then the built-in ones. Every filter given must match.
 
         Args:
-            page:        Page number (1-indexed, default 1).
-            size:        Items per page (default 20).
-            search:      Fuzzy name filter.
-            tool_type:   Filter by tool type.
-            workflow_id: Filter to tools belonging to a workflow.
+            page:       Page number (1-indexed, default 1).
+            size:       Items per page (default 20).
+            search:     Text matched, ignoring case, against names and descriptions.
+            tool_type:  Only tools of this type.
+            logical_id: Only the saved tool with this logical id. Built-in tools are listed whatever it is.
+            name:       Only tools whose name contains this, ignoring case.
+            category:   Only tools whose category contains this, ignoring case.
 
         Returns:
             A :class:`SyncPage` of :class:`Tool` objects.
         """
-        params: Dict[str, Any] = {"page": page, "size": size}
-        if search is not None:
-            params["search"] = search
-        if tool_type is not None:
-            params["type"] = tool_type
-        if workflow_id is not None:
-            params["workflow_id"] = workflow_id
+        params = _list_params(page=page, size=size, search=search, type=tool_type, logical_id=logical_id, name=name,
+                              category=category)
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, Tool, lambda p: self.list(page=p, size=size, search=search, tool_type=tool_type, workflow_id=workflow_id))
+        return SyncPage._from_response(
+            raw,
+            Tool,
+            lambda p: self.list(
+                page=p, size=size, search=search, tool_type=tool_type, logical_id=logical_id, name=name,
+                category=category,
+            ),
+        )
 
     def get(self, tool_id: str) -> Tool:
         """
@@ -360,18 +366,22 @@ class AsyncToolsResource(AsyncAPIResource):
         size: int = 20,
         search: Optional[str] = None,
         tool_type: Optional[str] = None,
-        workflow_id: Optional[str] = None,
+        logical_id: Optional[str] = None,
+        name: Optional[str] = None,
+        category: Optional[str] = None,
     ) -> AsyncPage[Tool]:
-        """List tools."""
-        params: Dict[str, Any] = {"page": page, "size": size}
-        if search is not None:
-            params["search"] = search
-        if tool_type is not None:
-            params["type"] = tool_type
-        if workflow_id is not None:
-            params["workflow_id"] = workflow_id
+        """List the team's saved tools, then the built-in ones; the filters are :meth:`ToolsResource.list`'s."""
+        params = _list_params(page=page, size=size, search=search, type=tool_type, logical_id=logical_id, name=name,
+                              category=category)
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, Tool, lambda p: self.list(page=p, size=size, search=search, tool_type=tool_type, workflow_id=workflow_id))
+        return AsyncPage._from_response(
+            raw,
+            Tool,
+            lambda p: self.list(
+                page=p, size=size, search=search, tool_type=tool_type, logical_id=logical_id, name=name,
+                category=category,
+            ),
+        )
 
     async def get(self, tool_id: str) -> Tool:
         """Retrieve a single tool by ID."""
@@ -455,3 +465,7 @@ class AsyncToolsResource(AsyncAPIResource):
             body={"tool_config": serialise_config(tool_config), "args": args or {}},
             cast_to=ToolExecuteResult,
         )
+
+
+def _list_params(**params: Any) -> Dict[str, Any]:
+    return {name: value for name, value in params.items() if value is not None}

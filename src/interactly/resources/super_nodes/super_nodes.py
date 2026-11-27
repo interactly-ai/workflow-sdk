@@ -102,18 +102,20 @@ class SuperNodesResource(SyncAPIResource):
         workflow_id: str,
         *,
         interface: SuperNodeInterfaceOrDict,
+        version_number: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
-        Publish a workflow as a super node.
+        Publish a version of a workflow as a super node.
 
-        Creates a new version of the workflow with a recorded ``SuperNodeInterface``
-        and a hydrated snapshot of the workflow config.
+        Records the ``SuperNodeInterface`` and a fully hydrated snapshot of that version, which other workflows
+        embed. The workflow itself is not changed; publishing the same version again replaces its interface.
 
         Args:
-            workflow_id: ObjectId of the workflow to publish.
-            interface:   A typed ``SuperNodeInterface`` (preferred) or an equivalent
-                         ``dict`` describing input fields and their mappings into
-                         the sub-workflow.
+            workflow_id:    ObjectId of the workflow to publish.
+            interface:      A typed ``SuperNodeInterface`` (preferred) or an equivalent
+                            ``dict`` describing input fields and their mappings into
+                            the sub-workflow.
+            version_number: The version to publish (defaults to the workflow's active version).
 
         Returns:
             A dict with ``workflow_id``, ``workflow_version_number``, ``message``,
@@ -122,6 +124,7 @@ class SuperNodesResource(SyncAPIResource):
         return self._client.put(
             f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-interface",
             body={"interface": serialise_config(interface)},
+            params=_version_params(version_number),
             cast_to=dict,
         )
 
@@ -130,6 +133,7 @@ class SuperNodesResource(SyncAPIResource):
         workflow_id: str,
         *,
         version_number: Optional[int] = None,
+        dry_run: bool = False,
     ) -> Dict[str, Any]:
         """
         Unpublish a workflow version as a super node.
@@ -142,6 +146,8 @@ class SuperNodesResource(SyncAPIResource):
             workflow_id:    ObjectId of the workflow to unpublish.
             version_number: Specific version to unpublish (defaults to the
                             workflow's active version).
+            dry_run:        Change nothing: only list the workflows that reference the super node, as
+                            ``workflows_referencing``, to show before unpublishing.
 
         Returns:
             A dict with ``workflow_id``, ``workflow_version_number``,
@@ -151,12 +157,9 @@ class SuperNodesResource(SyncAPIResource):
         Raises:
             NotFoundError: If the workflow has not been published as a super node.
         """
-        params: Dict[str, Any] = {}
-        if version_number is not None:
-            params["version_number"] = version_number
         return self._client.delete(
             f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-interface",
-            params=params,
+            params=_unpublish_params(version_number, dry_run),
             cast_to=dict,
         )
 
@@ -213,18 +216,22 @@ class SuperNodesResource(SyncAPIResource):
             cast_to=SuperNodeExpandPreview,
         )
 
-    def snapshot_status(self, workflow_id: str) -> Dict[str, Any]:
+    def snapshot_status(self, workflow_id: str, *, version_number: Optional[int] = None) -> Dict[str, Any]:
         """
-        Report whether the workflow's super-node snapshot is current.
+        Report, for each super node a workflow version embeds, whether its snapshot still matches the latest
+        publish of its sub-workflow.
 
         Args:
-            workflow_id: ObjectId of the workflow.
+            workflow_id:    ObjectId of the workflow.
+            version_number: The version to check (defaults to the workflow's active version).
 
         Returns:
-            A status dict describing snapshot freshness.
+            A dict with ``workflow_id``, ``version_number`` and ``super_nodes``, one entry per embedded super node.
         """
         return self._client.get(
-            f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-snapshot-status", cast_to=dict
+            f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-snapshot-status",
+            params=_version_params(version_number),
+            cast_to=dict,
         )
 
 
@@ -269,11 +276,13 @@ class AsyncSuperNodesResource(AsyncAPIResource):
         workflow_id: str,
         *,
         interface: SuperNodeInterfaceOrDict,
+        version_number: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Publish a workflow as a super node (typed ``SuperNodeInterface`` preferred; dict accepted)."""
+        """Publish a version of a workflow as a super node; see :meth:`SuperNodesResource.publish`."""
         return await self._client.put(
             f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-interface",
             body={"interface": serialise_config(interface)},
+            params=_version_params(version_number),
             cast_to=dict,
         )
 
@@ -282,14 +291,12 @@ class AsyncSuperNodesResource(AsyncAPIResource):
         workflow_id: str,
         *,
         version_number: Optional[int] = None,
+        dry_run: bool = False,
     ) -> Dict[str, Any]:
-        """Unpublish a workflow version as a super node."""
-        params: Dict[str, Any] = {}
-        if version_number is not None:
-            params["version_number"] = version_number
+        """Unpublish a workflow version as a super node; see :meth:`SuperNodesResource.unpublish`."""
         return await self._client.delete(
             f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-interface",
-            params=params,
+            params=_unpublish_params(version_number, dry_run),
             cast_to=dict,
         )
 
@@ -325,8 +332,22 @@ class AsyncSuperNodesResource(AsyncAPIResource):
             cast_to=SuperNodeExpandPreview,
         )
 
-    async def snapshot_status(self, workflow_id: str) -> Dict[str, Any]:
-        """Report whether the workflow's super-node snapshot is current."""
+    async def snapshot_status(self, workflow_id: str, *, version_number: Optional[int] = None) -> Dict[str, Any]:
+        """Report whether a workflow version's embedded super nodes are current; see
+        :meth:`SuperNodesResource.snapshot_status`."""
         return await self._client.get(
-            f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-snapshot-status", cast_to=dict
+            f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-snapshot-status",
+            params=_version_params(version_number),
+            cast_to=dict,
         )
+
+
+def _version_params(version_number: Optional[int]) -> Dict[str, Any]:
+    return {} if version_number is None else {"version_number": version_number}
+
+
+def _unpublish_params(version_number: Optional[int], dry_run: bool) -> Dict[str, Any]:
+    params = _version_params(version_number)
+    if dry_run:
+        params["dry_run"] = True
+    return params
