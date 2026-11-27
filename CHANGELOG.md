@@ -35,6 +35,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Configs — mirror synced to `interactly-ai@a87b31348` (2026-11-26)
+`make parity-check` reads 0 differences again, and `make schema-check` reads 0 findings against dev with
+simulations now compared.
+
+#### Added
+- **`SimulationStatus.PAUSED`**: a simulation group a person paused.
+- **A config of a type this package does not know yet no longer fails the node holding it.**
+  - **What changes:** an LLM config naming a newer provider arrives as `UnknownLLMConfig`, and a tool config of a
+    newer type as `UnknownToolConfig`. Both keep every field the server sent and are written back with exactly those
+    fields. The node keeps its own class: a `say_llm` node stays a `SayLLMNodeConfig`. Before, the whole node fell
+    back to `UnknownNodeConfig` and lost every typed field.
+  - **What still raises:** a config with no `type`, or a known type with an invalid field. Those are mistakes in
+    the config, not newer types.
+  - **Where it applies:** every place a single LLM config, an LLM-or-group config or a tool config is held. That
+    includes `LLMGroupConfig.llms`, so one unknown provider in a group does not fail the group.
+  - **What doesn't change:** the published JSON Schemas are unchanged.
+- `UnknownLLMConfig`, `UnknownToolConfig` and `UnknownNodeConfig` are exported from `interactly_configs` and
+  `interactly.configs`. So are `SimulationConfig`, `SimulationStatus`, `SimulationWorkflowDetails`,
+  `SimulationCommand`, `SimulationInput` and `SimulationEvent`, which needed `interactly_configs.simulation` before.
+
+#### Changed
+- **A saved LLM config naming a provider newer than the configs package** reads as an `UnknownLLMConfig` in
+  `LLMConfig.config`, not a plain `dict`. A config with no `type` still reads as a `dict`.
+- The six ECS node docstrings and the `WorkflowCommand.PAUSE` note follow upstream's text. `PAUSE` is not read by
+  anything; a run is paused through `client.runs.pause()`.
+
 ### Background runs and the approval example
 #### Added
 - **`client.workflows.start_background_run(workflow_id, version_number=None, dynamic_variables=None, run_by=None)`**

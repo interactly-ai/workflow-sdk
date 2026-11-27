@@ -21,6 +21,8 @@ class WorkflowCommand(str, Enum):
     START = "start"
     DATA = "data"
     RESUME = "resume"
+    #: Not read by anything: a run is paused through the run-control API (``POST /v1/workflow-runs/{id}/pause``). Kept
+    #: so stored runs and clients that send it still parse.
     PAUSE = "pause"
     STOP = "stop"
 

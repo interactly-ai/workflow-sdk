@@ -13,6 +13,9 @@ class SimulationStatus(str, Enum):
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+    # A simulation group a person paused: its simulations take no turn and none starts until it is resumed. Only a group
+    # takes it; every reader of a group's status must know it before anything writes it.
+    PAUSED = "paused"
 
 
 class SimulationWorkflowDetails(BaseModel):

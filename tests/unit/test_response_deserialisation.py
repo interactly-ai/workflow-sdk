@@ -149,12 +149,22 @@ class TestLLMConfigResponseDeserialisation:
         cfg = LLMConfig.model_validate({"id": "llm-1", "name": "Team GPT"})
         assert cfg.config is None
 
-    def test_unrecognised_config_stays_dict(self):
-        # A payload that does not validate against any LLMOrGroupConfig variant
-        # must be left as a plain dict (the coercion is silenced, never raised).
-        cfg = LLMConfig.model_validate(
-            {"id": "llm-1", "config": {"type": "not_a_real_provider", "foo": "bar"}}
-        )
+    def test_a_provider_newer_than_the_configs_package_is_kept_typed(self):
+        # A provider the [configs] extra does not know yet becomes an UnknownLLMConfig that keeps every field, the
+        # same treatment it gets inside a node, rather than an untyped dict.
+        try:
+            from interactly_configs import UnknownLLMConfig
+        except Exception:
+            pytest.skip("interactly_configs not installed")
+        raw = {"type": "not_a_real_provider", "model": "m-1", "foo": "bar"}
+        cfg = LLMConfig.model_validate({"id": "llm-1", "config": dict(raw)})
+        assert isinstance(cfg.config, UnknownLLMConfig)
+        assert cfg.config.model_dump() == raw
+
+    def test_a_config_with_no_type_stays_dict(self):
+        # A payload that validates against no LLMOrGroupConfig variant, not even as an unknown provider, is left as
+        # a plain dict: the coercion is silenced, never raised.
+        cfg = LLMConfig.model_validate({"id": "llm-1", "config": {"model": "m-1", "foo": "bar"}})
         assert isinstance(cfg.config, dict)
 
     def test_valid_config_coerces_when_configs_installed(self):

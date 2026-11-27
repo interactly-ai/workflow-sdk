@@ -270,7 +270,8 @@ class EcsWaitFields(EcsSuccessFields):
 class RunEcsTaskNodeConfig(PausableNodeConfig, EcsWaitFields, EcsLaunchFields, BaseAwsNodeConfig):
     """
     Runs an ECS task and waits for it to stop, then routes on how it ended. The run pauses while the task runs, so the
-    node works in scheduled runs and re-runs; editor runs and voice calls route on an error without launching.
+    node works in scheduled runs, re-runs, background runs, and editor and API runs where durable live runs are
+    switched on; voice calls, evaluations, simulations and the copilot's runs route on an error without launching.
     """
 
     type: Literal["aws_ecs_run_task"] = Field(
@@ -328,7 +329,8 @@ class EcsTaskArnsFields(EcsByArnFields):
 class StartEcsTaskNodeConfig(PausableNodeConfig, EcsLaunchFields, BaseAwsNodeConfig):
     """
     Starts an ECS task and finishes as soon as ECS accepts it, without waiting for it to stop. Like Run ECS task, it
-    works in scheduled runs and re-runs; editor runs and voice calls route on an error without launching.
+    works in scheduled runs, re-runs, background runs, and editor and API runs where durable live runs are switched
+    on; voice calls, evaluations, simulations and the copilot's runs route on an error without launching.
     """
 
     type: Literal["aws_ecs_start_task"] = Field(
@@ -392,8 +394,9 @@ class StartEcsTaskNodeRunOutput(BaseNodeRunOutput):
 class GetEcsTaskStatusNodeConfig(EcsSuccessFields, EcsTaskArnsFields, BaseAwsNodeConfig):
     """
     Reads the state of ECS tasks named by ARN, as last observed, without waiting; a task that has stopped is judged by
-    the node's primary container and success exit codes. Works in scheduled runs and re-runs; editor runs and voice
-    calls route on an error.
+    the node's primary container and success exit codes. Works in scheduled runs, re-runs, background runs, and editor
+    and API runs where durable live runs are switched on; voice calls, evaluations, simulations and the copilot's runs
+    route on an error.
     """
 
     type: Literal["aws_ecs_get_task_status"] = Field(
@@ -429,8 +432,9 @@ class GetEcsTaskStatusNodeRunOutput(BaseNodeRunOutput):
 
 class StopEcsTaskNodeConfig(EcsTaskArnsFields, BaseAwsNodeConfig):
     """
-    Asks ECS to stop tasks named by ARN, without waiting for them to stop. Works in scheduled runs and re-runs; editor
-    runs and voice calls route on an error.
+    Asks ECS to stop tasks named by ARN, without waiting for them to stop. Works in scheduled runs, re-runs, background
+    runs, and editor and API runs where durable live runs are switched on; voice calls, evaluations, simulations and the
+    copilot's runs route on an error.
     """
 
     type: Literal["aws_ecs_stop_task"] = Field(
@@ -473,8 +477,8 @@ class StopEcsTaskNodeRunOutput(BaseNodeRunOutput):
 class WaitForEcsTasksNodeConfig(PausableNodeConfig, EcsSuccessFields, EcsTaskArnsFields, BaseAwsNodeConfig):
     """
     Waits until ECS tasks named by ARN have stopped (all of them, or the first), then routes on how they went. The run
-    pauses while it waits, so the node works in scheduled runs and re-runs; editor runs and voice calls route on an
-    error.
+    pauses while it waits, so the node works in scheduled runs, re-runs, background runs, and editor and API runs where
+    durable live runs are switched on; voice calls, evaluations, simulations and the copilot's runs route on an error.
     """
 
     type: Literal["aws_ecs_wait_for_tasks"] = Field(
@@ -543,7 +547,8 @@ class WaitForEcsTasksNodeRunOutput(BaseNodeRunOutput):
 class GetEcsTaskLogsNodeConfig(EcsByArnFields, BaseAwsNodeConfig):
     """
     Reads an ECS task's logs from CloudWatch Logs, where its task definition sends them, into the run. Works in
-    scheduled runs and re-runs; editor runs and voice calls route on an error.
+    scheduled runs, re-runs, background runs, and editor and API runs where durable live runs are switched on; voice
+    calls, evaluations, simulations and the copilot's runs route on an error.
     """
 
     type: Literal["aws_ecs_get_task_logs"] = Field(

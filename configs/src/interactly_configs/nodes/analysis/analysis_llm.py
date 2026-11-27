@@ -4,15 +4,23 @@ from typing import Annotated, Literal, Optional, Union
 
 from pydantic import ConfigDict, Field
 
-from interactly_configs.llm import LLMConfig, WorkflowDefaultLLMConfig
+from interactly_configs.llm import LLMConfig, UnknownLLMConfig, WorkflowDefaultLLMConfig
 from interactly_configs.llm_group import LLMGroupConfig
 from interactly_configs.nodes.analysis.base import BaseAnalysisNodeConfig
 from interactly_configs.nodes.llm.llm import WorkerLLMNodeConfig
 from interactly_configs.nodes.node import NodeType
 from interactly_configs.prompt import PromptConfig
+from interactly_configs.unknown_types import unknown_type_serializer, unknown_type_validator
 
 # A single model or a group with fallback; the backchannel variant only makes sense while a caller waits.
-AnalysisLLMOrGroupConfig = Annotated[Union[LLMConfig, LLMGroupConfig], Field(discriminator="type")]
+# Upstream's alias is the discriminated union alone; the two extra entries are the mirror's fallback for a provider
+# newer than this package (see `LLMOrGroupConfig`).
+AnalysisLLMOrGroupConfig = Annotated[
+    Union[LLMConfig, LLMGroupConfig],
+    Field(discriminator="type"),
+    unknown_type_validator(UnknownLLMConfig),
+    unknown_type_serializer(UnknownLLMConfig),
+]
 
 
 class AnalysisWorkerLLMNodeConfig(WorkerLLMNodeConfig):

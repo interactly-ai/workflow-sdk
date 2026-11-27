@@ -12,12 +12,14 @@ from pydantic import (
     SecretStr,
     field_serializer,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
 from interactly_configs.auth import IntegrationAuthConfig
 from interactly_configs.gemini_models import GeminiThinkingLevel
 from interactly_configs.secrets import SensitiveMap, SensitiveMapField
+from interactly_configs.unknown_types import fields_that_arrived, unknown_type_serializer, unknown_type_validator
 
 
 class LLMProvider(str, Enum):
@@ -1098,4 +1100,38 @@ LLMConfigUnion = Union[
     NoLLMConfig,
 ]
 
+class UnknownLLMConfig(BaseLLMConfig):
+    """An LLM config whose ``type`` (its provider) this package does not know yet.
+
+    Held where a known provider's config would be. It reads the fields every LLM config shares, keeps the rest as sent
+    (``extra="allow"``), and is written back with exactly the fields it arrived with. Mirror-only: see
+    ``interactly_configs.unknown_types``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    type: str = Field(description="The provider type, as the server sent it.", title="LLM Config Type")
+    # A provider this package does not know is not an `LLMProvider` member either.
+    provider: Optional[str] = Field(
+        default=None,
+        description="The provider, as the server sent it.",
+        title="LLM Provider",
+    )
+
+    # No return annotation: pydantic would publish it as this class's serialization schema.
+    @model_serializer(mode="wrap")
+    def _write_back_what_arrived(self, handler):  # type: ignore[no-untyped-def]
+        return fields_that_arrived(self, handler(self))
+
+
 LLMConfig = Annotated[LLMConfigUnion, Field(discriminator="type")]
+
+# Mirror-only: `LLMConfig` with the fallback for a provider newer than this package, for a field that holds one LLM
+# config on its own. `LLMConfig` itself stays exactly as upstream declares it, because the unions that nest it
+# (`LLMOrGroupConfig`, `AnalysisLLMOrGroupConfig`) need it plain: pydantic merges a nested discriminated union's tags
+# into the outer one only when it carries no validator, and those outer unions carry the same fallback themselves.
+LLMConfigOrUnknown = Annotated[
+    LLMConfig,
+    unknown_type_validator(UnknownLLMConfig),
+    unknown_type_serializer(UnknownLLMConfig),
+]

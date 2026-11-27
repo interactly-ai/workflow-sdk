@@ -94,6 +94,11 @@ KNOWN_ONLY_MIRROR: Dict[str, str] = {
     # the whole workflow nor silently drops the node's fields. Upstream needs no equivalent: the
     # server is by definition current with its own node types.
     "UnknownNodeConfig": "forward-compat fallback for unknown node types (extra='allow')",
+    # The same landing pad one level down: an LLM provider or tool type newer than this package. Without them one
+    # unknown config failed the node that held it, which then fell back to UnknownNodeConfig with every typed field
+    # lost; with them only the config itself is unknown. Attached to the unions by `interactly_configs.unknown_types`.
+    "UnknownLLMConfig": "forward-compat fallback for unknown LLM provider types (extra='allow')",
+    "UnknownToolConfig": "forward-compat fallback for unknown tool types (extra='allow')",
 }
 
 #: Field-level divergences that are deliberate, as ``ClassName.field_name`` -> reason. Each one was
@@ -121,6 +126,9 @@ KNOWN_FIELD_DIVERGENCES: Dict[str, str] = {
     # Supplied by AccessControlLevelConfig above, which stands in for upstream's Beanie base.
     "WorkflowTemplateConfig.access_level": "from the AccessControlLevelConfig stand-in",
     "WorkflowTemplateConfig.access_list": "from the AccessControlLevelConfig stand-in",
+    # Upstream's `List[LLMConfig]`, with the fallback for a provider newer than this package (`LLMConfigOrUnknown`).
+    # `LLMConfig` itself cannot carry it: the unions that nest it would then publish a broken discriminator mapping.
+    "LLMGroupConfig.llms": "forward-compat: an unknown LLM provider in a group must not fail the group",
 }
 
 #: Enum capability data that upstream declares inside an enum body via `enum.nonmember(...)`, mapped to

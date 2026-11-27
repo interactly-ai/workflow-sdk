@@ -71,6 +71,7 @@ from interactly_configs.llm import (
     NoLLMConfig,
     OpenAILLMConfig,
     OPENAIModel,
+    UnknownLLMConfig,
     WorkflowDefaultLLMConfig,
     XAILLMConfig,
     XAIModel,
@@ -258,6 +259,14 @@ from interactly_configs.simulated_outcomes import (
     SimulatedNodeOutcome,
     SimulatedOutcomeKind,
 )
+from interactly_configs.simulation import (
+    SimulationCommand,
+    SimulationConfig,
+    SimulationEvent,
+    SimulationInput,
+    SimulationStatus,
+    SimulationWorkflowDetails,
+)
 from interactly_configs.super_node_interface import (
     SuperNodeFieldMapping,
     SuperNodeFieldMappingTargetType,
@@ -277,8 +286,9 @@ from interactly_configs.tool import (
     ToolConfig,
     ToolsConfig,
     ToolType,
+    UnknownToolConfig,
 )
-from interactly_configs.workflow import WorkflowConfig, WorkflowConfigFullyHydrated
+from interactly_configs.workflow import UnknownNodeConfig, WorkflowConfig, WorkflowConfigFullyHydrated
 from interactly_configs.workflow_outcome import (
     WorkflowOutcome,
     WorkflowTerminationCause,
@@ -373,6 +383,7 @@ __all__ = [
     "NoLLMConfig",
     "LLMConfigUnion",
     "LLMConfig",
+    "UnknownLLMConfig",
     "AUDIO_INPUT_OPENAI_MODELS",
     "DEEPSEEK_VERTEX_GLOBAL_ONLY",
     "GEMMA_VERTEX_GLOBAL_ONLY",
@@ -465,9 +476,11 @@ __all__ = [
     "ToolConfig",
     "ToolsConfig",
     "MCPServerConfig",
+    "UnknownToolConfig",
     # workflow
     "WorkflowConfig",
     "WorkflowConfigFullyHydrated",
+    "UnknownNodeConfig",
     # node_library
     "NodeLibraryConfig",
     # workflow_run
@@ -500,6 +513,12 @@ __all__ = [
     "SensitiveMap",
     "SimulatedNodeOutcome",
     "SimulatedOutcomeKind",
+    "SimulationCommand",
+    "SimulationConfig",
+    "SimulationEvent",
+    "SimulationInput",
+    "SimulationStatus",
+    "SimulationWorkflowDetails",
     "WorkflowOutcome",
     "WorkflowTerminationCause",
     "WorkflowType",
