@@ -22,11 +22,13 @@ Endpoints implemented:
     GET    /v1/workflow-runs/{id}/signals                      → list_signals (cursor-paged)
     GET    /v1/workflow-runs/{id}/external-jobs                → list_external_jobs (cursor-paged)
 
-Run control applies to durable runs only (scheduled runs, re-runs and background runs), and pausing, resuming,
-cancelling and signalling need Developer access or above. A 409 that carries ``Retry-After`` (the run kept changing
-while the request was recorded, so nothing was) is retried within ``max_retries``. A 503 (the server's durable store is
-unavailable) is raised at once as ``InternalServerError``: its ``Retry-After`` is long, and whether to wait is the
-caller's call.
+Run control applies to durable runs only, and pausing, resuming, cancelling and signalling need Developer access or
+above. Scheduled runs, re-runs and background runs are durable. Streamed, REST-executed and simulation runs are durable
+too where the server switches that on (``Run.durable`` says which a given run is).
+
+A 409 that carries ``Retry-After`` (the run kept changing while the request was recorded, so nothing was) is retried
+within ``max_retries``. A 503 (the server's durable store is unavailable) is raised at once as
+``InternalServerError``: its ``Retry-After`` is long, and whether to wait is the caller's call.
 """
 
 from __future__ import annotations
@@ -105,6 +107,11 @@ class RunsResource(SyncAPIResource):
 
         Returns a context manager that yields ``RunEvent`` objects.
 
+        Leaving the ``with`` block closes the socket, and the server cancels a run that has not finished, companion
+        threads included, even mid-turn (``status`` ``cancelled``, ``termination_source`` ``websocket_disconnect``).
+        Read until ``event.is_terminal()`` to let the run end on its own. A refusal arrives as a ``StreamError``
+        subclass named for it (see ``interactly._streaming``), carrying the close ``code`` and ``reason``.
+
         Args:
             workflow_id:       The workflow to run.
             command:           Command to send (default: ``WorkflowCommand.START``).
@@ -165,6 +172,9 @@ class RunsResource(SyncAPIResource):
         search: Optional[str] = None,
         source_workflow_run_id: Optional[str] = None,
         source_turn_index: Optional[int] = None,
+        needs_attention: Optional[bool] = None,
+        logical_id: Optional[str] = None,
+        version_number: Optional[int] = None,
     ) -> SyncPage[Run]:
         """List workflow runs with optional filtering (paginated).
 
@@ -173,6 +183,10 @@ class RunsResource(SyncAPIResource):
                 "N re-runs from this turn" view.
             source_turn_index:      Narrow ``source_workflow_run_id`` to one turn. Ignored on its
                 own — a turn index means nothing without the run it belongs to.
+            needs_attention:        Only runs waiting on a person: a durable run a person paused (with no cancel
+                asked), or one with a step waiting for a person's approval. Ended runs never match.
+            logical_id:             Only runs of the workflow with this logical id.
+            version_number:         Only runs of this workflow version.
         """
         params: dict[str, Any] = {"page": page, "size": size}
         if workflow_id is not None:
@@ -189,6 +203,12 @@ class RunsResource(SyncAPIResource):
             params["source_workflow_run_id"] = source_workflow_run_id
         if source_turn_index is not None:
             params["source_turn_index"] = source_turn_index
+        if needs_attention is not None:
+            params["needs_attention"] = needs_attention
+        if logical_id is not None:
+            params["logical_id"] = logical_id
+        if version_number is not None:
+            params["version_number"] = version_number
 
         raw = self._client.get(_PATH, params=params, cast_to=dict)
 
@@ -203,6 +223,9 @@ class RunsResource(SyncAPIResource):
                 search=search,
                 source_workflow_run_id=source_workflow_run_id,
                 source_turn_index=source_turn_index,
+                needs_attention=needs_attention,
+                logical_id=logical_id,
+                version_number=version_number,
             )
 
         return SyncPage._from_response(raw, Run, fetch_page)
@@ -332,7 +355,7 @@ class RunsResource(SyncAPIResource):
     # ---------------------------------------------------------------------- #
 
     # ---------------------------------------------------------------------- #
-    # Run control: durable runs (scheduled, re-run and background runs)       #
+    # Run control: durable runs (see the module docstring for which)         #
     # ---------------------------------------------------------------------- #
 
     def pause(self, run_id: str, *, reason: Optional[str] = None) -> RunControlResult:
@@ -580,9 +603,10 @@ class RunsResource(SyncAPIResource):
                                subsequent turns.  Pass the value from the previous response.
             command:           Workflow command. Accepts the typed ``WorkflowCommand`` enum
                                (preferred) or an equivalent string (default ``"start"``;
-                               use ``"stop"`` to cancel).
+                               ``"stop"`` ends the session, and the run is stored ``cancelled``).
             run_by:            Identifier for the caller (e.g. username).
-            version_number:    Specific version to run (defaults to active version).
+            version_number:    Specific version to run (defaults to the active version). Read on the first turn
+                               only: later turns keep the version the session started with.
             dynamic_variables: Key-value pairs replacing ``{{...}}`` placeholders in prompts.
             runtime_variables: Key-value pairs replacing ``[[...]]`` placeholders.
             miscellaneous:     Arbitrary extra data forwarded to the runtime.
@@ -608,6 +632,7 @@ class RunsResource(SyncAPIResource):
         return self._client.post(
             f"/v1/workflows/{workflow_id}/execute",
             body=body,
+            params=_execute_params(version_number, run_input),
             cast_to=InteractiveRunResponse,
         )
 
@@ -640,6 +665,7 @@ class RunsResource(SyncAPIResource):
         return self._client.post(
             f"/v1/workflows/{workflow_id}/execute",
             body=body,
+            params=_execute_params(None, run_input),
             cast_to=InteractiveRunResponse,
         )
 
@@ -675,7 +701,8 @@ class AsyncRunsResource(AsyncAPIResource):
 
         Returns an async context manager that yields ``RunEvent`` objects.
         Accepts optional ``dynamic_variables`` / ``runtime_variables`` or a full
-        typed ``run_input`` (preferred); see :meth:`RunsResource.stream`.
+        typed ``run_input`` (preferred); see :meth:`RunsResource.stream`, which also says what leaving the block does
+        to a run that has not finished (it is cancelled) and how refusals arrive.
         """
         ws_base = self._client._ws_base_url()
         ws_url = f"{ws_base}{_WS_PATH}"
@@ -710,11 +737,16 @@ class AsyncRunsResource(AsyncAPIResource):
         search: Optional[str] = None,
         source_workflow_run_id: Optional[str] = None,
         source_turn_index: Optional[int] = None,
+        needs_attention: Optional[bool] = None,
+        logical_id: Optional[str] = None,
+        version_number: Optional[int] = None,
     ) -> AsyncPage[Run]:
         """List workflow runs with optional filtering (paginated).
 
         ``source_workflow_run_id`` selects only runs that were re-run FROM that run;
-        ``source_turn_index`` narrows it to one turn and is ignored on its own.
+        ``source_turn_index`` narrows it to one turn and is ignored on its own. ``needs_attention`` selects runs waiting
+        on a person (a person's pause, or a step waiting for approval); ``logical_id`` and ``version_number`` select a
+        workflow's runs by logical id and by version.
         """
         params: dict[str, Any] = {"page": page, "size": size}
         if workflow_id is not None:
@@ -731,6 +763,12 @@ class AsyncRunsResource(AsyncAPIResource):
             params["source_workflow_run_id"] = source_workflow_run_id
         if source_turn_index is not None:
             params["source_turn_index"] = source_turn_index
+        if needs_attention is not None:
+            params["needs_attention"] = needs_attention
+        if logical_id is not None:
+            params["logical_id"] = logical_id
+        if version_number is not None:
+            params["version_number"] = version_number
 
         raw = await self._client.get(_PATH, params=params, cast_to=dict)
 
@@ -745,6 +783,9 @@ class AsyncRunsResource(AsyncAPIResource):
                 search=search,
                 source_workflow_run_id=source_workflow_run_id,
                 source_turn_index=source_turn_index,
+                needs_attention=needs_attention,
+                logical_id=logical_id,
+                version_number=version_number,
             )
 
         return AsyncPage._from_response(raw, Run, fetch_page)
@@ -846,7 +887,7 @@ class AsyncRunsResource(AsyncAPIResource):
     # ---------------------------------------------------------------------- #
 
     # ---------------------------------------------------------------------- #
-    # Run control: durable runs (scheduled, re-run and background runs)       #
+    # Run control: durable runs (see the module docstring for which)         #
     # ---------------------------------------------------------------------- #
 
     async def pause(self, run_id: str, *, reason: Optional[str] = None) -> RunControlResult:
@@ -1062,6 +1103,7 @@ class AsyncRunsResource(AsyncAPIResource):
         return await self._client.post(
             f"/v1/workflows/{workflow_id}/execute",
             body=body,
+            params=_execute_params(version_number, run_input),
             cast_to=InteractiveRunResponse,
         )
 
@@ -1079,6 +1121,7 @@ class AsyncRunsResource(AsyncAPIResource):
         return await self._client.post(
             f"/v1/workflows/{workflow_id}/execute",
             body=body,
+            params=_execute_params(None, run_input),
             cast_to=InteractiveRunResponse,
         )
 
@@ -1129,6 +1172,17 @@ def _build_stream_payload(
     if runtime_variables is not None:
         payload["runtime_variables"] = runtime_variables
     return payload
+
+
+def _execute_params(version_number: Optional[int], run_input: Optional["WorkflowRunInput"]) -> Optional[Dict[str, Any]]:
+    """The query string of an ``/execute`` call: the workflow version to run, as ``?version=``.
+
+    The server reads the version only from the query, falling back to the active version, and overwrites any
+    ``version_number`` in the body with the one it chose, so a version sent in the body alone was never run. Only the
+    first turn reads it; later turns keep the session's version. ``version_number`` wins over the typed input's.
+    """
+    version = version_number if version_number is not None else getattr(run_input, "version_number", None)
+    return {"version": version} if version is not None else None
 
 
 def _build_execute_body(

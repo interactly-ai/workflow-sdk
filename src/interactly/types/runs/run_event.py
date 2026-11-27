@@ -25,6 +25,11 @@ Known event types (non-exhaustive — the server may add new types):
     ``self_loop_exhausted``       — a bounded self-loop hit max_retries / expiry_time
     ``node_expired``              — an in-flight execution was terminated by expiry_time
     ``guardrail_escalation_edge`` — the guardrail-strikes threshold escalated the run
+    ``run_paused``                — a person paused the run through the run-control API; carries
+                                    ``paused_by``, ``pause_reason``, ``workflow_run_status`` and a
+                                    ``message``. The socket stays open, and a message sent while
+                                    the run is paused is refused with another ``run_paused`` frame
+    ``run_resumed``               — a person's pause of the run was lifted; carries ``resumed_by``
 """
 
 from __future__ import annotations
@@ -117,3 +122,15 @@ class RunEvent(BaseAPIModel):
         a companion is still emitting.
         """
         return self.type == "workflow_ready_for_input"
+
+    def is_run_paused(self) -> bool:
+        """Return True when a person paused the run, or refused a message because the run is paused.
+
+        Not terminal: the socket stays open and the run carries on once resumed (``client.runs.resume``), at which
+        point a ``run_resumed`` event arrives. Seen only on a server where streamed runs are durable.
+        """
+        return self.type == "run_paused"
+
+    def is_run_resumed(self) -> bool:
+        """Return True when a person's pause of the run was lifted and the run carries on."""
+        return self.type == "run_resumed"

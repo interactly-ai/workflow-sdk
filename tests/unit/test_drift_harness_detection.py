@@ -729,6 +729,21 @@ class TestSdkCoverageIsReported:
     def test_a_query_key_upstream_does_not_read_is_reported(self, route_report):
         assert route_report.sdk_query_not_upstream == [("GET", "/v1/things/{}", "nope")]
 
+    def test_a_params_helper_that_may_return_none_is_read(self, tmp_path):
+        source = """
+            _PATH = "/v1/things"
+
+            def _version_params(version):
+                return {"version": version} if version is not None else None
+
+            class Things:
+                def run(self, version=None):
+                    return self._client.post(f"{_PATH}/run", body={}, params=_version_params(version))
+        """
+        calls, unrenderable = rc.extract_sdk_calls(_write(tmp_path / "resources", {"things.py": source}))
+        assert unrenderable == []
+        assert [(c.method, c.path, c.query) for c in calls] == [("POST", "/v1/things/run", {"version"})]
+
     def test_params_the_harness_cannot_read_are_reported_not_assumed_empty(self, route_report):
         assert route_report.unrenderable_calls == [("things/things.py:mystery", "params `params`")]
 

@@ -11,10 +11,11 @@ import pytest
 
 from interactly import AsyncWorkflowClient
 
-#: A key acting as a developer, and one acting as a viewer, on the same team as INTERACTLY_API_KEY. A key acts
-#: with the lower of the role it was made with and its creator's current role, so an admin can mint both on the
-#: team's API Keys page. They exist because the main credential is a super-admin's, and a test that passes with
-#: it proves nothing about what a developer or a viewer is allowed to do.
+#: A key acting as a developer, and one acting as a viewer, on the same team as INTERACTLY_API_KEY. Only an admin
+#: can make a key, and a key acts with the lower of the role it was made with and its creator's current role, so
+#: each of these is made by a member who was an admin at the time and was then given the lower role. The key
+#: stops working if that member leaves the team. They exist because the main credential is a super-admin's, and a
+#: test that passes with it proves nothing about what a developer or a viewer is allowed to do.
 DEVELOPER_KEY_ENV = "INTERACTLY_DEVELOPER_API_KEY"
 VIEWER_KEY_ENV = "INTERACTLY_VIEWER_API_KEY"
 

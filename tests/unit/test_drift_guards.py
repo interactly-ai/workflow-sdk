@@ -151,19 +151,19 @@ class TestRouteCoverage:
     gained was found by hand, a sync late.
     """
 
-    #: Findings known and attributed, measured 2026-11-26 against upstream ``main`` at a87b31348: **91**.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **87**.
     #:
     #: * 11 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export, import and
     #:   usage; simulation-group pause and resume; workflow and tool usage.
-    #: * 77 query fields no SDK method can send: the date window (``start``/``end``, 30) and ``search`` (6) that
+    #: * 73 query fields no SDK method can send: the date window (``start``/``end``, 30) and ``search`` (6) that
     #:   every paginated list reads; ``version_number`` on node, edge and super-node routes (14); ``logical_id``
-    #:   on seven lists; ``workflow_type`` (3); the workflow, simulation, template and tool list filters;
-    #:   ``needs_attention``; ``find_active_version``; ``backend``; execute's ``version``; ``dry_run``.
+    #:   on six lists; ``workflow_type`` (3); the workflow, simulation, template and tool list filters;
+    #:   ``find_active_version``; ``backend``; ``dry_run``.
     #: * 3 query keys the SDK sends that the server does not read, so the filter silently does nothing:
     #:   ``workflow_id`` on the tool list; ``category`` and ``created_by_me`` on the active-versions list.
     #:
     #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
-    KNOWN_ROUTE_DEBT = 91
+    KNOWN_ROUTE_DEBT = 87
 
     @staticmethod
     def _report():
@@ -231,15 +231,10 @@ class TestRouteCoverage:
 class TestWireValues:
     """Values `src/interactly/` restates by hand from the server, which no other harness compares."""
 
-    #: Findings known and attributed, measured 2026-11-26 against upstream ``main`` at a87b31348: **15**.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **1**.
     #:
-    #: * ``ScheduleStatus`` lacks ``in_progress`` (upstream since 2026-04-11). ``Schedule.status`` is typed with
-    #:   the enum, so a schedule caught while it runs fails to parse.
-    #: * ``SimulationStatus`` lacks ``paused`` (upstream since 2026-11-23).
-    #: * ``RunStatus.pending`` exists only in the SDK; no server sends it.
-    #: * 12 close codes the run socket sends with no typed exception: 1008, 1011, 4000–4003, 4005, 4009, 4010,
-    #:   4030, 4040, 4400. Only 4006 and 4007 have one.
-    KNOWN_WIRE_DEBT = 15
+    #: * ``SimulationStatus`` (``interactly.types``) lacks ``paused`` (upstream since 2026-11-23).
+    KNOWN_WIRE_DEBT = 1
 
     @staticmethod
     def _report():
