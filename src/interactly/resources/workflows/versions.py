@@ -234,6 +234,8 @@ class WorkflowVersionsResource(SyncAPIResource):
                 created_by=created_by,
                 logical_id=logical_id,
             ),
+            page=page,
+            size=size,
         )
 
 
@@ -375,6 +377,8 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
                 created_by=created_by,
                 logical_id=logical_id,
             ),
+            page=page,
+            size=size,
         )
 
 

@@ -188,7 +188,7 @@ class SuperNodesResource(SyncAPIResource):
             f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-dependents", cast_to=dict, params=params
         )
         return SyncPage._from_response(
-            raw, SuperNodeDependent, lambda p: self.dependents(workflow_id, page=p, size=size)
+            raw, SuperNodeDependent, lambda p: self.dependents(workflow_id, page=p, size=size), page=page, size=size
         )
 
     def expand_preview(
@@ -313,7 +313,7 @@ class AsyncSuperNodesResource(AsyncAPIResource):
             f"{_WORKFLOWS_PATH}/{workflow_id}/super-node-dependents", cast_to=dict, params=params
         )
         return AsyncPage._from_response(
-            raw, SuperNodeDependent, lambda p: self.dependents(workflow_id, page=p, size=size)
+            raw, SuperNodeDependent, lambda p: self.dependents(workflow_id, page=p, size=size), page=page, size=size
         )
 
     async def expand_preview(

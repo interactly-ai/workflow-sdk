@@ -35,6 +35,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Lists page past their first page
+#### Fixed
+- **Every list stopped after its first page.** The list routes send the rows and the total, but not the page or page
+  size they served, and twelve list methods handed that answer to the pager as it was. With no page size the pager
+  could not count pages, so `has_next_page` was false, `next_page()` raised `NoMorePagesError`, and `list_all()` and
+  `iter_pages()` returned the first page only, without a word. Affected: `nodes`, `edges`, `tools`, `workflows`,
+  `workflows.versions.list_active`, `node_libraries`, `templates`, `llm_configs`, `global_variables`, `webhooks.list`,
+  `runs` (sync and async). Each now tells the pager the page and size it asked for; a page, size or page count the
+  server does send still takes precedence. A unit test fails any new list method that doesn't.
+
 ### Version guards and the list filters the server reads
 #### Added
 - **`version_number` on nodes and edges.** `nodes.list()` and `edges.list()` take `version_number` and

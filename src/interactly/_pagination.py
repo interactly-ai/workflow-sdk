@@ -1,14 +1,12 @@
 """
 Pagination helpers: SyncPage[T] and AsyncPage[T].
 
-The backend returns list results as:
-    {
-        "items": [...],       # or "data"
-        "total": 100,
-        "page": 1,
-        "size": 10,
-        "pages": 10
-    }
+The list routes return the rows under a resource-named key, with the total across all pages::
+
+    {"workflows": [...], "total": 138}
+
+They don't say which page or page size they served, so each list method passes the ones it asked for; a ``page``,
+``size`` or ``pages`` the server does send takes precedence.
 
 SyncPage / AsyncPage implement the iterator protocol and provide a
 ``list_all()`` / ``alist_all()`` convenience that auto-pages until exhausted.
@@ -33,10 +31,10 @@ __all__ = ["SyncPage", "AsyncPage", "SyncCursorPage", "AsyncCursorPage"]
 class PageMetadata(BaseAPIModel):
     """Common pagination metadata returned by the server.
 
-    ``pages`` is ``None`` when the server did not supply enough information to
-    know the total page count — in that case ``has_next`` is authoritative and
-    we do NOT fabricate a page count from ``len(items)`` (which would falsely
-    signal a single page and stop iteration early — see TR-5).
+    ``pages`` is ``None`` when there is not enough information to know the total
+    page count — in that case ``has_next`` is authoritative and we do NOT
+    fabricate a page count from ``len(items)``, which would falsely signal a
+    single page and stop iteration early.
     """
 
     total: Optional[int] = None
@@ -67,18 +65,20 @@ def _extract_items(raw: dict[str, Any]) -> list[Any]:
     return []
 
 
-def _build_metadata(raw: dict[str, Any]) -> PageMetadata:
+def _build_metadata(raw: dict[str, Any], page: Optional[int] = None, size: Optional[int] = None) -> PageMetadata:
     """Build page metadata WITHOUT inferring the page count from ``len(items)``.
+
+    ``page`` and ``size`` are the ones the request asked for; the server's own, when it sends them, take precedence.
 
     Precedence for deciding whether more pages exist:
       1. An explicit ``pages`` count from the server (compute nothing).
-      2. A ``total`` + ``size`` from the server → derive ``pages``.
+      2. A ``total`` from the server and a page ``size`` → derive ``pages``.
       3. An explicit ``has_next`` / cursor signal.
     If none are present, ``pages``/``has_next`` stay ``None`` and iteration
     stops after the current page rather than fabricating a count.
     """
-    page = raw.get("page", 1)
-    size = raw.get("size")
+    page = raw.get("page", page if page is not None else 1)
+    size = raw.get("size", size)
     total = raw.get("total")
     pages = raw.get("pages")
 
@@ -142,6 +142,9 @@ class SyncPage(Generic[ItemT]):
         raw: dict[str, Any],
         item_type: Type[ItemT],
         fetch_page: Callable[[int], "SyncPage[ItemT]"],
+        *,
+        page: Optional[int] = None,
+        size: Optional[int] = None,
     ) -> "SyncPage[ItemT]":
         raw_items: list[Any] = _extract_items(raw)
         # `item_type` is a pydantic model in every real call, but `ItemT` is unbounded, so a checker
@@ -152,7 +155,7 @@ class SyncPage(Generic[ItemT]):
             item_type.model_validate(i) if hasattr(item_type, "model_validate") else item_type(i)  # type: ignore[attr-defined, call-arg]
             for i in raw_items
         ]
-        meta = _build_metadata(raw)
+        meta = _build_metadata(raw, page, size)
         return cls(items=items, metadata=meta, fetch_page=fetch_page)
 
     # Iterator over items in this page.
@@ -233,6 +236,9 @@ class AsyncPage(Generic[ItemT]):
         raw: dict[str, Any],
         item_type: Type[ItemT],
         fetch_page: Callable[[int], Awaitable["AsyncPage[ItemT]"]],
+        *,
+        page: Optional[int] = None,
+        size: Optional[int] = None,
     ) -> "AsyncPage[ItemT]":
         raw_items: list[Any] = _extract_items(raw)
         # `item_type` is a pydantic model in every real call, but `ItemT` is unbounded, so a checker
@@ -243,7 +249,7 @@ class AsyncPage(Generic[ItemT]):
             item_type.model_validate(i) if hasattr(item_type, "model_validate") else item_type(i)  # type: ignore[attr-defined, call-arg]
             for i in raw_items
         ]
-        meta = _build_metadata(raw)
+        meta = _build_metadata(raw, page, size)
         return cls(items=items, metadata=meta, fetch_page=fetch_page)
 
     def __aiter__(self) -> "AsyncPage[ItemT]":
