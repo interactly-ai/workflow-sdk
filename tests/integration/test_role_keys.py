@@ -79,6 +79,15 @@ async def test_a_viewer_key_is_refused_a_simulation_groups_pause(viewer_client):
             await client.simulations.pause_run(_NO_SUCH_NODE, reason="role check")
 
 
+async def test_a_viewer_key_is_refused_a_workflows_secrets(viewer_client):
+    # Refused before the workflow is looked up, so an id no workflow has is enough.
+    async with viewer_client as client:
+        with pytest.raises(PermissionDeniedError, match="secrets"):
+            await client.workflows.export(
+                _NO_SUCH_NODE, version_numbers=[0], active_version_number=0, include_secrets=True
+            )
+
+
 async def test_a_developer_key_reaches_a_simulation_groups_pause(developer_client):
     async with developer_client as client:
         with pytest.raises(NotFoundError):

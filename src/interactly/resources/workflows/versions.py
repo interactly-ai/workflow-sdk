@@ -61,7 +61,7 @@ class WorkflowVersionsResource(SyncAPIResource):
         self,
         workflow_id: str,
         *,
-        version_name: Optional[str] = None,
+        version_name: str,
         mark_as_active: bool = False,
         source_version_number: Optional[int] = None,
     ) -> WorkflowVersion:
@@ -70,19 +70,13 @@ class WorkflowVersionsResource(SyncAPIResource):
 
         Args:
             workflow_id:           The workflow to version.
-            version_name:          Optional human-readable label.
+            version_name:          The version's name; the server requires one.
             mark_as_active:        Immediately activate this version.
             source_version_number: Clone from this version (default: current active).
         """
-        body: dict[str, Any] = {"mark_as_active": mark_as_active}
-        if version_name is not None:
-            body["version_name"] = version_name
-        if source_version_number is not None:
-            body["source_version_number"] = source_version_number
-
         version = self._client.post(
             self._path(workflow_id),
-            body=body,
+            body=_create_body(version_name, mark_as_active, source_version_number),
             cast_to=WorkflowVersion,
         )
         if mark_as_active:
@@ -135,10 +129,28 @@ class WorkflowVersionsResource(SyncAPIResource):
         *,
         config: WorkflowConfigOrDict,
     ) -> WorkflowVersion:
-        """Replace the graph config (nodes + edges) for a version."""
+        """Update a version's workflow-level settings: name, description, category, the global LLM config,
+        ``tools_config``, and the rest of ``WorkflowConfig``.
+
+        Only the settings given change; the rest keep their stored values. A typed ``WorkflowConfig`` sends the
+        fields that were set on it, a dict its keys. Nodes and edges are not settings: change them through
+        ``client.nodes`` and ``client.edges``. A workflow's type is fixed when it is created, and the server ignores
+        it here. A new ``category`` reaches every version of the workflow.
+
+        Example::
+
+            client.workflows.versions.update_config(workflow_id, 0, config={"description": "Books appointments"})
+
+        Returns:
+            The updated :class:`WorkflowVersion`. When the update removed global tools,
+            ``pruned_global_tool_exclusions`` lists the nodes whose exclusions of them were dropped.
+
+        Raises:
+            ValueError: ``config`` holds nodes or edges (a ``WorkflowConfigFullyHydrated``, say).
+        """
         return self._client.patch(
             f"{self._path(workflow_id, version_number)}/config",
-            body={"config": serialise_config(config)},
+            body=_settings_body(config),
             cast_to=WorkflowVersion,
         )
 
@@ -235,19 +247,14 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
         self,
         workflow_id: str,
         *,
-        version_name: Optional[str] = None,
+        version_name: str,
         mark_as_active: bool = False,
         source_version_number: Optional[int] = None,
     ) -> WorkflowVersion:
-        body: dict[str, Any] = {"mark_as_active": mark_as_active}
-        if version_name is not None:
-            body["version_name"] = version_name
-        if source_version_number is not None:
-            body["source_version_number"] = source_version_number
-
+        """Create a new version of the workflow; see :meth:`WorkflowVersionsResource.create`."""
         version = await self._client.post(
             self._path(workflow_id),
-            body=body,
+            body=_create_body(version_name, mark_as_active, source_version_number),
             cast_to=WorkflowVersion,
         )
         if mark_as_active:
@@ -299,9 +306,10 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
         *,
         config: WorkflowConfigOrDict,
     ) -> WorkflowVersion:
+        """Update a version's workflow-level settings; see :meth:`WorkflowVersionsResource.update_config`."""
         return await self._client.patch(
             f"{self._path(workflow_id, version_number)}/config",
-            body={"config": serialise_config(config)},
+            body=_settings_body(config),
             cast_to=WorkflowVersion,
         )
 
@@ -367,3 +375,28 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
                 logical_id=logical_id,
             ),
         )
+
+
+#: Keys that say a config carries a graph. The settings route ignores them, so sending one would change nothing.
+_GRAPH_KEYS = frozenset({"nodes", "edges", "node_configs", "edge_configs", "workflow_config"})
+
+
+def _create_body(version_name: str, mark_as_active: bool, source_version_number: Optional[int]) -> Dict[str, Any]:
+    body: Dict[str, Any] = {"version_name": version_name, "mark_as_active": mark_as_active}
+    if source_version_number is not None:
+        body["source_version_number"] = source_version_number
+    return body
+
+
+def _settings_body(config: WorkflowConfigOrDict) -> Dict[str, Any]:
+    """The settings to change, at the top level: the server merges the body into the stored settings as it is."""
+    settings = serialise_config(config, exclude_unset=True)
+    if not isinstance(settings, dict):
+        raise TypeError(f"config must be a WorkflowConfig or a dict, not {type(config).__name__}")
+    graph = sorted(_GRAPH_KEYS & set(settings))
+    if graph:
+        raise ValueError(
+            f"update_config changes a version's workflow-level settings, and would ignore {', '.join(graph)}: "
+            "change nodes and edges through client.nodes and client.edges."
+        )
+    return settings

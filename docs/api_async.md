@@ -28,14 +28,14 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `create_from_config` | `(config: "'WorkflowConfigFullyHydrated'", *, name: 'Optional[str]' = None, description: 'Optional[str]' = None) -> 'Workflow'` | Async variant of :meth:`WorkflowsResource.create_from_config`. |
 | `delete` | `(workflow_id: 'str') -> 'None'` |  |
 | `dynamic_variables` | `(workflow_id: 'str') -> 'Dict[str, Any]'` |  |
-| `export` | `(workflow_id: 'str', *, version_numbers: 'List[int]', active_version_number: 'int') -> 'Dict[str, Any]'` | Export a workflow as a portable bundle dict. |
+| `export` | `(workflow_id: 'str', *, version_numbers: 'List[int]', active_version_number: 'int', include_secrets: 'bool' = False) -> 'Dict[str, Any]'` | Export a workflow as a portable bundle dict; see :meth:`WorkflowsResource.export`. |
 | `favorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Mark a workflow as a favorite for the requesting user (idempotent). |
 | `generate_counter_workflow` | `(workflow_id: 'str', *, num_cases: 'int' = 10, instructions: 'Optional[str]' = None, version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None, new_workflow: 'bool' = False, provider: 'Optional[str]' = None) -> 'CounterGenerationState'` | Start generating a counter workflow; returns immediately. See the sync counterpart. |
 | `get` | `(workflow_id: 'str') -> 'Workflow'` |  |
 | `get_fully_hydrated` | `(workflow_id: 'str') -> "'WorkflowConfigFullyHydrated'"` | Async variant of :meth:`WorkflowsResource.get_fully_hydrated`. |
 | `global_node_config_schema` | `() -> 'Dict[str, Any]'` |  |
 | `handle` | `(workflow_id: 'str', *, dynamic_variables: 'Optional[Dict[str, Any]]' = None) -> "'AsyncWorkflowHandle'"` | Async variant of :meth:`WorkflowsResource.handle`. |
-| `import_bundle` | `(bundle: 'Dict[str, Any]', *, versions_to_import: 'Optional[List[int]]' = None, active_version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None) -> 'Workflow'` | Import a previously exported workflow bundle. |
+| `import_bundle` | `(bundle: 'Dict[str, Any]', *, versions_to_import: 'Optional[List[int]]' = None, active_version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None, secret_overrides: 'Optional[Dict[str, str]]' = None) -> 'Workflow'` | Import a previously exported workflow bundle; see :meth:`WorkflowsResource.import_bundle`. |
 | `lints` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'WorkflowLintReport'` | Every advisory lint for a stored workflow, run against the whole graph. See the sync counterpart. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'AsyncPage[Workflow]'` |  |
 | `realtime_compatibility` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, model: 'Optional[str]' = None) -> 'RealtimeCompatibilityReport'` | Whether this workflow can run on a realtime model. See the sync counterpart. |
@@ -44,19 +44,20 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `unfavorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Remove a workflow from the requesting user's favorites. |
 | `update` | `(workflow_id: 'str', *, name: 'NotGivenOr[str]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN) -> 'Workflow'` |  |
 | `update_concurrency` | `(workflow_id: 'str', *, max_concurrent_runs: 'int') -> 'Dict[str, Any]'` | Set the maximum number of simultaneous runs for a workflow. |
+| `usage` | `(workflow_id: 'str') -> 'UsageReport'` | The team's workflows that use this one; see :meth:`WorkflowsResource.usage`. |
 
 ### `client.workflows.versions`
 
 | Method | Signature | Description |
 |---|---|---|
 | `activate` | `(workflow_id: 'str', version_number: 'int') -> 'Workflow'` | Mark a specific version as the active version. |
-| `create` | `(workflow_id: 'str', *, version_name: 'Optional[str]' = None, mark_as_active: 'bool' = False, source_version_number: 'Optional[int]' = None) -> 'WorkflowVersion'` |  |
+| `create` | `(workflow_id: 'str', *, version_name: 'str', mark_as_active: 'bool' = False, source_version_number: 'Optional[int]' = None) -> 'WorkflowVersion'` | Create a new version of the workflow; see :meth:`WorkflowVersionsResource.create`. |
 | `delete` | `(workflow_id: 'str', version_number: 'int') -> 'None'` |  |
 | `diff` | `(workflow_id: 'str', version1: 'int', version2: 'int') -> 'VersionDiff'` | Compare two workflow versions and return a structured diff. |
 | `list` | `(workflow_id: 'str') -> 'List[WorkflowVersion]'` | Return all versions for the given workflow. |
 | `list_active` | `(*, page: 'int' = 1, size: 'int' = 20, favorites: 'Optional[bool]' = None, created_by_me: 'Optional[bool]' = None, category: 'Optional[str]' = None, categories: 'Optional[List[str]]' = None, logical_id: 'Optional[str]' = None) -> 'AsyncPage[WorkflowVersion]'` | List every workflow's active version across the team (paginated). |
 | `update` | `(workflow_id: 'str', version_number: 'int', *, version_name: 'str') -> 'WorkflowVersion'` |  |
-| `update_config` | `(workflow_id: 'str', version_number: 'int', *, config: 'WorkflowConfigOrDict') -> 'WorkflowVersion'` |  |
+| `update_config` | `(workflow_id: 'str', version_number: 'int', *, config: 'WorkflowConfigOrDict') -> 'WorkflowVersion'` | Update a version's workflow-level settings; see :meth:`WorkflowVersionsResource.update_config`. |
 
 ## Nodes
 
@@ -112,6 +113,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `schema` | `(tool_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific tool type. |
 | `types` | `() -> 'List[str]'` | Retrieve all available tool type identifiers. |
 | `update` | `(tool_id: 'str', *, tool_config: 'NotGivenOr[Optional[ToolConfigOrDict]]' = NOT_GIVEN) -> 'Tool'` | Update a tool's config: only the fields you set are sent. See the sync counterpart. |
+| `usage` | `(tool_id: 'str') -> 'UsageReport'` | The team's workflows that use this tool; see :meth:`ToolsResource.usage`. |
 
 ## Runs
 
@@ -299,3 +301,4 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `test` | `(llm_config_id: 'str', *, system_prompt: 'str', messages: 'Optional[List[Dict[str, Any]]]' = None, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN) -> 'LLMConfigTestResult'` | Exercise a saved LLM config against a system prompt + optional messages. |
 | `test_inline` | `(*, system_prompt: 'str', config: 'LLMConfigOrDict', messages: 'Optional[List[Dict[str, Any]]]' = None) -> 'LLMConfigTestResult'` | Exercise an unsaved (inline) LLM config before persisting it. |
 | `update` | `(llm_config_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN, is_default: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, override_default: 'bool' = False, preserve_api_key: 'bool' = True) -> 'LLMConfig'` | Update a saved LLM config; only supplied fields are sent. See the sync counterpart, in |
+| `usage` | `(llm_config_id: 'str') -> 'UsageReport'` | The team's workflows that use this saved LLM config; see :meth:`LLMConfigsResource.usage`. |

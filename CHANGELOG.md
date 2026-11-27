@@ -35,6 +35,35 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Workflow bundles with their secrets, usage reports, and version settings
+#### Added
+- **`workflows.export(..., include_secrets=False)`.** By default the server clears a workflow's secrets from the
+  bundle (a secret field becomes `None`, a sensitive header or body entry `""`) and lists each in
+  `bundle["redactions"]`; `include_secrets=True` keeps them, in plain text. A viewer asking for them gets
+  `PermissionDeniedError`.
+- **`workflows.import_bundle(..., secret_overrides=None)`**, named as `tools.import_bundle` names it: the values for
+  the cleared secrets, keyed by their `redactions` path (`{r["path"]: value for r in bundle["redactions"]}`). The
+  number after `versions.` in a path is the version's position in the bundle, not its version number. A secret not
+  supplied stays empty and adds a line to the returned workflow's `warnings`; an unlisted path raises
+  `UnprocessableEntityError`, with the paths in `err.body["field_errors"]`.
+- **`workflows.usage()`, `tools.usage()` and `llm_configs.usage()`**, returning a `UsageReport`: the team's
+  workflows that reference the item, with the versions that do. A delete doesn't consult it.
+- **`pruned_global_tool_exclusions`** on `Workflow` and `WorkflowVersion`: the nodes whose exclusions of global tools
+  a write dropped because it removed those tools. More generally, every key of a write's envelope now reaches the
+  returned model, as a field or an extra.
+
+#### Fixed
+- **`workflows.versions.update_config()` changed nothing.** It sent the settings under a `config` key, which the
+  server ignores. They now go at the top level, and only the ones given (a typed `WorkflowConfig` sends the fields
+  set on it). Its docstring said it replaced a version's nodes and edges; it changes the workflow-level settings, and
+  now raises `ValueError` on a config holding nodes or edges instead of sending one the server would ignore.
+- **`WorkflowVersion.config` was always `None`.** A version record holds its settings as `workflow_config`; they are
+  now read from there, as a `WorkflowConfig`.
+
+#### Changed
+- **`workflows.versions.create()` requires `version_name`.** The server refuses a version without one (422), so a
+  call without it could never succeed.
+
 ### Simulation groups: pause, resume and the list filters
 #### Added
 - **`simulations.pause_run(run_id, reason=None)` and `simulations.resume_run(run_id)`**, on both clients. A paused

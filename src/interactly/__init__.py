@@ -109,6 +109,7 @@ from interactly.types.tools.codebase_function import CodebaseFunction, CodebaseF
 from interactly.types.tools.execute_result import ToolExecuteResult
 from interactly.types.tools.params import ToolCreateParams, ToolListParams, ToolUpdateParams
 from interactly.types.tools.tool import Tool
+from interactly.types.usage import UsageEntry, UsageReport
 from interactly.types.webhooks.params import WebhookCreateParams, WebhookListParams, WebhookUpdateParams
 from interactly.types.webhooks.webhook import (
     WebhookAction,
@@ -189,6 +190,8 @@ __all__ = [
     # Workflow models
     "Workflow",
     "WorkflowVersion",
+    "UsageEntry",
+    "UsageReport",
     "VersionDiff",
     "WorkflowLintReport",
     "RealtimeCompatibilityReport",

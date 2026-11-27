@@ -14,6 +14,7 @@ Endpoints:
     GET    /v1/llm-configs/{id}            → get
     PATCH  /v1/llm-configs/{id}            → update
     DELETE /v1/llm-configs/{id}            → delete
+    GET    /v1/llm-configs/{id}/usage      → usage
     POST   /v1/llm-configs/{id}/test       → test
     POST   /v1/llm-configs/test            → test_inline
 """
@@ -28,6 +29,7 @@ from interactly._types import NOT_GIVEN, NotGivenOr, is_given
 from interactly._utils._serialise import serialise_config
 from interactly.types._config_types import LLMConfigOrDict
 from interactly.types.llm_configs.llm_config import LLMConfig, LLMConfigTestResult
+from interactly.types.usage import UsageReport
 
 __all__ = ["LLMConfigsResource", "AsyncLLMConfigsResource"]
 
@@ -247,6 +249,17 @@ class LLMConfigsResource(SyncAPIResource):
         """Delete a saved LLM config."""
         self._client.delete(f"{_PATH}/{llm_config_id}", cast_to=type(None))
 
+    def usage(self, llm_config_id: str) -> UsageReport:
+        """The team's workflows that use this saved LLM config, in any version.
+
+        A delete doesn't consult this: deleting the config still succeeds, and leaves these with a reference that no
+        longer resolves.
+
+        Raises:
+            NotFoundError: no saved LLM config with this id in the team.
+        """
+        return self._client.get(f"{_PATH}/{llm_config_id}/usage", cast_to=UsageReport)
+
     def test(
         self,
         llm_config_id: str,
@@ -364,6 +377,10 @@ class AsyncLLMConfigsResource(AsyncAPIResource):
     async def delete(self, llm_config_id: str) -> None:
         """Delete a saved LLM config."""
         await self._client.delete(f"{_PATH}/{llm_config_id}", cast_to=type(None))
+
+    async def usage(self, llm_config_id: str) -> UsageReport:
+        """The team's workflows that use this saved LLM config; see :meth:`LLMConfigsResource.usage`."""
+        return await self._client.get(f"{_PATH}/{llm_config_id}/usage", cast_to=UsageReport)
 
     async def test(
         self,

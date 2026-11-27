@@ -11,6 +11,7 @@ Endpoints implemented:
     PATCH  /v1/workflows/{id}/concurrency           → update_concurrency
     GET    /v1/workflows/{id}/export                → export
     POST   /v1/workflows/import/bundle              → import_bundle
+    GET    /v1/workflows/{id}/usage                 → usage
     GET    /v1/workflows/schema                     → schema
     GET    /v1/workflows/dynamic-variables/{id}     → dynamic_variables
     GET    /v1/workflows/{id}/lints                 → lints
@@ -33,6 +34,7 @@ from interactly._utils._serialise import serialise_config
 from interactly.resources.workflows.versions import AsyncWorkflowVersionsResource, WorkflowVersionsResource
 from interactly.types._config_types import WorkflowConfigOrDict
 from interactly.types.runs.run_control import BackgroundRunStarted
+from interactly.types.usage import UsageReport
 from interactly.types.workflows.analysis import (
     CounterGenerationState,
     CounterWorkflowStatus,
@@ -306,20 +308,31 @@ class WorkflowsResource(SyncAPIResource):
         *,
         version_numbers: List[int],
         active_version_number: int,
+        include_secrets: bool = False,
     ) -> Dict[str, Any]:
-        """Export a workflow as a portable bundle dict.
+        """Export a workflow as a portable bundle dict, for :meth:`import_bundle` here or on another server.
+
+        By default the workflow's secrets are cleared from the bundle: a secret field becomes ``None``, and a
+        sensitive header or body entry (an ``Authorization`` header, say) becomes ``""``. ``bundle["redactions"]``
+        lists each one, as ``{"path", "reason", "node_name", "segments"}``, and ``bundle["secrets_included"]`` says
+        whether they were kept. Supply them again on import with ``secret_overrides``.
 
         Args:
             workflow_id:           ObjectId of the workflow to export.
             version_numbers:       Version numbers to include in the bundle.
             active_version_number: Which of ``version_numbers`` is the active one
                                    (must be present in ``version_numbers``).
+            include_secrets:       Keep the secrets in the bundle, in plain text. Anything that stores the bundle
+                                   then holds the workflow's credentials. Refused to a viewer.
+
+        Raises:
+            PermissionDeniedError: ``include_secrets`` asked by a viewer.
         """
-        params: Dict[str, Any] = {
-            "version_numbers": version_numbers,
-            "active_version_number": active_version_number,
-        }
-        return self._client.get(f"{_PATH}/{workflow_id}/export", params=params, cast_to=dict)
+        return self._client.get(
+            f"{_PATH}/{workflow_id}/export",
+            params=_export_params(version_numbers, active_version_number, include_secrets),
+            cast_to=dict,
+        )
 
     def import_bundle(
         self,
@@ -328,8 +341,9 @@ class WorkflowsResource(SyncAPIResource):
         versions_to_import: Optional[List[int]] = None,
         active_version_number: Optional[int] = None,
         workflow_name: Optional[str] = None,
+        secret_overrides: Optional[Dict[str, str]] = None,
     ) -> Workflow:
-        """Import a previously exported workflow bundle.
+        """Import a previously exported workflow bundle as a new workflow.
 
         The server expects a ``WorkflowBundleImportRequest`` wrapper, so the
         raw bundle is nested under ``bundle``.
@@ -341,15 +355,31 @@ class WorkflowsResource(SyncAPIResource):
             active_version_number: Version number to set active in the new
                                    workflow (server default: ``0``).
             workflow_name:         Optional override for the imported workflow's name.
+            secret_overrides:      Values for the secrets the export cleared, keyed by their ``path`` in
+                                   ``bundle["redactions"]``: ``{r["path"]: value for r in bundle["redactions"]}``.
+                                   In a path, the number after ``versions.`` is the version's position in
+                                   ``bundle["versions"]``, not its version number. A blank value counts as not
+                                   supplied. Each secret not supplied stays empty and adds a line to the returned
+                                   workflow's ``warnings``.
+
+        Raises:
+            UnprocessableEntityError: a ``secret_overrides`` path the bundle doesn't list, or a bundle whose
+                ``redactions`` were edited; ``err.body["field_errors"]`` names the paths.
         """
-        body: Dict[str, Any] = {"bundle": bundle}
-        if versions_to_import is not None:
-            body["versions_to_import"] = versions_to_import
-        if active_version_number is not None:
-            body["active_version_number"] = active_version_number
-        if workflow_name is not None:
-            body["workflow_name"] = workflow_name
-        return self._client.post(f"{_PATH}/import/bundle", body=body, cast_to=Workflow)
+        return self._client.post(
+            f"{_PATH}/import/bundle",
+            body=_import_body(bundle, versions_to_import, active_version_number, workflow_name, secret_overrides),
+            cast_to=Workflow,
+        )
+
+    def usage(self, workflow_id: str) -> UsageReport:
+        """The team's workflows that use this one, in any version: as a super node's workflow, an evaluator, or a
+        warm-transfer target.
+
+        A delete doesn't consult this: deleting the workflow still succeeds, and leaves these with a reference that
+        no longer resolves. An id that names no workflow answers an empty report.
+        """
+        return self._client.get(f"{_PATH}/{workflow_id}/usage", cast_to=UsageReport)
 
     def schema(self) -> Dict[str, Any]:
         """Return the JSON schema for valid workflow configuration."""
@@ -669,17 +699,14 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         *,
         version_numbers: List[int],
         active_version_number: int,
+        include_secrets: bool = False,
     ) -> Dict[str, Any]:
-        """Export a workflow as a portable bundle dict.
-
-        Requires ``version_numbers`` and ``active_version_number`` query params
-        (the server rejects the request otherwise).
-        """
-        params: Dict[str, Any] = {
-            "version_numbers": version_numbers,
-            "active_version_number": active_version_number,
-        }
-        return await self._client.get(f"{_PATH}/{workflow_id}/export", params=params, cast_to=dict)
+        """Export a workflow as a portable bundle dict; see :meth:`WorkflowsResource.export`."""
+        return await self._client.get(
+            f"{_PATH}/{workflow_id}/export",
+            params=_export_params(version_numbers, active_version_number, include_secrets),
+            cast_to=dict,
+        )
 
     async def import_bundle(
         self,
@@ -688,20 +715,18 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         versions_to_import: Optional[List[int]] = None,
         active_version_number: Optional[int] = None,
         workflow_name: Optional[str] = None,
+        secret_overrides: Optional[Dict[str, str]] = None,
     ) -> Workflow:
-        """Import a previously exported workflow bundle.
+        """Import a previously exported workflow bundle; see :meth:`WorkflowsResource.import_bundle`."""
+        return await self._client.post(
+            f"{_PATH}/import/bundle",
+            body=_import_body(bundle, versions_to_import, active_version_number, workflow_name, secret_overrides),
+            cast_to=Workflow,
+        )
 
-        The server expects a ``WorkflowBundleImportRequest`` wrapper, so the
-        raw bundle is nested under ``bundle``.
-        """
-        body: Dict[str, Any] = {"bundle": bundle}
-        if versions_to_import is not None:
-            body["versions_to_import"] = versions_to_import
-        if active_version_number is not None:
-            body["active_version_number"] = active_version_number
-        if workflow_name is not None:
-            body["workflow_name"] = workflow_name
-        return await self._client.post(f"{_PATH}/import/bundle", body=body, cast_to=Workflow)
+    async def usage(self, workflow_id: str) -> UsageReport:
+        """The team's workflows that use this one; see :meth:`WorkflowsResource.usage`."""
+        return await self._client.get(f"{_PATH}/{workflow_id}/usage", cast_to=UsageReport)
 
     async def schema(self) -> Dict[str, Any]:
         return await self._client.get(f"{_PATH}/schema", cast_to=dict)
@@ -848,3 +873,29 @@ class AsyncWorkflowsResource(AsyncAPIResource):
     async def unfavorite(self, workflow_id: str) -> Dict[str, Any]:
         """Remove a workflow from the requesting user's favorites."""
         return await self._client.delete(f"{_PATH}/{workflow_id}/favorite", cast_to=dict)
+
+
+def _export_params(version_numbers: List[int], active_version_number: int, include_secrets: bool) -> Dict[str, Any]:
+    params: Dict[str, Any] = {"version_numbers": version_numbers, "active_version_number": active_version_number}
+    if include_secrets:
+        params["include_secrets"] = True
+    return params
+
+
+def _import_body(
+    bundle: Dict[str, Any],
+    versions_to_import: Optional[List[int]],
+    active_version_number: Optional[int],
+    workflow_name: Optional[str],
+    secret_overrides: Optional[Dict[str, str]],
+) -> Dict[str, Any]:
+    body: Dict[str, Any] = {"bundle": bundle}
+    if versions_to_import is not None:
+        body["versions_to_import"] = versions_to_import
+    if active_version_number is not None:
+        body["active_version_number"] = active_version_number
+    if workflow_name is not None:
+        body["workflow_name"] = workflow_name
+    if secret_overrides:
+        body["secret_overrides"] = secret_overrides
+    return body
