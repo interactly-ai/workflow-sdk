@@ -31,7 +31,6 @@ class RunStatus(str, Enum):
     """Execution status of a workflow run."""
 
     NOT_STARTED = "not_started"
-    PENDING = "pending"
     STARTED = "started"
     RUNNING = "running"
     PAUSED = "paused"

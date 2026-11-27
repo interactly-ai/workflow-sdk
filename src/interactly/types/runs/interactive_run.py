@@ -80,3 +80,8 @@ class InteractiveRunResponse(BaseAPIModel):
     #: pump may return MAIN-thread assistant output, when a waiting condition matched and the
     #: workflow moved on without a user turn.
     has_background_work: bool = False
+    #: For a durable run left ``paused`` or ``waiting`` (a step waits for a person, a timer, a signal or a job): what it
+    #: waits for, as ``Run.pause_summary`` shows it. ``is_waiting_for_input`` is then False, and the run carries on by
+    #: itself once what it waits for comes; a further turn sent while a person's pause stands is refused with a 409. A
+    #: run is durable here only where the server switches that on for REST-executed runs. None otherwise.
+    pause_summary: Optional[Dict[str, Any]] = None

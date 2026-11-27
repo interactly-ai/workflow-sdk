@@ -74,6 +74,10 @@ async def test_a_background_run_is_paused_signalled_and_cancelled():
         run = await client.runs.get(run_id)
         assert (run.pause_requested, run.pause_reason) == (True, "SDK_E2E hold")
 
+        # A run waiting on a person is listed as needing attention.
+        waiting = await client.runs.list(workflow_id=workflow_id, needs_attention=True)
+        assert [r.id for r in waiting.items] == [run_id]
+
         # A signal no wait is listening for yet is stored, and listed without its body.
         signal = await client.runs.send_signal(run_id, "sdk_e2e.note", {"n": 1})
         assert signal.outcome == "stored"
@@ -84,6 +88,8 @@ async def test_a_background_run_is_paused_signalled_and_cancelled():
         assert cancelled.outcome == "applied"
         run = await example_19.wait_for_status(client, run_id, example_19.FINISHED, timeout=30)
         assert run.status == "cancelled"
+        # An ended run never needs attention.
+        assert (await client.runs.list(workflow_id=workflow_id, needs_attention=True)).items == []
         assert await (await client.runs.list_pauses(run_id, open_only=True)).list_all() == []
     finally:
         if workflow_id:

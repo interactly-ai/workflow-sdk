@@ -18,9 +18,14 @@ Two things the server may do that are easy to misread:
 * **Background events arrive mid-wait.** While the workflow waits for the next user message, fork
   companions keep running and their events keep arriving. ``end_workflow_iteration`` therefore does
   not mean "your turn" — ``workflow_ready_for_input`` does.
-* **Some closures are rejections, not endings.** Close code 4006 means the start frame carried
-  ``initial_state`` (never allowed from a client); 4007 means the ``rerun_token`` was expired or
-  did not match. Both raise a specific exception rather than a generic StreamError.
+* **Some closures are rejections, not endings.** The server closes the socket with one code per
+  refusal, and each code raises its own ``StreamError`` subclass carrying ``code``, ``reason`` and,
+  when the server sent one first, the ``workflow_error`` frame's full ``server_message`` (a close
+  reason holds only 123 bytes). Close code 1000 is the run ending and stops iteration.
+* **Leaving the stream ends the run.** Closing the socket on a run that has not finished cancels
+  it (``status`` ``cancelled``, ``termination_source`` ``websocket_disconnect``), companion threads
+  included, even mid-turn. A durable socket run waiting on a pause is the exception: the server
+  hands it on rather than cancelling it.
 
 SDK design:
     - ``AsyncStream[T]``  — async-native iterator.  Use with ``async for``.
@@ -41,7 +46,45 @@ from interactly._utils._logs import logger
 
 
 class StreamError(InteractlyError):
-    """Raised when a streaming connection drops abnormally or a frame is malformed."""
+    """Raised when a streaming connection drops abnormally or a frame is malformed.
+
+    When the server closed the socket, ``code`` and ``reason`` are the close code and reason. When it sent a
+    ``workflow_error`` frame just before closing, ``server_message`` is that frame's message: the whole reason, where
+    a close reason is cut at 123 bytes.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: Optional[int] = None,
+        reason: Optional[str] = None,
+        server_message: Optional[str] = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.reason = reason
+        self.server_message = server_message
+
+
+class StreamRejectedError(StreamError):
+    """The server refused to start or continue the run (close code **4000**).
+
+    The reason says which: the start frame was malformed, the requested version does not exist, the workflow's
+    configuration or runtime could not be loaded, or a take-back start frame was misused.
+    """
+
+
+class UnrunnableWorkflowError(StreamError):
+    """The workflow's stored configuration cannot be run.
+
+    Close code **4001**: its nodes belong to a different version than the one requested. **4002**: it has no nodes.
+    **4005**: a super node in it could not be expanded. Fix the workflow; retrying the same start frame will not help.
+    """
+
+
+class ConcurrencyLimitError(StreamError):
+    """The team or workflow is already running as many runs as it may (close code **4003**). Retry later."""
 
 
 class InvalidStreamInputError(StreamError):
@@ -64,16 +107,87 @@ class RerunTokenError(StreamError):
     """
 
 
-#: WebSocket close codes the workflow service uses to reject a start frame, mapped to the exception
-#: that explains what to do about it. Anything else stays a generic ``StreamError``.
+class RunChangedElsewhereError(StreamError):
+    """The run was changed elsewhere while this socket held it (close code **4009**).
+
+    A person paused, resumed or cancelled it through the run-control API, or another session carried it on, so this
+    session's next turn could not be stored. ``server_message`` gives the run's status as it now stands.
+    """
+
+
+class TakeBackRefusedError(StreamError):
+    """The run could not be taken back on this socket (close code **4010**).
+
+    It has ended, is being cancelled, is open in another session, or the server is carrying it on right now.
+    ``server_message`` says which; the last of these is worth retrying in a moment.
+    """
+
+
+class TakeBackForbiddenError(StreamError):
+    """The caller's role may not take back a run (close code **4030**): it needs developer access or above."""
+
+
+class StreamNotFoundError(StreamError):
+    """The workflow or the run named in the start frame does not exist for this team (close code **4040**)."""
+
+
+class ResumeInputRejectedError(StreamError):
+    """The frame carried a resume input (close code **4400**).
+
+    Resuming a paused node is the server's to do, from the pause it recorded; approve a pause with
+    ``client.runs.resume`` instead.
+    """
+
+
+class StreamPermissionError(StreamError):
+    """The caller's role may not run workflows (close code **1008**): a viewer, or a role the server does not know.
+
+    Running a workflow needs developer access or above.
+    """
+
+
+class StreamServerError(StreamError):
+    """The server failed while handling the run (close code **1011**). The reason carries the error."""
+
+
+#: WebSocket close codes the workflow service closes the run socket with, mapped to the exception that explains what
+#: happened. 1000 is the run ending, not an error. Any other code stays a plain ``StreamError``.
 _CLOSE_CODE_ERRORS: dict[int, type[StreamError]] = {
+    1008: StreamPermissionError,
+    1011: StreamServerError,
+    4000: StreamRejectedError,
+    4001: UnrunnableWorkflowError,
+    4002: UnrunnableWorkflowError,
+    4003: ConcurrencyLimitError,
+    4005: UnrunnableWorkflowError,
     4006: InvalidStreamInputError,
     4007: RerunTokenError,
+    4009: RunChangedElsewhereError,
+    4010: TakeBackRefusedError,
+    4030: TakeBackForbiddenError,
+    4040: StreamNotFoundError,
+    4400: ResumeInputRejectedError,
 }
 
 ItemT = TypeVar("ItemT")
 
-__all__ = ["AsyncStream", "InvalidStreamInputError", "RerunTokenError", "Stream", "StreamError"]
+__all__ = [
+    "AsyncStream",
+    "ConcurrencyLimitError",
+    "InvalidStreamInputError",
+    "RerunTokenError",
+    "ResumeInputRejectedError",
+    "RunChangedElsewhereError",
+    "Stream",
+    "StreamError",
+    "StreamNotFoundError",
+    "StreamPermissionError",
+    "StreamRejectedError",
+    "StreamServerError",
+    "TakeBackForbiddenError",
+    "TakeBackRefusedError",
+    "UnrunnableWorkflowError",
+]
 
 
 class AsyncStream(Generic[ItemT]):
@@ -102,6 +216,8 @@ class AsyncStream(Generic[ItemT]):
         self._cast_to = cast_to
         self._token_provider = token_provider
         self._ws: Any = None
+        # The message of the last `workflow_error` frame, which the server sends before some closes.
+        self._last_error_message: Optional[str] = None
 
     async def __aenter__(self) -> "AsyncStream[ItemT]":
         try:
@@ -131,7 +247,13 @@ class AsyncStream(Generic[ItemT]):
             additional_headers=additional_headers,
         )
         # Send the initial command payload.
-        await self._ws.send(json.dumps(self._payload))
+        try:
+            await self._ws.send(json.dumps(self._payload))
+        except websockets.exceptions.ConnectionClosed:
+            # A caller refused outright (a viewer, on the run socket) is accepted and closed at once, often before
+            # the start frame goes out. Iteration reports that close, as it does one that follows the start frame,
+            # so the same refusal raises the same exception whichever side was first.
+            logger.debug("WebSocket closed before the start frame was sent")
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -166,18 +288,24 @@ class AsyncStream(Generic[ItemT]):
             # their own exception rather than as an opaque "closed abnormally".
             close_frame = getattr(exc, "rcvd", None)
             code: Optional[int] = getattr(close_frame, "code", None)
-            reason: str = getattr(close_frame, "reason", "") or str(exc)
+            reason: str = getattr(close_frame, "reason", "") or ""
             logger.debug("WebSocket closed abnormally", extra={"code": code, "reason": reason})
+            server_message = self._last_error_message
             error_cls = _CLOSE_CODE_ERRORS.get(code) if code is not None else None
             if error_cls is None:
-                raise StreamError(f"WebSocket connection closed abnormally: {exc}") from exc
-            raise error_cls(f"{reason} (close code {code})") from exc
+                message = f"WebSocket connection closed abnormally: {exc}"
+                error_cls = StreamError
+            else:
+                message = f"{server_message or reason or 'no reason given'} (close code {code})"
+            raise error_cls(message, code=code, reason=reason or None, server_message=server_message) from exc
 
         try:
             data = json.loads(raw)
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             raise StreamError(f"Failed to decode stream frame as JSON: {exc}") from exc
 
+        if isinstance(data, dict) and data.get("type") == "workflow_error" and isinstance(data.get("message"), str):
+            self._last_error_message = data["message"]
         return self._parse(data)
 
     def _parse(self, data: dict[str, Any]) -> ItemT:

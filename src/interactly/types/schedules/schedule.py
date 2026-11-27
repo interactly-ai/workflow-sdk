@@ -17,6 +17,8 @@ __all__ = ["ScheduleStatus", "Schedule"]
 
 class ScheduleStatus(str, Enum):
     PENDING = "pending"
+    #: The scheduled run is executing now.
+    IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"

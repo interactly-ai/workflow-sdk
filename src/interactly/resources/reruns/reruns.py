@@ -266,6 +266,10 @@ class RerunsResource(SyncAPIResource):
                 write, an outbound notification). Supply it to replay the turn against the new config.
             run_async: Execute in the background and answer 202 immediately (the default). A re-run
                 onto a different config can take longer than a request may live.
+
+        Raises:
+            ConflictError: the server runs re-runs as durable runs but its durable store is unavailable, so it
+                refuses to start one it could not see through. Retry later.
         """
         body = _target_body(
             target_workflow_id=target_workflow_id,

@@ -619,6 +619,11 @@ class _SdkModule:
             return set(), False
         if isinstance(expr, ast.Constant) and expr.value is None:
             return set(), True
+        if isinstance(expr, ast.IfExp):
+            # `{"version": v} if v is not None else None`: either branch can be sent.
+            body_keys, body_ok = self.param_keys(expr.body, func, depth + 1, given)
+            else_keys, else_ok = self.param_keys(expr.orelse, func, depth + 1, given)
+            return body_keys | else_keys, body_ok and else_ok
         if isinstance(expr, ast.Dict):
             keys: Set[str] = set()
             ok = True

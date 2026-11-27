@@ -28,18 +28,10 @@ else:
 
 __all__ = ["FeedbackUser", "Run", "RunComment", "RunEvaluationResult", "RunFeedbackResponse"]
 
-#: Keys the server computes for a run answer, beside the stored record: the single-run GET puts them on its envelope,
-#: and a list row carries ``pause_requested`` and ``pause_summary`` on the row itself.
-_COMPUTED_RUN_KEYS = (
-    "durable",
-    "pause_summary",
-    "pause_requested",
-    "paused_by",
-    "pause_reason",
-    "paused_since",
-    "paused_seconds_total",
-    "feedback_users",
-)
+#: Keys of a stored run record that `Run` maps to fields of its own name or derives other fields from. Every other key
+#: of the record, and every key of the single-run GET's envelope, is carried over as it is, so a key the server adds is
+#: kept as an extra the day it ships rather than dropped.
+_MAPPED_RECORD_KEYS = frozenset({"_id", "id", "workflow_run", "team_id", "created_at", "updated_at"})
 
 
 class FeedbackUser(BaseAPIModel):
@@ -150,15 +142,33 @@ class Run(BaseAPIModel):
     # Error details if the run failed.
     error: Optional[str] = None
 
+    #: What ended the run, when something other than the workflow did: ``client_stop`` (a STOP sent by the client,
+    #: which ends the run ``cancelled``), ``websocket_disconnect`` (the stream was closed before the run ended),
+    #: ``unsettled_turn``, and others the server may add.
+    termination_source: Optional[str] = None
+
     team_id: Optional[str] = None
+
+    #: The name of the run's workflow, on a list row.
+    workflow_name: Optional[str] = None
+    #: True when the run's workflow has since been deleted.
+    workflow_deleted: Optional[bool] = None
+    #: True for a run started with ``client.workflows.start_background_run``.
+    is_background_run: Optional[bool] = None
+    #: The schedule that started the run, for a scheduled run.
+    schedule_id: Optional[str] = None
+    #: True when a run started in the editor and handed to the server when its socket closed can be taken back in a
+    #: new stream. Set only on the single-run GET, and only where streamed runs are durable.
+    can_continue_in_editor: Optional[bool] = None
 
     #: Display identities for every user referenced by this run's feedback, keyed by user id.
     #: Shipped with the run so a client can attribute a comment or rating without holding a copy of
     #: the team roster.
     feedback_users: Dict[str, FeedbackUser] = Field(default_factory=dict)
 
-    # A durable run's pause state (scheduled, re-run and background runs). Each is None when the answer did not carry
-    # it: a list row carries only ``pause_requested`` and ``pause_summary``, and a server older than the pause fields
+    # A durable run's pause state. Scheduled, re-run and background runs are durable; streamed, REST-executed and
+    # simulation runs are durable too where the server switches that on. Each is None when the answer did not carry it:
+    # a list row carries only ``pause_requested`` and ``pause_summary``, and a server older than the pause fields
     # carries none.
 
     #: True when the run is durable, so it can be paused, resumed, cancelled or signalled.
@@ -212,7 +222,8 @@ class Run(BaseAPIModel):
             return data
 
         # Unwrap the outer single-object envelope from single-get responses. The envelope itself carries what the
-        # server computes for the answer rather than stores: the pause state and the feedback authors' identities.
+        # server computes for the answer rather than stores: the pause state, the feedback authors' identities,
+        # whether the run can be taken back.
         envelope: Dict[str, Any] = {}
         record = data
         if isinstance(record.get("workflow_run"), dict) and "_id" not in record and "id" not in record:
@@ -223,13 +234,12 @@ class Run(BaseAPIModel):
         if not isinstance(state, dict):
             return data
 
-        computed = {
-            key: envelope[key] if key in envelope else record[key]
-            for key in _COMPUTED_RUN_KEYS
-            if key in envelope or key in record
-        }
+        # Everything on the record and the envelope comes along (the envelope winning, as it is computed for this
+        # answer); the fields below are then set from the run's state, overriding any key of the same name.
+        carried = {key: value for key, value in record.items() if key not in _MAPPED_RECORD_KEYS}
+        carried.update({key: value for key, value in envelope.items() if key != "workflow_run"})
         return {
-            **computed,
+            **carried,
             "id": state.get("workflow_run_id") or record.get("_id") or record.get("id"),
             "workflow_id": state.get("workflow_id"),
             "status": state.get("status"),
@@ -237,6 +247,7 @@ class Run(BaseAPIModel):
             "version_number": state.get("version_number"),
             "input_output_pairs": state.get("input_output_pairs"),
             "error": state.get("termination_source") if state.get("status") == "failed" else None,
+            "termination_source": state.get("termination_source"),
             "team_id": record.get("team_id"),
             "started_at": record.get("created_at"),
             "completed_at": record.get("updated_at"),

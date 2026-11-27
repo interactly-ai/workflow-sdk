@@ -33,10 +33,20 @@ from interactly._exceptions import (
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._streaming import (
     AsyncStream,
+    ConcurrencyLimitError,
     InvalidStreamInputError,
     RerunTokenError,
+    ResumeInputRejectedError,
+    RunChangedElsewhereError,
     Stream,
     StreamError,
+    StreamNotFoundError,
+    StreamPermissionError,
+    StreamRejectedError,
+    StreamServerError,
+    TakeBackForbiddenError,
+    TakeBackRefusedError,
+    UnrunnableWorkflowError,
 )
 from interactly._types import NOT_GIVEN, NotGiven, NotGivenOr
 from interactly._version import __version__
@@ -145,6 +155,16 @@ __all__ = [
     "StreamError",
     "InvalidStreamInputError",
     "RerunTokenError",
+    "ConcurrencyLimitError",
+    "ResumeInputRejectedError",
+    "RunChangedElsewhereError",
+    "StreamNotFoundError",
+    "StreamPermissionError",
+    "StreamRejectedError",
+    "StreamServerError",
+    "TakeBackForbiddenError",
+    "TakeBackRefusedError",
+    "UnrunnableWorkflowError",
     # Pagination
     "SyncPage",
     "AsyncPage",

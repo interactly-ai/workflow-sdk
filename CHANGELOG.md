@@ -35,6 +35,53 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### Runs and the run socket
+#### Added
+- **A typed exception for every code the run socket closes with.** Each is a `StreamError` subclass carrying
+  `code`, `reason` and, when the server sent a `workflow_error` frame just before closing, `server_message`: the
+  whole reason, where a close reason is cut at 123 bytes.
+
+  | Close code | Exception | Meaning |
+  |---|---|---|
+  | 1008 | `StreamPermissionError` | The caller's role may not run workflows |
+  | 1011 | `StreamServerError` | The server failed while handling the run |
+  | 4000 | `StreamRejectedError` | A malformed frame, a missing version, or a configuration that would not load |
+  | 4001, 4002, 4005 | `UnrunnableWorkflowError` | The stored workflow cannot run |
+  | 4003 | `ConcurrencyLimitError` | Too many runs at once |
+  | 4009 | `RunChangedElsewhereError` | The run was paused, resumed or cancelled elsewhere |
+  | 4010 | `TakeBackRefusedError` | The run could not be taken back |
+  | 4030 | `TakeBackForbiddenError` | The caller's role may not take back a run |
+  | 4040 | `StreamNotFoundError` | The workflow or run does not exist |
+  | 4400 | `ResumeInputRejectedError` | The frame carried a resume input |
+
+  `InvalidStreamInputError` (4006) and `RerunTokenError` (4007) are unchanged. A viewer's socket is accepted and
+  closed at once, usually before the start frame goes out. Iteration now reports that close too, so it raises
+  `StreamPermissionError` and no longer the `websockets` library's own `ConnectionClosedError`.
+- **`RunEvent.is_run_paused()` and `is_run_resumed()`** for the `run_paused` and `run_resumed` frames. A durable
+  streamed run sends them when a person pauses or resumes it.
+- **`client.runs.list(needs_attention=..., logical_id=..., version_number=...)`.** `needs_attention=True` lists the
+  runs waiting on a person: a person's pause, or a step waiting for approval.
+- **New fields:**
+  - `InteractiveRunResponse.pause_summary`, for a durable REST-executed run left paused or waiting;
+  - on `Run`: `termination_source`, `workflow_name`, `workflow_deleted`, `is_background_run`, `schedule_id` and
+    `can_continue_in_editor`.
+- **`ScheduleStatus.IN_PROGRESS`.**
+
+#### Changed
+- **`Run` keeps every key the server sends.** Keys of the run record and of the single-run GET's envelope that `Run`
+  has no field for are now kept as extras (`run.model_extra`), not dropped.
+
+#### Fixed
+- **`client.runs.execute(version_number=N)` runs version N.** The server reads the version to run only from
+  `?version=` and overwrites the body's, so the SDK, which sent it in the body, ran the active version on every call.
+  `execute` and `execute_with_input` now send it as `?version=`, taking it from `run_input.version_number` when
+  given. Only a session's first turn reads it.
+- **A schedule fetched while it runs parses.** `Schedule.status` is typed `ScheduleStatus`, which lacked
+  `in_progress`, so `client.schedules` raised on such a schedule.
+
+#### Removed
+- **`RunStatus.PENDING`.** No server sends it.
+
 ### Configs — mirror synced to `interactly-ai@a87b31348` (2026-11-26)
 `make parity-check` reads 0 differences again, and `make schema-check` reads 0 findings against dev with
 simulations now compared.
