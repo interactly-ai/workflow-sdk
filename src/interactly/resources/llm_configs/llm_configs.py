@@ -192,7 +192,7 @@ class LLMConfigsResource(SyncAPIResource):
         if search is not None:
             params["search"] = search
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, LLMConfig, lambda p: self.list(page=p, size=size, search=search))
+        return SyncPage._from_response(raw, LLMConfig, lambda p: self.list(page=p, size=size, search=search), page=page, size=size)
 
     def get_default(self) -> LLMConfig:
         """Return the team's default saved LLM config.
@@ -339,7 +339,7 @@ class AsyncLLMConfigsResource(AsyncAPIResource):
         if search is not None:
             params["search"] = search
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, LLMConfig, lambda p: self.list(page=p, size=size, search=search))
+        return AsyncPage._from_response(raw, LLMConfig, lambda p: self.list(page=p, size=size, search=search), page=page, size=size)
 
     async def get_default(self) -> LLMConfig:
         """Return the team's default saved LLM config."""

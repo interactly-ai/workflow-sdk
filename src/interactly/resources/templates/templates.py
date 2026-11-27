@@ -81,7 +81,7 @@ class TemplatesResource(SyncAPIResource):
         if access_level is not None:
             params["access_level"] = access_level
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, Template, lambda p: self.list(page=p, size=size, search=search, access_level=access_level))
+        return SyncPage._from_response(raw, Template, lambda p: self.list(page=p, size=size, search=search, access_level=access_level), page=page, size=size)
 
     def get(self, template_id: str) -> Template:
         """
@@ -157,7 +157,7 @@ class AsyncTemplatesResource(AsyncAPIResource):
         if access_level is not None:
             params["access_level"] = access_level
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, Template, lambda p: self.list(page=p, size=size, search=search, access_level=access_level))
+        return AsyncPage._from_response(raw, Template, lambda p: self.list(page=p, size=size, search=search, access_level=access_level), page=page, size=size)
 
     async def get(self, template_id: str) -> Template:
         """Retrieve a single workflow template by ID."""

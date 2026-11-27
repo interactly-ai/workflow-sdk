@@ -129,7 +129,7 @@ class WorkflowWebhooksResource(SyncAPIResource):
         if action is not None:
             params["action"] = action.value if isinstance(action, WebhookAction) else action
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, WebhookSubscription, lambda p: self.list(page=p, size=size, search=search, enabled=enabled, action=action))
+        return SyncPage._from_response(raw, WebhookSubscription, lambda p: self.list(page=p, size=size, search=search, enabled=enabled, action=action), page=page, size=size)
 
     def get(self, webhook_id: str) -> WebhookSubscription:
         """
@@ -371,7 +371,7 @@ class AsyncWorkflowWebhooksResource(AsyncAPIResource):
         if action is not None:
             params["action"] = action.value if isinstance(action, WebhookAction) else action
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, WebhookSubscription, lambda p: self.list(page=p, size=size, search=search, enabled=enabled, action=action))
+        return AsyncPage._from_response(raw, WebhookSubscription, lambda p: self.list(page=p, size=size, search=search, enabled=enabled, action=action), page=page, size=size)
 
     async def get(self, webhook_id: str) -> WebhookSubscription:
         """Retrieve a single webhook subscription by ID.

@@ -249,7 +249,7 @@ class RunsResource(SyncAPIResource):
                 version_number=version_number,
             )
 
-        return SyncPage._from_response(raw, Run, fetch_page)
+        return SyncPage._from_response(raw, Run, fetch_page, page=page, size=size)
 
     def get(self, run_id: str) -> Run:
         """Retrieve a single run by ID."""
@@ -815,7 +815,7 @@ class AsyncRunsResource(AsyncAPIResource):
                 version_number=version_number,
             )
 
-        return AsyncPage._from_response(raw, Run, fetch_page)
+        return AsyncPage._from_response(raw, Run, fetch_page, page=page, size=size)
 
     async def get(self, run_id: str) -> Run:
         return await self._client.get(f"{_PATH}/{run_id}", cast_to=Run)

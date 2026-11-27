@@ -109,7 +109,7 @@ class GlobalVariablesResource(SyncAPIResource):
         if category is not None:
             params["category"] = category
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, GlobalVariable, lambda p: self.list(page=p, size=size, search=search, category=category))
+        return SyncPage._from_response(raw, GlobalVariable, lambda p: self.list(page=p, size=size, search=search, category=category), page=page, size=size)
 
     def get(self, variable_id: str) -> GlobalVariable:
         """
@@ -240,7 +240,7 @@ class AsyncGlobalVariablesResource(AsyncAPIResource):
         if category is not None:
             params["category"] = category
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, GlobalVariable, lambda p: self.list(page=p, size=size, search=search, category=category))
+        return AsyncPage._from_response(raw, GlobalVariable, lambda p: self.list(page=p, size=size, search=search, category=category), page=page, size=size)
 
     async def get(self, variable_id: str) -> GlobalVariable:
         """Retrieve a single global variable by ID."""

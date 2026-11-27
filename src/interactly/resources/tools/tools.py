@@ -148,6 +148,8 @@ class ToolsResource(SyncAPIResource):
                 page=p, size=size, search=search, tool_type=tool_type, logical_id=logical_id, name=name,
                 category=category,
             ),
+            page=page,
+            size=size,
         )
 
     def get(self, tool_id: str) -> Tool:
@@ -381,6 +383,8 @@ class AsyncToolsResource(AsyncAPIResource):
                 page=p, size=size, search=search, tool_type=tool_type, logical_id=logical_id, name=name,
                 category=category,
             ),
+            page=page,
+            size=size,
         )
 
     async def get(self, tool_id: str) -> Tool:

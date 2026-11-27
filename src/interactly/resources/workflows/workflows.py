@@ -248,7 +248,7 @@ class WorkflowsResource(SyncAPIResource):
         def fetch_page(p: int) -> SyncPage[Workflow]:
             return self.list(page=p, size=size, search=search)
 
-        return SyncPage._from_response(raw, Workflow, fetch_page)
+        return SyncPage._from_response(raw, Workflow, fetch_page, page=page, size=size)
 
     # ---------------------------------------------------------------------- #
     # Utility operations                                                       #
@@ -662,7 +662,7 @@ class AsyncWorkflowsResource(AsyncAPIResource):
         async def fetch_page(p: int) -> AsyncPage[Workflow]:
             return await self.list(page=p, size=size, search=search)
 
-        return AsyncPage._from_response(raw, Workflow, fetch_page)
+        return AsyncPage._from_response(raw, Workflow, fetch_page, page=page, size=size)
 
     async def clone(
         self,

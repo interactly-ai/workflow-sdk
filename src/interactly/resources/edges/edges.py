@@ -104,7 +104,7 @@ class EdgesResource(SyncAPIResource):
         if version_number is not None:
             params["version_number"] = version_number
         raw = self._client.get(_PATH, cast_to=dict, params=params)
-        return SyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id, logical_id=logical_id, version_number=version_number))
+        return SyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id, logical_id=logical_id, version_number=version_number), page=page, size=size)
 
     def get(self, edge_id: str, *, version_number: Optional[int] = None) -> Edge:
         """
@@ -206,7 +206,7 @@ class AsyncEdgesResource(AsyncAPIResource):
         if version_number is not None:
             params["version_number"] = version_number
         raw = await self._client.get(_PATH, cast_to=dict, params=params)
-        return AsyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id, logical_id=logical_id, version_number=version_number))
+        return AsyncPage._from_response(raw, Edge, lambda p: self.list(page=p, size=size, search=search, edge_type=edge_type, workflow_id=workflow_id, logical_id=logical_id, version_number=version_number), page=page, size=size)
 
     async def get(self, edge_id: str, *, version_number: Optional[int] = None) -> Edge:
         """Retrieve a single edge by ID."""
