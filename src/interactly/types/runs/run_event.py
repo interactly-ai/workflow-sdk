@@ -14,9 +14,9 @@ Known event types (non-exhaustive — the server may add new types):
                                     caller node (non-terminal navigation event;
                                     carries ``global_node_logical_id``)
     ``workflow_ready_for_input``  — every non-companion thread has settled and the
-                                    workflow will accept the next user message. This,
-                                    NOT ``end_workflow_iteration``, is the "your turn"
-                                    signal once companion threads are in play
+                                    workflow will accept the next user message. Sent only
+                                    while fork companions run on; ``is_ready_for_input()``
+                                    is the "your turn" signal for every workflow
     ``companion_step_boundary``   — one companion self-loop step completed
     ``waiting_evaluation_boundary`` — a parked thread's waiting-edges were evaluated
     ``waiting_condition_matched`` — a conditional edge fired while its source node was
@@ -36,7 +36,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from pydantic import model_validator
+from pydantic import PrivateAttr, model_validator
 
 from interactly._models import BaseAPIModel
 
@@ -79,6 +79,10 @@ class RunEvent(BaseAPIModel):
     # ``[[thread_<id>.<var>]]`` reference.
     thread_reference_id: Optional[str] = None
 
+    # Set by the stream that read this event, when the turn it ends hands over to the user without the server saying
+    # so (no workflow_ready_for_input, as when no fork companion runs). See is_ready_for_input().
+    _ends_turn_awaiting_user: bool = PrivateAttr(default=False)
+
     @model_validator(mode="before")
     @classmethod
     def _normalize(cls, data: Any) -> Any:
@@ -113,7 +117,13 @@ class RunEvent(BaseAPIModel):
         return self.type in {"end_workflow", "workflow_error"}
 
     def is_ready_for_input(self) -> bool:
-        """Return True when the workflow will accept the next user message.
+        """Return True at the moment the run waits for the user's next message: the time to ``send()`` it.
+
+        It fires once per turn that hands over to the user. The server says so with ``workflow_ready_for_input`` only
+        while fork companions run on in the background. Without them it sends nothing of the kind, so a stream marks
+        the turn's last event instead (its ``end_workflow_iteration``) when the turn left a main thread waiting for a
+        message, and marks a take-back's acknowledgement when the run it took back waits for its user. An event read
+        outside a stream answers by its type alone.
 
         Distinct from :meth:`is_terminal` and from ``end_workflow_iteration``. Once companion
         threads are in play the three diverge: an iteration marker is per-turn accounting,
@@ -121,7 +131,7 @@ class RunEvent(BaseAPIModel):
         is parked and waiting. Loops that break on ``end_workflow_iteration`` will hang or race when
         a companion is still emitting.
         """
-        return self.type == "workflow_ready_for_input"
+        return self.type == "workflow_ready_for_input" or self._ends_turn_awaiting_user
 
     def is_run_paused(self) -> bool:
         """Return True when a person paused the run, or refused a message because the run is paused.

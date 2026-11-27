@@ -47,6 +47,9 @@ class RunStreamParams(TypedDict):
     #: Redeems a re-run projection minted by ``client.reruns.create_token``. Only valid on a
     #: ``start`` frame; an expired or mismatched token closes the socket with code 4007.
     rerun_token: NotRequired[Optional[str]]
+    #: Takes back a run a socket handed off, instead of starting one. A ``start`` frame that names a
+    #: run carries nothing else; see ``client.runs.stream``.
+    workflow_run_id: NotRequired[Optional[str]]
 
 
 class RunCommentParams(TypedDict):

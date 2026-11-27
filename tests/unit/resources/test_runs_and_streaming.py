@@ -172,12 +172,15 @@ class TestCloseBeforeTheStartFrame:
                 await _read_until_closed(stream, [])
         assert socket.sent == [{"command": "start"}]
 
-    async def test_a_normal_close_before_the_start_frame_is_an_empty_stream(self, monkeypatch):
+    async def test_a_normal_close_before_the_start_frame_says_the_run_has_ended(self, monkeypatch):
+        # Only a refusal or a failure is left for iteration, which carries its typed exception. A normal close means
+        # nothing will take the frame, so it is said at once.
         stream = self._stream_connecting_to(_FakeSocket([], 1000, closed_before_start=True), monkeypatch)
-        events: List[RunEvent] = []
-        async with stream:
-            await _read_until_closed(stream, events)
-        assert events == []
+        with pytest.raises(StreamError) as caught:
+            async with stream:
+                pass
+        assert type(caught.value) is StreamError
+        assert caught.value.code == 1000
 
 
 class TestPauseFrames:

@@ -11,7 +11,7 @@ from typing import Any
 
 from interactly._utils._typing import NotGiven
 
-__all__ = ["strip_not_given", "build_body"]
+__all__ = ["strip_not_given", "build_body", "deep_merge"]
 
 
 def _clean_list(seq: list[Any]) -> list[Any]:
@@ -55,3 +55,19 @@ def build_body(params: dict[str, Any] | None) -> dict[str, Any] | None:
         return None
     cleaned = strip_not_given(params)
     return cleaned if cleaned else None
+
+
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge ``override`` on top of ``base`` without mutating either.
+
+    ``override`` wins at the leaf level; ``base`` values survive under dicts that ``override`` only partially
+    overrides. Non-dict values are replaced wholesale.
+    """
+    result = dict(base)
+    for key, override_value in override.items():
+        base_value = result.get(key)
+        if isinstance(base_value, dict) and isinstance(override_value, dict):
+            result[key] = deep_merge(base_value, override_value)
+        else:
+            result[key] = override_value
+    return result
