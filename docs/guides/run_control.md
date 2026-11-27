@@ -28,11 +28,13 @@ Pause, resume, cancel and signal work only on a durable run. The server decides 
 | Run | Durable when |
 |---|---|
 | Scheduled, re-run and background runs | By default: the server flag `ENABLE_DURABLE_HEADLESS_RUNS` is on |
-| Editor and stream runs | Where the server sets `ENABLE_DURABLE_SOCKET_RUNS` (off by default) |
-| REST execute runs | Where the server sets `ENABLE_DURABLE_REST_RUNS` (off by default) |
-| Simulation runs | Where the server sets `ENABLE_DURABLE_SIMULATION_RUNS` (off by default) |
+| Editor and stream runs | By default: `ENABLE_DURABLE_SOCKET_RUNS` |
+| REST execute runs | By default: `ENABLE_DURABLE_REST_RUNS` |
+| Simulation runs | By default: `ENABLE_DURABLE_SIMULATION_RUNS` |
 
-A run control request on a run that is not durable raises `ConflictError`. `durable` on the run says which it is:
+The three live-run flags are on by default in servers built since late November 2026. A deployment can switch any of
+them off, and an older server has them off, so don't assume: a run control request on a run that is not durable
+raises `ConflictError`, and `durable` on the run says which it is:
 
 ```python
 run = await client.runs.get(run_id)
