@@ -14,6 +14,8 @@ Endpoints:
     GET    /v1/llm-configs/{id}            → get
     PATCH  /v1/llm-configs/{id}            → update
     DELETE /v1/llm-configs/{id}            → delete
+    POST   /v1/llm-configs/export          → export
+    POST   /v1/llm-configs/import          → import_bundle
     GET    /v1/llm-configs/{id}/usage      → usage
     POST   /v1/llm-configs/{id}/test       → test
     POST   /v1/llm-configs/test            → test_inline
@@ -26,9 +28,10 @@ from typing import Any, Dict, List, Optional
 from interactly._pagination import AsyncPage, SyncPage
 from interactly._resource import AsyncAPIResource, SyncAPIResource
 from interactly._types import NOT_GIVEN, NotGivenOr, is_given
+from interactly._utils._credentials import CREDENTIAL_FIELDS, CREDENTIAL_HEADER_MAPS, is_credential_header
 from interactly._utils._serialise import serialise_config
 from interactly.types._config_types import LLMConfigOrDict
-from interactly.types.llm_configs.llm_config import LLMConfig, LLMConfigTestResult
+from interactly.types.llm_configs.llm_config import LLMConfig, LLMConfigImportResult, LLMConfigTestResult
 from interactly.types.usage import UsageReport
 
 __all__ = ["LLMConfigsResource", "AsyncLLMConfigsResource"]
@@ -110,28 +113,59 @@ def _pair_group_members(new_members: List[Any], old_members: List[Any]) -> List[
     return pairs
 
 
-def _carry_stored_api_keys(new_config: Any, old_config: Any) -> None:
-    """Copy each stored ``api_key`` into the outgoing config wherever the outgoing one leaves it unset.
+def _carry_stored_credentials(new_config: Any, old_config: Any) -> None:
+    """Copy each stored credential into the outgoing config wherever the outgoing one leaves it blank.
 
-    The client-side twin of the server's own preservation, which it applies only to non-admin callers:
-    an admin is shown the real key on read, so for an admin a missing key means "delete it". Without
-    this, an admin-token SDK user who sends a freshly built config wipes the provider key without being
-    told. Recurses into group members (paired by ``logical_id``) and backchannel sub-configs, exactly as
-    the server does. Mutates ``new_config`` in place.
+    The client-side twin of the server's own preservation, which it applies only to non-admin callers: an admin is
+    shown the credentials on read, so for an admin a blank one means "delete it". Without this, an admin-token SDK
+    user who sends a freshly built config deletes the provider credentials without being told. Carried:
 
-    One deliberate difference from the server: a key is carried only onto a config of the same ``type``.
-    Switching a saved config from one provider to another must not hand the old provider's key to the
-    new one; the caller supplies the new provider's key, or the server's team credentials apply.
+    - each credential field (``api_key``, Bedrock's ``aws_access_key_id`` and ``aws_secret_access_key``) that the
+      outgoing config leaves unset;
+    - each credential header of a header map (the custom gateway's ``default_headers``: ``Authorization``,
+      ``x-api-key`` and the like) that the outgoing map sends empty, matched by name exactly and then ignoring
+      case, as the server matches it. A header the caller filled in keeps its value. If the outgoing config has no
+      header map at all, the stored credential headers are carried into a new one; the other headers are not.
+
+    Recurses into group members (paired by ``logical_id``) and backchannel sub-configs, as the server does. Mutates
+    ``new_config`` in place.
+
+    One deliberate difference from the server: credentials are carried only onto a config of the same ``type``.
+    Switching a saved config from one provider to another must not hand the old provider's credentials to the new
+    one; the caller supplies the new provider's, or the server's team credentials apply.
     """
     if not isinstance(new_config, dict) or not isinstance(old_config, dict):
         return
-    same_provider = new_config.get("type") == old_config.get("type")
-    if same_provider and new_config.get("api_key") is None and old_config.get("api_key") is not None:
-        new_config["api_key"] = old_config["api_key"]
+    if new_config.get("type") == old_config.get("type"):
+        for field in CREDENTIAL_FIELDS:
+            if new_config.get(field) is None and old_config.get(field) is not None:
+                new_config[field] = old_config[field]
+        for field in CREDENTIAL_HEADER_MAPS:
+            if isinstance(old_config.get(field), dict):
+                carried = _carry_stored_headers(new_config.get(field), old_config[field])
+                if carried is not None:
+                    new_config[field] = carried
     for new_member, old_member in _pair_group_members(new_config.get("llms") or [], old_config.get("llms") or []):
-        _carry_stored_api_keys(new_member, old_member)
+        _carry_stored_credentials(new_member, old_member)
     for key in ("main_llm_config", "backchannel_llm_config"):
-        _carry_stored_api_keys(new_config.get(key), old_config.get(key))
+        _carry_stored_credentials(new_config.get(key), old_config.get(key))
+
+
+def _carry_stored_headers(new_headers: Any, old_headers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The outgoing headers with each blank credential header given its stored value, or ``None`` to leave them."""
+    stored = {name: value for name, value in old_headers.items() if value and is_credential_header(name)}
+    if new_headers is None:
+        return dict(stored) or None
+    if not isinstance(new_headers, dict):
+        return None
+    stored_by_lower = {str(name).lower(): value for name, value in stored.items()}
+    restored = dict(new_headers)
+    for name, value in new_headers.items():
+        if value in (None, "") and is_credential_header(name):
+            value = stored.get(name, stored_by_lower.get(str(name).lower()))
+            if value:
+                restored[name] = value
+    return restored
 
 
 def _build_test_body(
@@ -215,23 +249,24 @@ class LLMConfigsResource(SyncAPIResource):
         config: NotGivenOr[Optional[LLMConfigOrDict]] = NOT_GIVEN,
         is_default: NotGivenOr[Optional[bool]] = NOT_GIVEN,
         override_default: bool = False,
-        preserve_api_key: bool = True,
+        preserve_credentials: bool = True,
     ) -> LLMConfig:
         """Update a saved LLM config; only supplied fields are sent.
 
-        ``config`` replaces the stored config **wholesale**. For a caller with an admin or super-admin
-        token, the server treats a config with no ``api_key`` as "remove the stored key", because an
-        admin is shown the real key on read and so could only have cleared it on purpose. A config built
-        fresh in code has no key, so that would silently delete the provider credential.
+        ``config`` replaces the stored config **wholesale**. For a caller with an admin or super-admin token, the
+        server treats a credential the config leaves blank as "remove it", because an admin is shown the real
+        credentials on read and so could only have cleared one on purpose. A config built fresh in code has none, so
+        that would silently delete the provider's ``api_key``, Bedrock's AWS key pair, or a custom gateway's
+        ``Authorization`` header.
 
-        ``preserve_api_key`` (the default) guards against that. When ``config`` leaves ``api_key`` unset,
-        the stored config is read first and its key carried over, including the keys of group members,
-        which are paired by ``logical_id``. That costs one extra GET. For a non-admin the read returns no
-        key and nothing changes, since the server preserves it for them anyway.
+        ``preserve_credentials`` (the default) guards against that. The stored config is read first, and each
+        credential ``config`` leaves blank is carried over from it, in group members (paired by ``logical_id``) and
+        backchannel configs too, and only onto a config of the same provider type. That costs one extra GET. For a
+        non-admin the read returns no credentials and nothing changes, since the server keeps them for them anyway.
 
         Args:
-            preserve_api_key: Pass ``False`` to send ``config`` exactly as given. With an admin token,
-                              that is how a stored key is deliberately removed.
+            preserve_credentials: Pass ``False`` to send ``config`` exactly as given. With an admin token, that is
+                                  how stored credentials are deliberately removed.
         """
         body = _build_update_body(
             name=name,
@@ -240,9 +275,9 @@ class LLMConfigsResource(SyncAPIResource):
             is_default=is_default,
             override_default=override_default,
         )
-        if preserve_api_key and "config" in body:
+        if preserve_credentials and "config" in body:
             stored = _stored_config(self._client.get(f"{_PATH}/{llm_config_id}", cast_to=dict))
-            _carry_stored_api_keys(body["config"], stored)
+            _carry_stored_credentials(body["config"], stored)
         return self._client.patch(f"{_PATH}/{llm_config_id}", body=body, cast_to=LLMConfig)
 
     def delete(self, llm_config_id: str) -> None:
@@ -259,6 +294,39 @@ class LLMConfigsResource(SyncAPIResource):
             NotFoundError: no saved LLM config with this id in the team.
         """
         return self._client.get(f"{_PATH}/{llm_config_id}/usage", cast_to=UsageReport)
+
+    def export(self, *, llm_config_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Export saved LLM configs as a portable bundle dict, for :meth:`import_bundle` here or on another server.
+
+        Every secret is replaced with ``"<REDACTED>"`` and listed in ``bundle["redactions"]`` as
+        ``{"path", "config_name", "reason"}``, whatever the caller's role: the file is meant to be passed around.
+
+        Args:
+            llm_config_ids: The configs to export; every config of the team when omitted.
+
+        Raises:
+            NotFoundError: one of ``llm_config_ids`` names no config of the team.
+        """
+        return self._client.post(f"{_PATH}/export", body=_export_body(llm_config_ids), cast_to=dict)
+
+    def import_bundle(
+        self, bundle: Dict[str, Any], *, secret_overrides: Optional[Dict[str, str]] = None
+    ) -> LLMConfigImportResult:
+        """Create LLM configs from an exported bundle, all or nothing.
+
+        Every redacted secret must come back in ``secret_overrides``, keyed by its ``path`` in
+        ``bundle["redactions"]``: ``{r["path"]: value for r in bundle["redactions"]}``. An id the team already uses is
+        replaced by a new one (``ids_reminted``), and a name it already uses gets an ``(imported)`` suffix
+        (``renamed_from``). Imported configs never become the team default.
+
+        Raises:
+            UnprocessableEntityError: a redacted secret was not supplied, or the bundle is malformed; the paths are
+                in ``err.body``.
+            ConflictError: the import collides with the team's configs.
+        """
+        return self._client.post(
+            f"{_PATH}/import", body=_import_body(bundle, secret_overrides), cast_to=LLMConfigImportResult
+        )
 
     def test(
         self,
@@ -358,10 +426,10 @@ class AsyncLLMConfigsResource(AsyncAPIResource):
         config: NotGivenOr[Optional[LLMConfigOrDict]] = NOT_GIVEN,
         is_default: NotGivenOr[Optional[bool]] = NOT_GIVEN,
         override_default: bool = False,
-        preserve_api_key: bool = True,
+        preserve_credentials: bool = True,
     ) -> LLMConfig:
         """Update a saved LLM config; only supplied fields are sent. See the sync counterpart, in
-        particular for ``preserve_api_key``."""
+        particular for ``preserve_credentials``."""
         body = _build_update_body(
             name=name,
             description=description,
@@ -369,9 +437,9 @@ class AsyncLLMConfigsResource(AsyncAPIResource):
             is_default=is_default,
             override_default=override_default,
         )
-        if preserve_api_key and "config" in body:
+        if preserve_credentials and "config" in body:
             stored = _stored_config(await self._client.get(f"{_PATH}/{llm_config_id}", cast_to=dict))
-            _carry_stored_api_keys(body["config"], stored)
+            _carry_stored_credentials(body["config"], stored)
         return await self._client.patch(f"{_PATH}/{llm_config_id}", body=body, cast_to=LLMConfig)
 
     async def delete(self, llm_config_id: str) -> None:
@@ -381,6 +449,18 @@ class AsyncLLMConfigsResource(AsyncAPIResource):
     async def usage(self, llm_config_id: str) -> UsageReport:
         """The team's workflows that use this saved LLM config; see :meth:`LLMConfigsResource.usage`."""
         return await self._client.get(f"{_PATH}/{llm_config_id}/usage", cast_to=UsageReport)
+
+    async def export(self, *, llm_config_ids: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Export saved LLM configs as a portable bundle dict; see :meth:`LLMConfigsResource.export`."""
+        return await self._client.post(f"{_PATH}/export", body=_export_body(llm_config_ids), cast_to=dict)
+
+    async def import_bundle(
+        self, bundle: Dict[str, Any], *, secret_overrides: Optional[Dict[str, str]] = None
+    ) -> LLMConfigImportResult:
+        """Create LLM configs from an exported bundle, all or nothing; see :meth:`LLMConfigsResource.import_bundle`."""
+        return await self._client.post(
+            f"{_PATH}/import", body=_import_body(bundle, secret_overrides), cast_to=LLMConfigImportResult
+        )
 
     async def test(
         self,
@@ -408,3 +488,15 @@ class AsyncLLMConfigsResource(AsyncAPIResource):
             "config": serialise_config(config),
         }
         return await self._client.post(f"{_PATH}/test", body=body, cast_to=LLMConfigTestResult)
+
+
+def _export_body(llm_config_ids: Optional[List[str]]) -> Dict[str, Any]:
+    # Always a body: the route requires one, and a null list of ids is how it is asked for every config.
+    return {"llm_config_ids": llm_config_ids}
+
+
+def _import_body(bundle: Dict[str, Any], secret_overrides: Optional[Dict[str, str]]) -> Dict[str, Any]:
+    body: Dict[str, Any] = {"bundle": bundle}
+    if secret_overrides:
+        body["secret_overrides"] = secret_overrides
+    return body

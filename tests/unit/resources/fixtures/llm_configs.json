@@ -1,0 +1,196 @@
+{
+  "export": {
+    "status": 200,
+    "body": {
+      "export_format": "llm_configs.v1",
+      "exported_at": "2026-11-27T07:05:04.880940Z",
+      "configs": [
+        {
+          "llm_config_id": "00000000-0000-4000-8000-000000000000",
+          "name": "SDK_E2E gateway",
+          "description": null,
+          "is_default": false,
+          "config": {
+            "logical_id": "llm_00000000-0000-4000-8000-000000000001",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "custom",
+            "streaming": false,
+            "max_retries": 0,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": 2000,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": "<REDACTED>",
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "model": "none",
+            "reasoning_effort": null,
+            "type": "custom_llm",
+            "base_url": "https://llm.unreachable.invalid/v1",
+            "default_headers": {
+              "Authorization": "<REDACTED>",
+              "X-Tenant": "t1"
+            },
+            "rewrite_base_url": false,
+            "verify_ssl": true,
+            "response_unwrap_key": null,
+            "integration_auth": null,
+            "use_responses_api": false,
+            "decisions_api": null,
+            "supports_audio_input": false
+          }
+        }
+      ],
+      "redactions": [
+        {
+          "path": "configs.0.config.api_key",
+          "config_name": "SDK_E2E gateway",
+          "reason": "secret field"
+        },
+        {
+          "path": "configs.0.config.default_headers.Authorization",
+          "config_name": "SDK_E2E gateway",
+          "reason": "sensitive header"
+        }
+      ],
+      "warnings": []
+    }
+  },
+  "export_unknown": {
+    "status": 404,
+    "body": {
+      "message": "Sorry! We haven't found this route or not implemented yet!"
+    }
+  },
+  "import_missing_secrets": {
+    "status": 422,
+    "body": {
+      "message": {
+        "message": "Redacted fields must be supplied again before import",
+        "field_errors": [
+          "configs.0.config.api_key",
+          "configs.0.config.default_headers.Authorization"
+        ]
+      }
+    }
+  },
+  "import": {
+    "status": 200,
+    "body": {
+      "imported": [
+        {
+          "source_llm_config_id": "00000000-0000-4000-8000-000000000000",
+          "llm_config": {
+            "team_id": "665f1c0a2b3c4d5e6f760000",
+            "created_by": "665f1c0a2b3c4d5e6f760001",
+            "updated_by": "665f1c0a2b3c4d5e6f760001",
+            "created_at": "2026-11-27T07:05:05.503Z",
+            "updated_at": "2026-11-27T07:05:05.503Z",
+            "_id": "665f1c0a2b3c4d5e6f760002",
+            "llm_config_id": "00000000-0000-4000-8000-000000000002",
+            "name": "SDK_E2E gateway (imported)",
+            "description": null,
+            "config": {
+              "logical_id": "llm_00000000-0000-4000-8000-000000000003",
+              "named_llm_config_id": null,
+              "named_llm_config_name": null,
+              "provider": "custom",
+              "streaming": false,
+              "max_retries": 0,
+              "max_parse_retries": 3,
+              "max_tokens": null,
+              "temperature": null,
+              "request_timeout_ms": 2000,
+              "seed": null,
+              "model_kwargs": {},
+              "api_key": "sk-sdk-probe",
+              "do_not_split_sentences": false,
+              "truncated_max_recent_messages": null,
+              "model": "none",
+              "reasoning_effort": null,
+              "type": "custom_llm",
+              "base_url": "https://llm.unreachable.invalid/v1",
+              "default_headers": {
+                "Authorization": "Bearer sdk-probe-not-a-secret",
+                "X-Tenant": "t1"
+              },
+              "rewrite_base_url": false,
+              "verify_ssl": true,
+              "response_unwrap_key": null,
+              "integration_auth": null,
+              "use_responses_api": false,
+              "decisions_api": null,
+              "supports_audio_input": false
+            },
+            "is_default": false
+          },
+          "renamed_from": "SDK_E2E gateway",
+          "ids_reminted": true
+        }
+      ],
+      "warnings": []
+    }
+  },
+  "test_inline_unreachable": {
+    "status": 200,
+    "body": {
+      "success": false,
+      "response": null,
+      "error": "[Errno -2] Name or service not known",
+      "provider": null,
+      "model": null,
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "latency_ms": null,
+      "used_user_api_key": true,
+      "error_category": "unavailable",
+      "winning_member": null,
+      "backchannel_response": null,
+      "backchannel_member": null,
+      "backchannel_prompt_tokens": null,
+      "backchannel_completion_tokens": null,
+      "backchannel_total_tokens": null
+    }
+  },
+  "node_422": {
+    "status": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "string_type",
+          "loc": [
+            "body",
+            "say_llm",
+            "name"
+          ],
+          "msg": "Input should be a valid string",
+          "input": 123
+        },
+        {
+          "type": "value_error",
+          "loc": [
+            "body",
+            "say_llm",
+            "workflow_id"
+          ],
+          "msg": "Value error, Id must be of type PydanticObjectId",
+          "input": "nope",
+          "ctx": {
+            "error": {}
+          }
+        }
+      ],
+      "message": "Node Name: Input should be a valid string; Workflow DB Object ID: Id must be of type PydanticObjectId"
+    }
+  },
+  "signal_413": {
+    "status": 413,
+    "body": {
+      "message": "The signal body is 71691 bytes, over the 65536 byte limit."
+    }
+  }
+}

@@ -28,6 +28,7 @@ from interactly._exceptions import (
     NotFoundError,
     PermissionDeniedError,
     RateLimitError,
+    RequestTooLargeError,
     UnprocessableEntityError,
 )
 from interactly._pagination import AsyncPage, SyncPage
@@ -74,7 +75,13 @@ from interactly.types.global_variables.params import (
     GlobalVariableListParams,
     GlobalVariableUpdateParams,
 )
-from interactly.types.llm_configs.llm_config import LLMConfig, LLMConfigTestResult, LLMTestMemberInfo
+from interactly.types.llm_configs.llm_config import (
+    ImportedLLMConfig,
+    LLMConfig,
+    LLMConfigImportResult,
+    LLMConfigTestResult,
+    LLMTestMemberInfo,
+)
 from interactly.types.llm_configs.params import (
     LLMConfigCreateParams,
     LLMConfigListParams,
@@ -163,6 +170,7 @@ __all__ = [
     "NotFoundError",
     "ConflictError",
     "UnprocessableEntityError",
+    "RequestTooLargeError",
     "RateLimitError",
     "InternalServerError",
     "NoMorePagesError",
@@ -301,6 +309,8 @@ __all__ = [
     # LLM config types
     "LLMConfig",
     "LLMConfigTestResult",
+    "LLMConfigImportResult",
+    "ImportedLLMConfig",
     "LLMTestMemberInfo",
     "LLMConfigCreateParams",
     "LLMConfigUpdateParams",

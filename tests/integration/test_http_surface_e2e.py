@@ -195,7 +195,7 @@ async def test_an_update_without_a_key_keeps_it_and_the_opt_out_removes_it(clien
         assert _key_of(kept) == "sk-sdk-e2e-not-a-real-key", "the stored key was lost on update"
 
         await client.llm_configs.update(
-            created.id, config=OpenAILLMConfig(model=OPENAIModel.GPT_5_4), preserve_api_key=False
+            created.id, config=OpenAILLMConfig(model=OPENAIModel.GPT_5_4), preserve_credentials=False
         )
         assert _key_of(await client.llm_configs.get(created.id)) is None, "the opt-out did not remove the key"
     finally:

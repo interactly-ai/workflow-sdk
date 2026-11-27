@@ -468,7 +468,7 @@ class TestRunListWindow:
 
 
 # --------------------------------------------------------------------------------------------- #
-# LLM config: keep the stored key                                                                 #
+# LLM config: keep the stored credentials                                                               #
 # --------------------------------------------------------------------------------------------- #
 
 
@@ -476,7 +476,7 @@ def _stored(config: Dict[str, Any]) -> Dict[str, Any]:
     return {"llm_config": {"_id": "c1", "name": "Main", "config": config}}
 
 
-class TestPreserveApiKey:
+class TestPreserveCredentials:
     @respx.mock
     def test_an_admin_read_key_is_carried_onto_a_config_that_omits_it(self, client):
         stored = {"type": "openai_llm", "model": "gpt-5.4-mini", "api_key": "sk-stored"}
@@ -507,7 +507,7 @@ class TestPreserveApiKey:
         calls: List[Dict[str, Any]] = []
         respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored({})))
 
-        client.llm_configs.update("c1", config={"type": "openai_llm"}, preserve_api_key=False)
+        client.llm_configs.update("c1", config={"type": "openai_llm"}, preserve_credentials=False)
 
         assert not read.called
         assert "api_key" not in calls[0]["body"]["config"]
@@ -572,6 +572,113 @@ class TestPreserveApiKey:
         client.llm_configs.update("c1", config={"type": "openai_llm"})
 
         assert calls[0]["body"]["config"].get("api_key") is None
+
+    @respx.mock
+    def test_bedrocks_aws_key_pair_is_carried(self, client):
+        stored = {"type": "bedrock_llm", "region": "us-east-1", "aws_access_key_id": "AKIA1", "aws_secret_access_key": "s1"}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(stored)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(stored)))
+
+        client.llm_configs.update("c1", config={"type": "bedrock_llm", "region": "eu-west-1"})
+
+        sent = calls[0]["body"]["config"]
+        assert (sent["aws_access_key_id"], sent["aws_secret_access_key"], sent["region"]) == ("AKIA1", "s1", "eu-west-1")
+
+    @respx.mock
+    def test_a_blank_credential_header_gets_its_stored_value_matched_ignoring_case(self, client):
+        stored = {"type": "custom_llm", "default_headers": {"Authorization": "Bearer stored", "X-Tenant": "t1"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(stored)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(stored)))
+
+        client.llm_configs.update(
+            "c1", config={"type": "custom_llm", "default_headers": {"authorization": "", "X-Tenant": ""}}
+        )
+
+        # The credential comes back; a plain header the caller blanked stays blank.
+        assert calls[0]["body"]["config"]["default_headers"] == {"authorization": "Bearer stored", "X-Tenant": ""}
+
+    @respx.mock
+    def test_with_no_header_map_only_the_stored_credential_headers_are_carried(self, client):
+        stored = {"type": "custom_llm", "default_headers": {"x-api-key": "k1", "X-Tenant": "t1"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(stored)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(stored)))
+
+        client.llm_configs.update("c1", config={"type": "custom_llm", "base_url": "https://gw.example.invalid/v1"})
+
+        assert calls[0]["body"]["config"]["default_headers"] == {"x-api-key": "k1"}
+
+    @respx.mock
+    def test_a_header_the_caller_fills_in_keeps_its_value(self, client):
+        stored = {"type": "custom_llm", "default_headers": {"Authorization": "Bearer stored"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(stored)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(stored)))
+
+        client.llm_configs.update("c1", config={"type": "custom_llm", "default_headers": {"Authorization": "Bearer new"}})
+
+        assert calls[0]["body"]["config"]["default_headers"] == {"Authorization": "Bearer new"}
+
+    @respx.mock
+    def test_a_non_admin_read_of_every_credential_carries_nothing(self, client):
+        # What a member below admin reads: the credential fields null, the credential headers emptied.
+        read = {"type": "custom_llm", "api_key": None, "default_headers": {"Authorization": "", "X-Tenant": "t1"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(read)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(read)))
+
+        client.llm_configs.update("c1", config={"type": "custom_llm", "default_headers": {"Authorization": ""}})
+
+        sent = calls[0]["body"]["config"]
+        assert (sent.get("api_key"), sent["default_headers"]) == (None, {"Authorization": ""})
+
+    @respx.mock
+    def test_opting_out_clears_the_aws_keys_and_headers_on_purpose(self, client):
+        read = respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1")
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored({})))
+
+        client.llm_configs.update("c1", config={"type": "bedrock_llm"}, preserve_credentials=False)
+
+        assert not read.called
+        assert calls[0]["body"]["config"] == {"type": "bedrock_llm"}
+
+    @respx.mock
+    def test_no_credential_crosses_to_a_different_provider(self, client):
+        stored = {"type": "custom_llm", "api_key": "sk-1", "default_headers": {"Authorization": "Bearer stored"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(stored)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored({})))
+
+        client.llm_configs.update("c1", config={"type": "openai_llm"})
+
+        assert calls[0]["body"]["config"] == {"type": "openai_llm"}
+
+    @respx.mock
+    def test_a_backchannel_groups_configs_are_carried_into(self, client):
+        stored = {
+            "type": "llm_group_with_backchannel",
+            "main_llm_config": {"type": "bedrock_llm", "aws_access_key_id": "AKIA1", "aws_secret_access_key": "s1"},
+            "backchannel_llm_config": {"type": "custom_llm", "default_headers": {"Authorization": "Bearer b"}},
+        }
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(stored)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(stored)))
+
+        client.llm_configs.update(
+            "c1",
+            config={
+                "type": "llm_group_with_backchannel",
+                "main_llm_config": {"type": "bedrock_llm"},
+                "backchannel_llm_config": {"type": "custom_llm"},
+            },
+        )
+
+        sent = calls[0]["body"]["config"]
+        assert sent["main_llm_config"]["aws_secret_access_key"] == "s1"
+        assert sent["backchannel_llm_config"]["default_headers"] == {"Authorization": "Bearer b"}
 
     @respx.mock
     async def test_async(self, aclient):

@@ -35,6 +35,31 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### LLM configs: every credential kept, export and import, and clearer errors
+#### Added
+- **`llm_configs.export(llm_config_ids=None)` and `llm_configs.import_bundle(bundle, secret_overrides=None)`.** An
+  export replaces every secret with `"<REDACTED>"` and lists it in `bundle["redactions"]`, whatever the caller's
+  role. An import is all or nothing: every redacted secret must come back in `secret_overrides`, keyed by its path.
+  It returns an `LLMConfigImportResult` (`imported`, each with `renamed_from` and `ids_reminted`, and `warnings`).
+- **`LLMConfigTestResult.used_user_api_key` and `error_category`** (`auth`, `permission`, `quota`, `rate_limit`,
+  `model`, `timeout`, `unavailable` or `other`); `error` holds the provider's own message.
+- **`RequestTooLargeError`** for a 413, such as a signal body over 64 KiB.
+
+#### Changed
+- **`llm_configs.update(..., preserve_api_key=)` is now `preserve_credentials=`**, with no alias, and it keeps
+  every stored credential, not only `api_key`. With an admin token, the server reads a credential the outgoing
+  config leaves blank as "delete it", so an update built in code deleted Bedrock's AWS key pair and a custom
+  gateway's `Authorization` header. Now the stored config is read first and each blank credential carried over:
+  `api_key`, `aws_access_key_id`, `aws_secret_access_key`, and the credential headers of `default_headers`, matched
+  by name ignoring case. Only onto a config of the same provider type, and into group members and backchannel
+  configs as before. A unit test pins the client's list of credentials to the server's declarations.
+
+#### Fixed
+- **A 422's message is readable.** A refused node config's 422 carries FastAPI's error list and a `message` naming
+  the fields; the exception now reads as the `message`, where it used to read as the list. A list alone reads as
+  "where: why", and a refusal nested in a dict (an LLM-config import's) reads as its message. The full body stays
+  on `.body`.
+
 ### Evaluation workflows and `workflow_type`
 #### Added
 - **`client.evaluation_workflows`**, sync and async: `templates()`, `node_presets()`, `create_from_template(

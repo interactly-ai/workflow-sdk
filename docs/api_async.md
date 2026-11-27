@@ -307,11 +307,13 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 |---|---|---|
 | `create` | `(*, name: 'str', config: 'LLMConfigOrDict', description: 'Optional[str]' = None, is_default: 'bool' = False, override_default: 'bool' = False) -> 'LLMConfig'` | Create a saved LLM config (single provider or group). |
 | `delete` | `(llm_config_id: 'str') -> 'None'` | Delete a saved LLM config. |
+| `export` | `(*, llm_config_ids: 'Optional[List[str]]' = None) -> 'Dict[str, Any]'` | Export saved LLM configs as a portable bundle dict; see :meth:`LLMConfigsResource.export`. |
 | `get` | `(llm_config_id: 'str') -> 'LLMConfig'` | Retrieve a single saved LLM config by ID. |
 | `get_default` | `() -> 'LLMConfig'` | Return the team's default saved LLM config. |
+| `import_bundle` | `(bundle: 'Dict[str, Any]', *, secret_overrides: 'Optional[Dict[str, str]]' = None) -> 'LLMConfigImportResult'` | Create LLM configs from an exported bundle, all or nothing; see :meth:`LLMConfigsResource.import_bundle`. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None) -> 'AsyncPage[LLMConfig]'` | List the team's saved LLM configs (paginated). |
 | `schema` | `() -> 'Dict[str, Any]'` | Return the JSON schema for a saved LLM config (``LLMOrGroupConfig``). |
 | `test` | `(llm_config_id: 'str', *, system_prompt: 'str', messages: 'Optional[List[Dict[str, Any]]]' = None, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN) -> 'LLMConfigTestResult'` | Exercise a saved LLM config against a system prompt + optional messages. |
 | `test_inline` | `(*, system_prompt: 'str', config: 'LLMConfigOrDict', messages: 'Optional[List[Dict[str, Any]]]' = None) -> 'LLMConfigTestResult'` | Exercise an unsaved (inline) LLM config before persisting it. |
-| `update` | `(llm_config_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN, is_default: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, override_default: 'bool' = False, preserve_api_key: 'bool' = True) -> 'LLMConfig'` | Update a saved LLM config; only supplied fields are sent. See the sync counterpart, in |
+| `update` | `(llm_config_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, description: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, config: 'NotGivenOr[Optional[LLMConfigOrDict]]' = NOT_GIVEN, is_default: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, override_default: 'bool' = False, preserve_credentials: 'bool' = True) -> 'LLMConfig'` | Update a saved LLM config; only supplied fields are sent. See the sync counterpart, in |
 | `usage` | `(llm_config_id: 'str') -> 'UsageReport'` | The team's workflows that use this saved LLM config; see :meth:`LLMConfigsResource.usage`. |

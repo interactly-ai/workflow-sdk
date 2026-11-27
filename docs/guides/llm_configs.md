@@ -351,7 +351,7 @@ To remove a stored key on purpose, opt out and send the config as given:
 await client.llm_configs.update(
     llm_config_id="<config_id>",
     config=OpenAILLMConfig(model=OPENAIModel.GPT_5_4_MINI),
-    preserve_api_key=False,   # with an admin token, this deletes the stored key
+    preserve_credentials=False,   # with an admin token, this deletes the stored credentials
 )
 ```
 
@@ -545,7 +545,7 @@ For a group that combines a main model with a fast backchannel responder, use `L
 | Option | Default | Notes |
 |---|---|---|
 | `is_default` | False | Mark as team default |
-| `preserve_api_key` | True | Keep the stored key when an update's `config` has none (update) |
+| `preserve_credentials` | True | Keep each stored credential (`api_key`, Bedrock's AWS keys, a gateway's credential headers) an update's `config` leaves blank (update) |
 | `override_default` | False | Allows replacing existing default |
 | `search` | None | Fuzzy filter by name (list) |
 | `page` | 1 | Page number (list) |
@@ -553,8 +553,8 @@ For a group that combines a main model with a fast backchannel responder, use `L
 
 ## Gotchas
 
-1. **Key visibility depends on role** — admins and super-admins are shown the stored `api_key`; every other role gets it redacted.
-2. **An admin update without a key deletes it, unless the SDK keeps it** — leave `preserve_api_key` at its default unless removing the key is the point.
+1. **Credential visibility depends on role** — admins and super-admins are shown the stored credentials; every other role gets `api_key` and Bedrock's AWS keys as `None` and credential headers as `""`.
+2. **An admin update without a credential deletes it, unless the SDK keeps it** — leave `preserve_credentials` at its default unless removing credentials is the point.
 3. **Reference a saved config by id** — set `attachable_llm_config_id`; `named_llm_config_id` / `named_llm_config_name` are filled in by the server, and there is no lookup by name.
 4. **Test inline requires the secret** — `test_inline()` needs a full config with `api_key` if not using a vendor credential stored on the server.
 5. **Override conflicts** — if you set `is_default=True` without `override_default=True` and a default already exists, the operation will fail.
