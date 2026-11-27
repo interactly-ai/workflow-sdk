@@ -53,6 +53,11 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   configs as before. A unit test pins the client's list of credentials to the server's declarations.
 
 #### Fixed
+- **A developer's or viewer's update kept no credential headers.** Below admin, every credential reads blank, so
+  `preserve_credentials` found nothing to carry. An update whose config had no header map then went out without one,
+  and the server, which keeps a stored credential header an update sends blank but deletes one it leaves out, deleted
+  a custom gateway's `Authorization`. The stored credential headers are now sent by name, blank, and kept. `api_key`
+  and the AWS keys were never at risk: the server restores those below admin whatever the update sends.
 - **A 422's message is readable.** A refused node config's 422 carries FastAPI's error list and a `message` naming
   the fields; the exception now reads as the `message`, where it used to read as the list. A list alone reads as
   "where: why", and a refusal nested in a dict (an LLM-config import's) reads as its message. The full body stays

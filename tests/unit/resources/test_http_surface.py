@@ -635,6 +635,19 @@ class TestPreserveCredentials:
         assert (sent.get("api_key"), sent["default_headers"]) == (None, {"Authorization": ""})
 
     @respx.mock
+    def test_a_non_admin_update_with_no_header_map_names_the_credential_headers_blank(self, client):
+        # A member below admin reads them blank. Sent blank, the server keeps the stored values; left out, it would
+        # delete them, as a developer's update did before the names were carried.
+        read = {"type": "custom_llm", "api_key": None, "default_headers": {"Authorization": "", "X-Tenant": "t1"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(read)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(read)))
+
+        client.llm_configs.update("c1", config={"type": "custom_llm", "base_url": "https://gw.example.invalid/v1"})
+
+        assert calls[0]["body"]["config"]["default_headers"] == {"Authorization": ""}
+
+    @respx.mock
     def test_opting_out_clears_the_aws_keys_and_headers_on_purpose(self, client):
         read = respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1")
         calls: List[Dict[str, Any]] = []

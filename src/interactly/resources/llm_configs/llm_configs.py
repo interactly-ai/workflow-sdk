@@ -152,10 +152,15 @@ def _carry_stored_credentials(new_config: Any, old_config: Any) -> None:
 
 
 def _carry_stored_headers(new_headers: Any, old_headers: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """The outgoing headers with each blank credential header given its stored value, or ``None`` to leave them."""
-    stored = {name: value for name, value in old_headers.items() if value and is_credential_header(name)}
+    """The outgoing headers with each blank credential header given its stored value, or ``None`` to leave them.
+
+    A stored credential header is carried by name even when it reads blank, as it does for every member below admin.
+    The server keeps a stored credential header that an update sends blank, but deletes one the update leaves out, so
+    a map left out entirely would delete a non-admin's headers without this.
+    """
+    stored = {name: value for name, value in old_headers.items() if is_credential_header(name)}
     if new_headers is None:
-        return dict(stored) or None
+        return {name: value or "" for name, value in stored.items()} or None
     if not isinstance(new_headers, dict):
         return None
     stored_by_lower = {str(name).lower(): value for name, value in stored.items()}
@@ -261,8 +266,9 @@ class LLMConfigsResource(SyncAPIResource):
 
         ``preserve_credentials`` (the default) guards against that. The stored config is read first, and each
         credential ``config`` leaves blank is carried over from it, in group members (paired by ``logical_id``) and
-        backchannel configs too, and only onto a config of the same provider type. That costs one extra GET. For a
-        non-admin the read returns no credentials and nothing changes, since the server keeps them for them anyway.
+        backchannel configs too, and only onto a config of the same provider type. That costs one extra GET. Below
+        admin the read returns the credentials blank and the server restores the credential fields itself, but it
+        deletes a credential header the update leaves out, so each stored one is sent by name, blank, to be kept.
 
         Args:
             preserve_credentials: Pass ``False`` to send ``config`` exactly as given. With an admin token, that is

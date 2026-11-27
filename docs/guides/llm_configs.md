@@ -362,8 +362,11 @@ await client.llm_configs.update(
 )
 ```
 
-For a non-admin token nothing changes either way: the server never shows them the credentials, and keeps them for
-them itself.
+For a token below admin, the server never shows the credentials, and keeps most of them itself: it restores `api_key`
+and the AWS keys whatever the update sends, and keeps a stored credential header the update sends blank. A credential
+header the update leaves out, though, is deleted, so with no header map in `config`, `update` sends each stored
+credential header by name, blank, and the server keeps it. With `preserve_credentials=False` and no header map, a
+non-admin's update deletes the stored credential headers.
 
 To change the default:
 
