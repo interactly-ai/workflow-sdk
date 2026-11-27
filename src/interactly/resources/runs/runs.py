@@ -100,17 +100,30 @@ class RunsResource(SyncAPIResource):
         runtime_variables: Optional[Dict[str, Any]] = None,
         run_input: Optional["WorkflowRunInput"] = None,
         rerun_token: Optional[str] = None,
+        workflow_run_id: Optional[str] = None,
         cast_to: Type[RunEvent] = RunEvent,
     ) -> Stream[RunEvent]:
         """
         Open a WebSocket connection and stream workflow run events.
 
-        Returns a context manager that yields ``RunEvent`` objects.
+        Returns a context manager that yields ``RunEvent`` objects. Send each later turn with ``send()`` once an event
+        is ``is_ready_for_input()``, and end the run with ``stop()``, so one ``with`` block holds a whole conversation.
 
         Leaving the ``with`` block closes the socket, and the server cancels a run that has not finished, companion
         threads included, even mid-turn (``status`` ``cancelled``, ``termination_source`` ``websocket_disconnect``).
         Read until ``event.is_terminal()`` to let the run end on its own. A refusal arrives as a ``StreamError``
         subclass named for it (see ``interactly._streaming``), carrying the close ``code`` and ``reason``.
+
+        **Taking a run back.** Where durable socket runs are on, a run left while it waited on a pause (an
+        approval, a wait, a signal, a job) is handed to the server rather than cancelled. ``workflow_run_id`` takes
+        such a run back onto a new stream: the first frame says ``"Workflow run taken back"`` and carries the turns
+        so far as ``restored_messages``, and ``send()`` carries on the conversation. A take-back names the run and
+        nothing else, so ``version_number``, ``run_input``, ``rerun_token`` and a ``command`` other than ``START``
+        are refused; ``dynamic_variables`` and ``runtime_variables`` go with each later turn. The server refuses a
+        run it can't hand over with ``TakeBackRefusedError`` (4010): durable socket runs are off, or the run has
+        ended, is open elsewhere, was not started on a stream, or the server is carrying it on right now (worth
+        retrying). ``TakeBackForbiddenError`` (4030) is a role below developer; ``StreamNotFoundError`` (4040), no
+        such run on this team.
 
         Args:
             workflow_id:       The workflow to run.
@@ -123,21 +136,25 @@ class RunsResource(SyncAPIResource):
                                (including ``dynamic_variables`` / ``runtime_variables`` /
                                ``thread_to_node_inputs``) are merged into the WS payload,
                                which the server validates as a full ``WorkflowRunInput``.
+            rerun_token:       A token from ``client.reruns.create_token``, to start a re-run from it.
+            workflow_run_id:   A run to take back, instead of starting one (see above).
             cast_to:           Pydantic model to parse each event into.
+
+        Raises:
+            ValueError: ``workflow_run_id`` was given with an argument a take-back can't carry.
 
         Example::
 
             with client.runs.stream(workflow_id="abc") as events:
                 for event in events:
                     print(event)
+                    if event.is_ready_for_input():
+                        events.send("Tuesday morning, please.")
         """
         ws_base = self._client._ws_base_url()
         ws_url = f"{ws_base}{_WS_PATH}"
         # The gateway authenticates WS upgrades via a single-use ``?token=``
         # session; mint one up front (falls back to header auth when absent).
-        token = self._client._mint_ws_session_token()
-        if token:
-            ws_url = f"{ws_url}?token={token}"
         payload = _build_stream_payload(
             workflow_id=workflow_id,
             command=command,
@@ -147,7 +164,11 @@ class RunsResource(SyncAPIResource):
             runtime_variables=runtime_variables,
             run_input=run_input,
             rerun_token=rerun_token,
+            workflow_run_id=workflow_run_id,
         )
+        token = self._client._mint_ws_session_token()
+        if token:
+            ws_url = f"{ws_url}?token={token}"
 
         return Stream(
             ws_url=ws_url,
@@ -694,15 +715,20 @@ class AsyncRunsResource(AsyncAPIResource):
         runtime_variables: Optional[Dict[str, Any]] = None,
         run_input: Optional["WorkflowRunInput"] = None,
         rerun_token: Optional[str] = None,
+        workflow_run_id: Optional[str] = None,
         cast_to: Type[RunEvent] = RunEvent,
     ) -> AsyncStream[RunEvent]:
         """
         Open an async WebSocket connection and stream workflow run events.
 
-        Returns an async context manager that yields ``RunEvent`` objects.
-        Accepts optional ``dynamic_variables`` / ``runtime_variables`` or a full
-        typed ``run_input`` (preferred); see :meth:`RunsResource.stream`, which also says what leaving the block does
-        to a run that has not finished (it is cancelled) and how refusals arrive.
+        Returns an async context manager that yields ``RunEvent`` objects, with ``send()`` and ``stop()`` for the
+        run's later turns. Accepts optional ``dynamic_variables`` / ``runtime_variables`` or a full typed
+        ``run_input`` (preferred), and ``workflow_run_id`` to take a run back. See :meth:`RunsResource.stream`, which
+        also says what leaving the block does to a run that has not finished (it is cancelled), how refusals arrive,
+        and which runs can be taken back.
+
+        Raises:
+            ValueError: ``workflow_run_id`` was given with an argument a take-back can't carry.
         """
         ws_base = self._client._ws_base_url()
         ws_url = f"{ws_base}{_WS_PATH}"
@@ -715,6 +741,7 @@ class AsyncRunsResource(AsyncAPIResource):
             runtime_variables=runtime_variables,
             run_input=run_input,
             rerun_token=rerun_token,
+            workflow_run_id=workflow_run_id,
         )
 
         return AsyncStream(
@@ -1142,6 +1169,7 @@ def _build_stream_payload(
     runtime_variables: Optional[Dict[str, Any]],
     run_input: Optional["WorkflowRunInput"],
     rerun_token: Optional[str] = None,
+    workflow_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Build the WebSocket handshake payload for ``/workflow-runs/ws``.
 
@@ -1150,6 +1178,17 @@ def _build_stream_payload(
     ``dynamic_variables`` / ``runtime_variables`` are layered on top when given.
     When nothing extra is supplied this reduces to today's minimal payload.
     """
+    if workflow_run_id is not None:
+        return _build_take_back_payload(
+            workflow_id=workflow_id,
+            workflow_run_id=workflow_run_id,
+            command=command,
+            version_number=version_number,
+            run_input=run_input,
+            rerun_token=rerun_token,
+            dynamic_variables=dynamic_variables,
+            runtime_variables=runtime_variables,
+        )
     if run_input is not None:
         payload: Dict[str, Any] = dict(serialise_config(run_input))
     else:
@@ -1167,6 +1206,51 @@ def _build_stream_payload(
         # state server-side, and rejects the connection with close code 4007 if it is expired or
         # was minted for a different workflow/version.
         payload["rerun_token"] = rerun_token
+    if dynamic_variables is not None:
+        payload["dynamic_variables"] = dynamic_variables
+    if runtime_variables is not None:
+        payload["runtime_variables"] = runtime_variables
+    return payload
+
+
+def _build_take_back_payload(
+    *,
+    workflow_id: str,
+    workflow_run_id: str,
+    command: WorkflowCommand,
+    version_number: Optional[int],
+    run_input: Optional["WorkflowRunInput"],
+    rerun_token: Optional[str],
+    dynamic_variables: Optional[Dict[str, Any]],
+    runtime_variables: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """The ``start`` frame that takes back a handed-off run, shaped as the workflow editor sends it.
+
+    It names the run and nothing else: the run keeps the version it ran, and the server refuses a take-back that also
+    carries a re-run token. The variables ride along only so the stream sends them with each later turn; the server
+    reads none of them here.
+    """
+    refused = [
+        name
+        for name, given in (
+            ("version_number", version_number is not None),
+            ("run_input", run_input is not None),
+            ("rerun_token", rerun_token is not None),
+            ("command", (command.value if isinstance(command, WorkflowCommand) else command) != "start"),
+        )
+        if given
+    ]
+    if refused:
+        raise ValueError(
+            f"A take-back (workflow_run_id) names the run and nothing else; drop {', '.join(refused)}. The run keeps "
+            "its own version, and its next turn goes through send()."
+        )
+    payload: Dict[str, Any] = {
+        "command": "start",
+        "workflow_id": workflow_id,
+        "workflow_run_id": workflow_run_id,
+        "thread_to_node_inputs": {"0": {"node_run_inputs": []}},
+    }
     if dynamic_variables is not None:
         payload["dynamic_variables"] = dynamic_variables
     if runtime_variables is not None:

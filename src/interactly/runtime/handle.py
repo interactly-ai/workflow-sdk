@@ -19,6 +19,8 @@ import asyncio
 import copy
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Iterator, Optional
 
+from interactly._utils._transform import deep_merge
+
 if TYPE_CHECKING:  # pragma: no cover - imports for type hints only
     from interactly_configs import WorkflowConfigFullyHydrated
     from interactly_configs.workflow_run import WorkflowRunInput
@@ -36,23 +38,6 @@ __all__ = [
 ]
 
 
-def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
-    """Recursively merge ``override`` on top of ``base`` without mutating either.
-
-    ``override`` (caller/per-turn values) wins at the leaf level; ``base``
-    (handle defaults) values survive under dicts that ``override`` only
-    partially overrides.  Non-dict values are replaced wholesale.
-    """
-    result = dict(base)
-    for key, override_value in override.items():
-        base_value = result.get(key)
-        if isinstance(base_value, dict) and isinstance(override_value, dict):
-            result[key] = _deep_merge(base_value, override_value)
-        else:
-            result[key] = override_value
-    return result
-
-
 def _merge_dynamic_variables(run_input: "WorkflowRunInput", defaults: Dict[str, Any]) -> "WorkflowRunInput":
     """Return a copy of ``run_input`` with ``defaults`` merged underneath its own ``dynamic_variables``.
 
@@ -64,7 +49,7 @@ def _merge_dynamic_variables(run_input: "WorkflowRunInput", defaults: Dict[str, 
     """
     if not defaults:
         return run_input
-    merged = _deep_merge(defaults, run_input.dynamic_variables or {})
+    merged = deep_merge(defaults, run_input.dynamic_variables or {})
     # Use model_copy to avoid mutating the caller's instance.
     return run_input.model_copy(update={"dynamic_variables": merged})
 

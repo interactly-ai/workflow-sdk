@@ -66,6 +66,8 @@ FACADE_MODULES = frozenset(
 KNOWN_CONFIGS_IMPORTERS = frozenset(
     Path(p)
     for p in (
+        # Annotation only: a stream's send() takes a typed run input, and builds a plain message turn without one.
+        "src/interactly/_streaming.py",
         "src/interactly/configs.py",
         "src/interactly/runtime/events.py",
         "src/interactly/runtime/handle.py",

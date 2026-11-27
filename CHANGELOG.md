@@ -35,6 +35,30 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
   one finding: `SimulationStatus` lacks `paused`.
 
+### A whole conversation on one stream
+#### Added
+- **`stream.send()` and `stream.stop()`**, on `Stream` and `AsyncStream`, and **`stream.run_id`.** A stream used to
+  send its start frame and only read, so every later turn needed REST execute. Now one `with` block holds a whole
+  conversation: send each turn once an event is `is_ready_for_input()`, keep iterating, and end the run with
+  `stop()` (stored `cancelled`, `termination_source` `client_stop`).
+  - `send(message)` puts the text on the main thread as the user's message, as the workflow editor does; a typed
+    `run_input` covers anything more. The variables the stream was opened with go with every turn, because edge
+    conditions read them from each turn's input; a turn's own are merged over them for that turn.
+  - The server reads the socket only between turns, so a turn sent while one runs is taken when it ends.
+  - Sending after the run has ended raises `StreamError`; a refusal met while sending is raised by iteration, as
+    its typed exception.
+- **`client.runs.stream(..., workflow_run_id=...)` takes back a run** that a stream left while it waited on a pause
+  (an approval, a wait, a signal, a job), which the server then carried on. It needs durable socket runs on the
+  server; elsewhere it raises `TakeBackRefusedError`. A take-back names the run and nothing else, so `version_number`,
+  `run_input`, `rerun_token` and a command other than `START` raise `ValueError`.
+
+#### Fixed
+- **`event.is_ready_for_input()` fires in every workflow, once per turn that hands over to the user.** The server
+  sends `workflow_ready_for_input` only while fork companions run on, so in a workflow without them it never fired
+  and a loop waiting on it hung. A stream now follows each turn as the server settles one, and marks the turn's
+  `end_workflow_iteration` when a main thread was left waiting for a message. A take-back's acknowledgement is marked
+  when the run waits for its user.
+
 ### Runs and the run socket
 #### Added
 - **A typed exception for every code the run socket closes with.** Each is a `StreamError` subclass carrying
