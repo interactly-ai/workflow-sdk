@@ -24,7 +24,7 @@ say, calls tools, and eventually ends. The server holds all the state; your code
 | **Author** a workflow as code | Typed config classes (`SayLLMNodeConfig`, `DirectEdgeConfig`, …) via the `[configs]` extra |
 | **Deploy** it | `client.workflows.create` / `create_from_config`, versions, publish, clone, export/import |
 | **Run** it | `client.runs.stream` (WebSocket), `client.runs.execute` (turn-by-turn), or a runtime `handle` |
-| **Operate** it | Runs, evaluations, comments, schedules, webhooks, simulations, global variables |
+| **Operate** it | Runs, evaluations, evaluation workflows (`client.evaluation_workflows`), comments, schedules, webhooks, simulations, global variables |
 
 ## Two layers: authoring vs. execution
 

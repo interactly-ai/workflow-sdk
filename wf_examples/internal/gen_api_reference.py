@@ -37,6 +37,7 @@ SECTIONS: List[Tuple[str, str]] = [
     ("schedules", "Schedules"),
     ("webhooks", "Webhooks"),
     ("simulations", "Simulations"),
+    ("evaluation_workflows", "Evaluation workflows"),
     ("global_variables", "Global variables"),
     ("super_nodes", "Super nodes"),
     ("node_libraries", "Node libraries"),

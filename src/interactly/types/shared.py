@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-__all__ = ["WorkflowStatus", "WorkflowCommand", "RunStatus"]
+__all__ = ["WorkflowStatus", "WorkflowCommand", "RunStatus", "WorkflowType"]
 
 
 class WorkflowStatus(str, Enum):
@@ -15,6 +15,14 @@ class WorkflowStatus(str, Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     ARCHIVED = "archived"
+
+
+class WorkflowType(str, Enum):
+    """What a workflow is: set when it is created and never changed. A workflow stored without one is standard."""
+
+    STANDARD = "standard"
+    #: Post-call analysis of a finished conversation, run by the server; never on a live call.
+    EVALUATION = "evaluation"
 
 
 class WorkflowCommand(str, Enum):

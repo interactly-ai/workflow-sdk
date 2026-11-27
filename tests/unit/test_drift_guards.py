@@ -151,17 +151,13 @@ class TestRouteCoverage:
     gained was found by hand, a sync late.
     """
 
-    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **16**.
-    #:
-    #: * 6 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export and import.
-    #: * 10 query fields no SDK method can send: ``workflow_type`` (3); the workflow list's ``categories``,
-    #:   ``created_by``, ``favorites`` and ``logical_id``; ``workflows.get``'s ``version_number`` and
-    #:   ``find_active_version``; ``backend`` on the realtime-compatibility check.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **2**, the two public routes
+    #: no SDK method calls: LLM-config export and import.
     #:
     #: Fields a route declares but never reads are on ``KNOWN_UNCOVERED_QUERY_FIELDS``, with the reason.
     #:
     #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
-    KNOWN_ROUTE_DEBT = 16
+    KNOWN_ROUTE_DEBT = 2
 
     @staticmethod
     def _report():

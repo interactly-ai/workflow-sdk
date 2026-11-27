@@ -43,6 +43,7 @@ from config_parity import find_interactly_ai_root  # noqa: E402
 ENUM_TWINS: Dict[str, Tuple[str, str]] = {
     "types/shared.py:RunStatus": ("agentic_workflow_framework/configs/workflow_run.py", "WorkflowStatus"),
     "types/shared.py:WorkflowCommand": ("agentic_workflow_framework/configs/workflow_run.py", "WorkflowCommand"),
+    "types/shared.py:WorkflowType": ("agentic_workflow_framework/configs/workflow_type.py", "WorkflowType"),
     "types/simulations/simulation.py:SimulationStatus": (
         "agentic_workflow_framework/configs/simulation.py",
         "SimulationStatus",

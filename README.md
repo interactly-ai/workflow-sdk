@@ -7,7 +7,7 @@ dashboard, expressed as typed Python config objects and driven through a typed c
 - **Author** workflows from typed config classes (nodes, edges, tools, LLM configs, super-nodes, …).
 - **Deploy** them to the Interactly Workflow API (create workflows, versions, publish, clone, export/import).
 - **Run** them interactively (streaming events over WebSocket, or turn-by-turn `execute`).
-- **Operate** them (runs, evaluations, comments, schedules, webhooks, simulations, global variables).
+- **Operate** them (runs, evaluations, evaluation workflows, comments, schedules, webhooks, simulations, global variables).
 
 ---
 

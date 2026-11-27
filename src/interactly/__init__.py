@@ -61,6 +61,12 @@ from interactly.runtime import (
 from interactly.types.copilot.copilot_types import CopilotSchema
 from interactly.types.edges.edge import Edge
 from interactly.types.edges.params import EdgeCreateParams, EdgeListParams, EdgeUpdateParams
+from interactly.types.evaluation_workflows.evaluation_workflow import (
+    AnalysisNodePreset,
+    EvaluationTemplate,
+    EvaluationWorkflow,
+    EvaluationWorkflowVersion,
+)
 from interactly.types.global_variables.global_variable import GlobalVariable
 from interactly.types.global_variables.params import (
     GlobalVariableBulkCreateParams,
@@ -94,7 +100,7 @@ from interactly.types.runs.run_control import (
 from interactly.types.runs.run_event import RunEvent
 from interactly.types.schedules.params import ScheduleCreateParams, ScheduleListParams, ScheduleUpdateParams
 from interactly.types.schedules.schedule import Schedule, ScheduleStatus
-from interactly.types.shared import RunStatus, WorkflowCommand, WorkflowStatus
+from interactly.types.shared import RunStatus, WorkflowCommand, WorkflowStatus, WorkflowType
 from interactly.types.simulations.simulation import (
     Simulation,
     SimulationGroup,
@@ -186,12 +192,18 @@ __all__ = [
     # Enums
     "WorkflowStatus",
     "WorkflowCommand",
+    "WorkflowType",
     "RunStatus",
     # Workflow models
     "Workflow",
     "WorkflowVersion",
     "UsageEntry",
     "UsageReport",
+    # Evaluation workflow types
+    "EvaluationTemplate",
+    "AnalysisNodePreset",
+    "EvaluationWorkflow",
+    "EvaluationWorkflowVersion",
     "VersionDiff",
     "WorkflowLintReport",
     "RealtimeCompatibilityReport",
