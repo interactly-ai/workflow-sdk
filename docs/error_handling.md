@@ -17,14 +17,25 @@ InteractlyError
 │   ├── NotFoundError              # 404 — resource does not exist
 │   ├── ConflictError              # 409 — duplicate / state conflict
 │   ├── UnprocessableEntityError   # 422 — request body failed validation
+│   ├── RequestTooLargeError       # 413 — request body over the server's limit
 │   ├── RateLimitError             # 429 — too many requests
 │   └── InternalServerError        # 5xx — backend error
 ├── APIConnectionError             # Network failure (no response)
 │   └── APITimeoutError            # Request timed out
 ├── NoMorePagesError               # Advanced past the last page of a paginator
-└── StreamError                    # WebSocket / streaming failure
-    ├── InvalidStreamInputError    # close 4006 — start frame carried client-supplied state
-    └── RerunTokenError            # close 4007 — re-run token expired or mismatched
+└── StreamError                    # WebSocket / streaming failure (close code in parentheses)
+    ├── StreamPermissionError      # 1008 — caller's role may not run workflows
+    ├── StreamServerError          # 1011 — server failed while handling the run
+    ├── StreamRejectedError        # 4000 — start frame or configuration refused
+    ├── UnrunnableWorkflowError    # 4001, 4002, 4005 — stored workflow cannot run
+    ├── ConcurrencyLimitError      # 4003 — too many runs at once
+    ├── InvalidStreamInputError    # 4006 — start frame carried client-supplied state
+    ├── RerunTokenError            # 4007 — re-run token expired or mismatched
+    ├── RunChangedElsewhereError   # 4009 — run paused, resumed or cancelled elsewhere
+    ├── TakeBackRefusedError       # 4010 — run could not be taken back
+    ├── TakeBackForbiddenError     # 4030 — role below developer, for a take-back
+    ├── StreamNotFoundError        # 4040 — workflow or run does not exist
+    └── ResumeInputRejectedError   # 4400 — frame carried a resume input
 
 WebhookVerificationError           # Standalone Exception (not an InteractlyError) — HMAC signature mismatch
 ```
@@ -69,8 +80,9 @@ Every `APIError` exposes:
 | Attribute | Type | Description |
 |-----------|------|-------------|
 | `status_code` | `int` | HTTP status code. |
-| `message` | `str \| None` | Error message from the API response body. |
-| `body` | `str` | Raw response body text. |
+| `message` | `str` | The message built from the body. See [Validation Errors](#validation-errors-422). |
+| `body` | `Any \| None` | The parsed JSON response body, when there is one. |
+| `request_id` | `str \| None` | The `X-Request-Id` response header, if present. |
 | `request` | `httpx.Request` | The outgoing request that caused the error. |
 | `response` | `httpx.Response` | The raw HTTP response. |
 
@@ -90,9 +102,20 @@ async with AsyncWorkflowClient() as client:
 
 ## Validation Errors (422)
 
-The backend returns `422 Unprocessable Entity` when the request body fails
-schema validation. The `message` attribute will contain a description of the
-failing fields.
+The backend returns `422 Unprocessable Entity` when the request body fails schema validation. `message` names
+the failing fields and why. The full error list, or the paths a refusal names, stays on `body`.
+
+`message` is built the same way for every API error:
+
+- A string `detail` is the message. When the body also has an `error` key, the two are joined as `detail: error`.
+- When `detail` is a list (FastAPI's validation errors) or a dict, the body's `message` beside it is used, if there
+  is one. A `message` that is itself a dict reads as its own `message`, so a refusal naming `field_errors` reads as
+  its text. A server message names the fields as a person knows them, such as `Node Name: Input should be a valid
+  string; …`.
+- With no `message`, a list reads as `field: why` pairs joined by `; `. The `body`, `query` and `path` locations are
+  dropped from the field name.
+- When the body has both `message` and `error`, they are joined as `message: error`. The `message` names the
+  category and `error` names the rule that failed.
 
 ```python
 from interactly import AsyncWorkflowClient, UnprocessableEntityError
@@ -105,6 +128,17 @@ async with AsyncWorkflowClient() as client:
         )
     except UnprocessableEntityError as e:
         print(e.message)
+```
+
+A workflow import that names a secret path it does not list is refused with the paths on `body`:
+
+```python
+async with AsyncWorkflowClient() as client:
+    try:
+        await client.workflows.import_bundle(bundle)
+    except UnprocessableEntityError as e:
+        print(e.message)
+        print(e.body["field_errors"])   # the paths the refusal names
 ```
 
 ---
@@ -140,6 +174,21 @@ The rules behind these are documented in
 
 ---
 
+## Request too large (413)
+
+A request body over the server's limit raises `RequestTooLargeError`. A run's signal body and its resume data are
+limited to 64 KiB.
+
+```python
+from interactly import AsyncWorkflowClient, RequestTooLargeError
+
+async with AsyncWorkflowClient() as client:
+    try:
+        await client.runs.send_signal(run_id, "approval", large_body)
+    except RequestTooLargeError as e:
+        print(e.message)   # The signal body is N bytes, over the 65536 byte limit.
+```
+
 ## Refusals (403) and hidden resources (404)
 
 Some resources are restricted by role. A refused write arrives as `PermissionDeniedError`; servers before
@@ -168,29 +217,37 @@ A date window wider than 31 days on `runs.list()` is a `BadRequestError` whose m
 
 ## Streaming Errors
 
-Most WebSocket closures simply end the stream. Two are the server rejecting your start frame, and each
-raises a specific subclass of `StreamError`:
+A run socket closed with code 1000 ends iteration. Any other close raises a `StreamError` subclass named for
+the close code. A code the SDK does not map raises plain `StreamError`, with `code` and `reason` set. The full
+table is in [Streaming → close codes](streaming.md#close-codes-and-errors).
+
+Every `StreamError` carries `code`, `reason` and `server_message`. `server_message` is the full message of the
+`workflow_error` frame the server sent before closing, or `None`. A close reason holds only 123 bytes, so read
+`server_message` when the reason looks cut off.
 
 ```python
-from interactly import InvalidStreamInputError, RerunTokenError, StreamError
+from interactly import (
+    AsyncWorkflowClient,
+    InvalidStreamInputError,
+    RerunTokenError,
+    StreamError,
+    StreamPermissionError,
+)
 
-try:
-    async with client.runs.stream(workflow_id=wf_id, rerun_token=token) as events:
-        async for event in events:
-            ...
-except InvalidStreamInputError:
-    # close 4006 — the frame carried `initial_state`. A client is never the source of run
-    # state; mint a re-run token instead.
-    ...
-except RerunTokenError:
-    # close 4007 — expired, or minted for a different workflow/version. Mint a fresh one.
-    ...
-except StreamError:
-    # anything else: an abnormal closure.
-    ...
+async with AsyncWorkflowClient() as client:
+    try:
+        async with client.runs.stream(workflow_id=wf_id, rerun_token=token) as events:
+            async for event in events:
+                ...
+    except InvalidStreamInputError:
+        ...   # close 4006: the frame carried initial_state; use a rerun token instead
+    except RerunTokenError:
+        ...   # close 4007: expired, or minted for a different workflow or version
+    except StreamPermissionError:
+        ...   # close 1008: a viewer; running a workflow needs developer access
+    except StreamError as exc:
+        print(exc.code, exc.server_message or exc.reason)
 ```
-
-See [Streaming → close codes](streaming.md#close-codes-and-errors).
 
 ---
 
@@ -228,6 +285,9 @@ client = AsyncWorkflowClient(
     max_retries=4,   # 0 to disable retries entirely
 )
 ```
+
+Run control is the exception to the 503 rule. On `pause`, `resume`, `cancel` and `send_signal`, a 409 that carries
+`Retry-After` is retried within `max_retries`, and a 503 is raised at once as `InternalServerError`.
 
 Per-request override is not currently supported — set `max_retries=0` on the
 client and implement your own retry loop if needed.
@@ -284,3 +344,22 @@ except NotFoundError:
 except InteractlyError as e:
     print(f"Unexpected error: {e}")
 ```
+
+---
+
+## See also
+
+- [Streaming](streaming.md) — the run socket's close codes and the turn protocol
+- [Run control](guides/run_control.md) — pausing, resuming and signalling durable runs
+- [Companion threads](guides/companion_threads.md#the-four-graph-rules) — the graph rules behind 400s
+
+## Gotchas
+
+- **`body` is not always a dict.** Check `isinstance(e.body, dict)` before indexing it. When it is not a dict,
+  `message` reads as the HTTP reason phrase.
+- **`message` is a summary.** For the full error list, read `e.body`.
+- **A viewer's stream raises `StreamPermissionError` (1008), not `PermissionDeniedError`.** The latter is a REST
+  refusal. A take-back by a role below developer raises `TakeBackForbiddenError` (4030).
+- **A `workflow_error` does not always end the run.** A tolerated node failure ends the turn, and the socket stays
+  open. See [Streaming](streaming.md#gotchas).
+- **A refusal met while sending is raised by iteration**, not by `send()`.

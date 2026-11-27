@@ -46,9 +46,21 @@ async with AsyncWorkflowClient() as client:
 
 The return dict contains:
 - `workflow_id` — the published workflow's ID
-- `workflow_version_number` — the version snapshot created
+- `workflow_version_number` — the version published (the active one unless `version_number` is given)
 - `num_input_fields` — count of interface fields
 - `message` — human-readable confirmation
+
+Publishing records the interface and a snapshot of one existing version. It does not create a version, and the
+workflow itself is unchanged. Publishing the same version again replaces its interface. To publish a version other
+than the active one, pass `version_number`:
+
+```python
+result = await client.super_nodes.publish(
+    workflow_id="<workflow_id>",
+    interface=interface,
+    version_number=2,
+)
+```
 
 ## Get super node details
 
@@ -64,6 +76,8 @@ print(f"Interface: {super_node.super_node_interface}")
 if super_node.encapsulated_workflow_config:
     print(f"Config nodes: {len(super_node.encapsulated_workflow_config.nodes)}")
 ```
+
+A workflow that has not been published as a super node raises `NotFoundError`.
 
 To fetch a specific version:
 
@@ -112,12 +126,15 @@ The report contains diagnostics like duplicate node IDs and expansion warnings.
 
 ## Check snapshot freshness
 
-Determine if a workflow's super-node snapshot is current (matches the workflow's latest state):
+Check whether each super node a workflow version embeds still matches the latest publish of its sub-workflow:
 
 ```python
-status = await client.super_nodes.snapshot_status(workflow_id="<workflow_id>")
-print(status)  # e.g., {"is_current": True, "last_updated_at": "2025-07-03T..."}
+status = await client.super_nodes.snapshot_status(workflow_id="<workflow_id>")                    # active version
+status = await client.super_nodes.snapshot_status(workflow_id="<workflow_id>", version_number=2)
+print(status["super_nodes"])   # one entry per embedded super node
 ```
+
+The result is a dict with `workflow_id`, `version_number` and `super_nodes`.
 
 ## Find dependents
 
@@ -158,6 +175,14 @@ result = await client.super_nodes.unpublish(
     workflow_id="<workflow_id>",
     version_number=1,
 )
+```
+
+To see what would break before unpublishing, pass `dry_run=True`. It changes nothing and lists the workflows that still
+reference the super node:
+
+```python
+preview = await client.super_nodes.unpublish(workflow_id="<workflow_id>", dry_run=True)
+print(preview["workflows_referencing"])
 ```
 
 ## Embedding a super node in a workflow
@@ -201,16 +226,10 @@ Prefer the typed `SuperNodeConfig` when the extra is available — it validates 
 
 | Option | Default | Notes |
 |---|---|---|
-| `version_number` | active version | Retrieve or unpublish a specific version |
+| `version_number` | active version | Retrieve, publish, unpublish or snapshot-check a specific version |
+| `dry_run` | False | Unpublish only: list the referencing workflows and change nothing |
 | `page` | 1 | For dependents pagination |
 | `size` | 20 | Items per page (dependents) |
-
-## Gotchas
-
-1. **Interface mapping is critical** — the interface must correctly map input fields to the sub-workflow's dynamic variables or the super node will fail at runtime.
-2. **Snapshot stalenesss** — after modifying a sub-workflow's config, call `publish()` again to update the snapshot; use `snapshot_status()` to check freshness.
-3. **Dependent workflows fail** — unpublishing a super node breaks any workflow that references it; always check `dependents()` first.
-4. **Active version matters** — if you don't specify `version_number`, the workflow's currently-active version is used.
 
 ## Synchronous alternative
 
@@ -242,4 +261,10 @@ client.close()
 - [Embedding a super node](../../wf_examples/wf_example_progression_17.py) — progression example that builds and embeds a sub-workflow
 - [Configs guide](../configs.md) — super node config types and parameters
 - [API reference](../api_async.md#super-nodes--clientsuper_nodes)
-```
+
+## Gotchas
+
+1. **Interface mapping is critical** — the interface must correctly map input fields to the sub-workflow's dynamic variables or the super node will fail at runtime.
+2. **Snapshots are taken at publish** — editing a sub-workflow does not change the snapshot published from it. Publish the version that holds the change, and use `snapshot_status()` to check whether embedded super nodes still match the latest publish.
+3. **Dependent workflows fail** — unpublishing a super node breaks any workflow that references it; check `dependents()` or `unpublish(..., dry_run=True)` first.
+4. **Active version matters** — if you don't specify `version_number`, the workflow's currently-active version is used.

@@ -69,7 +69,7 @@ async with AsyncWorkflowClient() as client:
 
 **Parameters:**
 - `workflow_id`: The workflow to list schedules for.
-- `status`: Optional. Filter by schedule status (e.g., `"pending"`, `"completed"`, `"failed"`). Use `ScheduleStatus` enum.
+- `status`: Optional. Filter by schedule status: `"pending"`, `"in_progress"` (its run is executing now), `"completed"`, `"failed"` or `"cancelled"`. Use the `ScheduleStatus` enum.
 - `skip`: Offset for pagination (default 0).
 - `limit`: Max items per call (1–100, default 50).
 

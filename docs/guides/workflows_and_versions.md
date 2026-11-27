@@ -103,9 +103,16 @@ async with AsyncWorkflowClient() as client:
 
     # Filter by name/description
     page = await client.workflows.list(search="customer")
+
+    # Filter by type, category, logical id, creator or favourites (every filter given must match)
+    page = await client.workflows.list(workflow_type="evaluation")
+    page = await client.workflows.list(categories=["Sales"], favorites=True)
+    page = await client.workflows.list(logical_id="workflow_abc123")
 ```
 
 **Pagination**: `page` is an `AsyncPage[Workflow]` object. Iterate with `async for item in page:` or collect all pages via `await page.list_all()` (returns a list).
+
+**Workflow type**: `workflow_type` is `standard` (the workflows that run calls) or `evaluation` (post-call analysis, see [Evaluation workflows](#evaluation-workflows)). The server lists `standard` workflows unless `evaluation` is asked for.
 
 ## Cloning Workflows
 
@@ -155,6 +162,48 @@ async with AsyncWorkflowClient() as client:
     )
 ```
 
+### Secrets in a bundle
+
+By default `export()` clears the workflow's secrets: a secret field becomes `None`, and a sensitive header or body entry (an `Authorization` header, say) becomes `""`. Each cleared value is listed in `bundle["redactions"]` as `{"path", "reason", "node_name", "segments"}`, and `bundle["secrets_included"]` is `False`.
+
+```python
+async with AsyncWorkflowClient() as client:
+    bundle = await client.workflows.export(
+        workflow_id="wf_123",
+        version_numbers=[0],
+        active_version_number=0,
+    )
+    for redaction in bundle["redactions"]:
+        print(redaction["path"], redaction["reason"])
+
+    # Supply each cleared value again on import, keyed by its path
+    # (supplied: your own dict of values, keyed by redaction path)
+    imported = await client.workflows.import_bundle(
+        bundle,
+        secret_overrides={r["path"]: supplied[r["path"]] for r in bundle["redactions"]},
+    )
+    for warning in imported.warnings:
+        print(warning)   # a secret not supplied stays empty, and is named here
+```
+
+- `include_secrets=True` keeps the secrets in the bundle, in plain text. Anything that stores the bundle then holds the workflow's credentials. A viewer asking for them gets `PermissionDeniedError`.
+- In a `secret_overrides` path, the number after `versions.` is the version's position in `bundle["versions"]`, not its version number.
+- A blank value counts as not supplied. A secret not supplied stays empty and adds a line to the imported workflow's `warnings`.
+- A path the bundle does not list raises `UnprocessableEntityError`; `err.body["field_errors"]` names the paths.
+
+## Usage
+
+`usage()` lists the team's workflows that use this one, in any version: as a super node's workflow, an evaluator, or a warm-transfer target.
+
+```python
+async with AsyncWorkflowClient() as client:
+    report = await client.workflows.usage("wf_123")
+    for entry in report.used_by:
+        print(entry.workflow_id, entry.name, entry.version_numbers)
+```
+
+A delete does not consult this: deleting the workflow still succeeds and leaves these workflows with a reference that no longer resolves. An id that names no workflow returns an empty report.
+
 ## Schema & Dynamic Variables
 
 ### Get the workflow schema
@@ -176,6 +225,9 @@ async with AsyncWorkflowClient() as client:
     result = await client.workflows.dynamic_variables(workflow_id="wf_123")
     result["dynamic_variables"]          # what a run must supply, e.g. {"member_id": "", "patient": {"id": ""}}
     result["global_variables_resolved"]  # names your team's global variables already fill in
+
+    # The variables of one version; without version_number the server reads the workflow's own record
+    result = await client.workflows.dynamic_variables(workflow_id="wf_123", version_number=2)
 ```
 
 Variables a team global already provides are listed under `global_variables_resolved` and **removed**
@@ -234,6 +286,9 @@ async with AsyncWorkflowClient() as client:
     # Fetch as a typed config
     config = await client.workflows.get_fully_hydrated("wf_123")
     # Returns: WorkflowConfigFullyHydrated instance
+
+    # Hydrate one version rather than the workflow's own record
+    config = await client.workflows.get_fully_hydrated("wf_123", version_number=2)
 ```
 
 ## Favorites
@@ -248,8 +303,8 @@ async with AsyncWorkflowClient() as client:
     # Remove from favorites
     await client.workflows.unfavorite(workflow_id="wf_123")
 
-    # List favorites via search + filter
-    page = await client.workflows.list(search="...")  # then filter in code
+    # List the workflows the calling user favourited
+    page = await client.workflows.list(favorites=True)
 ```
 
 ## Workflow Handles
@@ -314,7 +369,7 @@ Each workflow has multiple versions. The active version is used by default when 
 
 ```python
 async with AsyncWorkflowClient() as client:
-    # Create a new version, cloned from the current active version. Every version needs a name.
+    # Create a new version, cloned from the current active version. version_name is required.
     v = await client.workflows.versions.create(
         workflow_id="wf_123",
         version_name="Release 1.0"
@@ -333,6 +388,17 @@ async with AsyncWorkflowClient() as client:
         version_name="Release 1.1",
         mark_as_active=True
     )
+```
+
+### Get one version
+
+`get()` returns one version's name and its settings snapshot (`config`, a `WorkflowConfig`). It raises `NotFoundError`
+if the workflow or the version does not exist.
+
+```python
+async with AsyncWorkflowClient() as client:
+    v = await client.workflows.versions.get("wf_123", 1)
+    print(v.version_name, v.config)
 ```
 
 ### List versions for a workflow
@@ -370,8 +436,12 @@ async with AsyncWorkflowClient() as client:
 ### Update a version's settings
 
 `update_config` changes a version's workflow-level settings (name, description, category, the global LLM config,
-`tools_config`, ...). Only the settings given change. Nodes and edges are not settings: change them through
-`client.nodes` and `client.edges`.
+`tools_config`, ...). Only the settings given change: a typed `WorkflowConfig` sends the fields set on it, and a dict
+sends its keys. A new `category` reaches every version of the workflow.
+
+Nodes and edges are not settings. A `config` holding them raises `ValueError`; change them through `client.nodes` and
+`client.edges`. If the update removed global tools, the returned version's `pruned_global_tool_exclusions` lists the
+nodes whose exclusions of those tools were dropped.
 
 ```python
 async with AsyncWorkflowClient() as client:
@@ -427,7 +497,41 @@ async with AsyncWorkflowClient() as client:
 
     # Filter by workflow logical ID
     page = await client.workflows.versions.list_active(logical_id="workflow_abc123")
+
+    # Evaluation workflows instead of standard ones
+    page = await client.workflows.versions.list_active(workflow_type="evaluation")
 ```
+
+---
+
+## Evaluation workflows
+
+An evaluation workflow analyses a finished conversation (a summary, a success verdict, structured data) and stores
+what it finds. It never runs on a live call. Once created, it is an ordinary workflow to `client.workflows`.
+
+```python
+async with AsyncWorkflowClient() as client:
+    templates = await client.evaluation_workflows.templates()
+    presets = await client.evaluation_workflows.node_presets()   # the ready-made analysis nodes
+
+    wf = await client.evaluation_workflows.create_from_template(
+        template_id=templates[0].template_id,
+        name="Call summary",
+    )                                                            # version 0 is active
+
+    evaluators = await client.evaluation_workflows.list()        # the team's evaluation workflows, not paged
+
+    # The same workflows through the standard list
+    page = await client.workflows.list(workflow_type="evaluation")
+```
+
+- `templates()`: the templates a new evaluation workflow can start from. Each has a `template_id`.
+- `node_presets()`: the ready-made analysis nodes, in the order a workflow usually uses them.
+- `create_from_template(template_id=, name=)`: `NotFoundError` for an unknown template; `BadRequestError` when the
+  template uses a node type this server has not enabled.
+- `list()`: each evaluation workflow with its versions and whether it masks PHI.
+
+`WorkflowType` has two values: `standard` (the default, the workflows that run calls) and `evaluation`.
 
 ---
 
@@ -443,32 +547,13 @@ async with AsyncWorkflowClient() as client:
 | `search` | str | None | Fuzzy filter on name/description |
 | `max_concurrent_runs` | int | — | Max simultaneous runs |
 | `version_number` | int | — | Version number (0-indexed) |
-| `version_name` | str | None | Human label for version |
+| `version_name` | str | required on create | Version label; the server refuses a version without one |
 | `source_version_number` | int | None | Clone from this version |
 | `mark_as_active` | bool | False | Immediately activate on create |
 | `dynamic_variables` | dict | None | Default vars for handle |
-
----
-
-## Gotchas
-
-- **Cascading delete**: Deleting a workflow deletes all its versions and associated runs.
-- **Active version required**: A workflow must always have an active version. You cannot delete the only remaining version.
-- **Export format**: The bundle (`export_format` `"v2"`) is a dict with `versions`, `active_version_number`, `source_workflow_id`, `source_workflow_name`, `exported_at` and `warnings`. Each entry in `versions` holds a `version_number`, a `version_name` and a fully-hydrated `workflow_config` (with its own `node_configs` and `edge_configs`). Treat it as opaque and do not modify it by hand; read `warnings` for anything the export stripped or could not resolve.
-- **Handles are single-flight**: Do not interleave `.arun()` calls on the same handle from different async contexts. Create a new handle for each concurrent session.
-- **NOT_GIVEN sentinel**: When updating, omit a field to leave it unchanged; pass `None` to explicitly set it to null.
-- **`dynamic_variables()` returns an envelope**: read `["dynamic_variables"]`; names a team global already fills are under `["global_variables_resolved"]` instead.
-- **Writes can carry `warnings`**: a created or imported workflow's `warnings` lists advisory lints that did not block the save. `lints()` runs the same checks on demand.
-
----
-
-## See also
-
-- [Nodes & Edges & Tools](nodes_edges_tools.md) — structure your graph
-- [Running Workflows](running_workflows.md) — execute workflows (streaming, interactive, handles)
-- [Monitoring Runs](monitoring_runs.md) — query run history and results
-- [API Reference](../api_async.md) — full endpoint docs
-- [Configs](../configs.md) — typed workflow models
+| `workflow_type` | str | `standard` | List filter: `standard` or `evaluation` |
+| `include_secrets` | bool | False | Export: keep secrets in the bundle, in plain text (viewers refused) |
+| `secret_overrides` | dict | None | Import: cleared secret values, keyed by their `redactions` path |
 
 ---
 
@@ -495,3 +580,27 @@ all_workflows = page.list_all()
 ```
 
 For version operations, use `client.workflows.versions.*` (without `await`). See [api_sync.md](../api_sync.md) for the complete synchronous reference.
+
+---
+
+## See also
+
+- [Nodes & Edges & Tools](nodes_edges_tools.md) — structure your graph
+- [Running Workflows](running_workflows.md) — execute workflows (streaming, interactive, handles)
+- [Monitoring Runs](monitoring_runs.md) — query run history and results
+- [API Reference](../api_async.md) — full endpoint docs
+- [Configs](../configs.md) — typed workflow models
+
+---
+
+## Gotchas
+
+- **Cascading delete**: Deleting a workflow deletes all its versions and associated runs.
+- **Active version required**: A workflow must always have an active version. You cannot delete the only remaining version.
+- **Export format**: The bundle (`export_format` `"v2"`) is a dict with `versions`, `active_version_number`, `source_workflow_id`, `source_workflow_name`, `exported_at`, `redactions`, `secrets_included` and `warnings`. Each entry in `versions` holds a `version_number`, a `version_name` and a fully-hydrated `workflow_config` (with its own `node_configs` and `edge_configs`). Treat it as opaque and do not modify it by hand; read `warnings` for anything the export stripped or could not resolve.
+- **Handles are single-flight**: Do not interleave `.arun()` calls on the same handle from different async contexts. Create a new handle for each concurrent session.
+- **NOT_GIVEN sentinel**: When updating, omit a field to leave it unchanged; pass `None` to explicitly set it to null.
+- **`dynamic_variables()` returns an envelope**: read `["dynamic_variables"]`; names a team global already fills are under `["global_variables_resolved"]` instead.
+- **Writes can carry `warnings`**: a created or imported workflow's `warnings` lists advisory lints that did not block the save. `lints()` runs the same checks on demand.
+- **Writes can carry `pruned_global_tool_exclusions`**: a write that removed global tools lists the nodes whose exclusions of them it dropped.
+- **Secrets are cleared by default**: an export without `include_secrets=True` carries no secret values. Supply them again with `secret_overrides` on import, or the imported workflow has them empty.

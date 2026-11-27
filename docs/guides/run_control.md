@@ -1,8 +1,8 @@
 # Run Control
 
 Pause, resume and cancel a durable run, approve the steps waiting for a person, send it signals, and see what it
-waits on. A durable run is a scheduled run, a re-run or a background run: its state is stored between turns, so it can
-wait for hours on a timer, a signal, an external job or a person.
+waits on. A durable run keeps its state between turns, so it can wait for hours on a timer, a signal, an external job or a
+person. Only durable runs take run control; see [Which runs are durable](#which-runs-are-durable).
 
 ## Setup
 
@@ -20,6 +20,24 @@ Pausing, resuming, cancelling and signalling need **Developer access or above**;
 signals and jobs. A call from a lower role raises `PermissionDeniedError`.
 
 ---
+
+## Which runs are durable
+
+Pause, resume, cancel and signal work only on a durable run. The server decides which runs are durable, by its flags:
+
+| Run | Durable when |
+|---|---|
+| Scheduled, re-run and background runs | By default: the server flag `ENABLE_DURABLE_HEADLESS_RUNS` is on |
+| Editor and stream runs | Where the server sets `ENABLE_DURABLE_SOCKET_RUNS` (off by default) |
+| REST execute runs | Where the server sets `ENABLE_DURABLE_REST_RUNS` (off by default) |
+| Simulation runs | Where the server sets `ENABLE_DURABLE_SIMULATION_RUNS` (off by default) |
+
+A run control request on a run that is not durable raises `ConflictError`. `durable` on the run says which it is:
+
+```python
+run = await client.runs.get(run_id)
+run.durable   # True when pause, resume, cancel and signal apply
+```
 
 ## Starting a background run
 
@@ -54,6 +72,17 @@ for pause in page:
 
 `wake["kind"]` says what ends each pause: `manual` (a person approves it), `timer`, `signal`, `external_job`, or
 `run_pause` (a person's pause of the whole run). `waits_for_person` is true for the ones an approval names.
+
+## Runs waiting on a person
+
+`runs.list(needs_attention=True)` lists the runs that wait on a person: a durable run a person paused, with no cancel
+asked, or a run with a step waiting for approval. Ended runs never match, and a cancelled run drops out.
+
+```python
+page = await client.runs.list(needs_attention=True)
+async for run in page:
+    print(run.id, run.status)
+```
 
 ## Pausing and cancelling
 
@@ -116,6 +145,22 @@ for job in jobs:
     print(job.provider, job.external_ref, job.state, job.outcome)
 ```
 
+## Simulation groups
+
+`simulations.pause_run(run_id, reason=None)`, given a simulation group's id, pauses every simulation of the group, and the workflow runs of those in
+flight. `simulations.resume_run(run_id)` resumes them. The answer lists each run it touched, with its `role`
+(`selected` for the workflow under test, `counter` for the workflow playing its user) and its `outcome`. An `outcome`
+of `not_durable` means simulation runs are not durable on the server, so the group holds them itself. See
+[Simulations](simulations.md).
+
+```python
+result = await client.simulations.pause_run(group_id, reason="Checking the dose")
+for run in result.runs:
+    print(run.workflow_run_id, run.role, run.outcome)
+
+await client.simulations.resume_run(group_id)
+```
+
 ## Paging
 
 The three lists page by cursor: there is no total, and each page holds up to `limit` rows (100 by default, at most
@@ -127,7 +172,7 @@ A request that arrives while the run is changing gets **409 with `Retry-After`**
 retries it within `max_retries`. Every other 409 is raised as `ConflictError`.
 
 A **503** means the server's store for durable runs is unavailable. It is raised at once as `InternalServerError`;
-its `Retry-After` (30 seconds) is on `error.response.headers`, and whether to wait that long is yours to decide.
+its `Retry-After` is long and is on `error.response.headers`. Whether to wait for it is yours to decide.
 
 ---
 
@@ -143,6 +188,9 @@ pending = [p for p in client.runs.list_pauses(run_id, open_only=True).list_all()
 client.runs.resume(run_id, pause_ids=[p.pause_id for p in pending], data={"approved": True})
 client.runs.send_signal(run_id, "lab.result", {"value": 7.2}, idempotency_key="lab-42")
 client.runs.cancel(run_id)
+
+client.simulations.pause_run(group_id, reason="Checking the dose")
+client.simulations.resume_run(group_id)
 ```
 
 ---
@@ -151,11 +199,13 @@ client.runs.cancel(run_id)
 
 - [Monitoring runs](monitoring_runs.md) — finding runs and reading their state
 - [Webhooks](webhooks.md) — `workflow_run_paused` and `workflow_run_resumed`, to be told instead of polling
+- [Simulations](simulations.md) — simulation groups, their runs and their outcomes
 - [Error handling](../error_handling.md) — `ConflictError`, `PermissionDeniedError` and the rest
 
 ## Gotchas
 
-- **Only durable runs.** A voice call, a chat session or a streamed run can't be paused or signalled: 409.
+- **Only durable runs.** Run control on a run that is not durable raises `ConflictError` (HTTP 409). Check `durable`
+  first; the flags that make editor, REST and simulation runs durable are listed above.
 - **The waiting nodes are enabled per server.** Where `CONTROL_WAIT_NODES_ENABLED` is off, a workflow holding one is
   refused on save with a 400 that names the flag.
 - **Resuming the run does not approve steps.** Lifting a person's pause leaves Pause Workflow nodes waiting; approve

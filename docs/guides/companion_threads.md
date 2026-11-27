@@ -71,7 +71,7 @@ its self-loop budget. That is what you want for the polling case above, where a 
 has no one left to hear it.
 
 Set it to `False` for work that must **outlive** the conversation, such as a write-back to an EHR, or a
-result you want recorded even though it arrives after the caller hangs up:
+result you want recorded even though it arrives after the goodbye:
 
 ```python
 writeback = ic.DirectEdgeConfig(
@@ -85,12 +85,15 @@ writeback = ic.DirectEdgeConfig(
 )
 ```
 
+The companion keeps running only while the stream is open. Keep iterating until the stream ends on its own;
+leaving the `with` block early cancels the run, companions included.
+
 A companion that outlives the conversation still needs a bound, or it keeps the run alive: give its
 loop a `max_retries` or an `expiry_time` (see [Self-loops](self_loops.md)).
 
 > **Server support.** The behaviour lives on the server, and arrived upstream on 2026-10-01
 > (`interactly-ai@310a9a8ec`). A server built before that ignores the field, and every companion runs
-> out its own budget as it always did. As of 2026-10-02 the dev server is one of those.
+> out its own budget as it always did.
 
 ---
 
@@ -185,24 +188,32 @@ direct edges, which take precedence on the normal transition path.
 The WebSocket driver pumps background work itself while it waits for the next message. Companion
 events simply arrive in the stream.
 
-**One thing changes:** `end_workflow_iteration` no longer means "your turn". Use
+**One thing changes:** with companions, `end_workflow_iteration` no longer means "your turn". Use
 `is_ready_for_input()`:
 
 ```python
-async with client.runs.stream(workflow_id=workflow_id) as stream:
-    async for event in stream:
-        if event.is_ready_for_input():   # workflow_ready_for_input
-            break                        # NOW it is safe to send the next message
-        if event.is_terminal():          # end_workflow — ALL threads finished
-            break
+messages = iter(["Are my lab results back yet?", "Thanks, that's all."])
+
+async with AsyncWorkflowClient() as client:
+    async with client.runs.stream(workflow_id=workflow_id) as stream:
+        async for event in stream:
+            if event.is_ready_for_input():     # the main thread waits for the caller
+                message = next(messages, None)
+                if message is None:
+                    await stream.stop()        # ends the run, companions included
+                else:
+                    await stream.send(message)
 ```
+
+Companion events keep arriving between turns, so keep iterating the same stream. Only `end_workflow` means every
+thread has finished; a `workflow_error` ends the turn (see [Streaming](../streaming.md#gotchas)).
 
 Three events that are easy to conflate:
 
 | Event | Means |
 |---|---|
 | `end_workflow_iteration` | One turn's accounting is done. Companions may still be running. |
-| `workflow_ready_for_input` | Every non-companion thread has settled. **Send the next message.** |
+| `workflow_ready_for_input` | The main thread waits for the caller. Sent only while companions run; `is_ready_for_input()` is True at this point in every workflow. **Send the next message.** |
 | `end_workflow` | Every thread has ended, companions included. |
 
 A loop that breaks on `end_workflow_iteration` will race or hang once companions are in play.
@@ -318,6 +329,9 @@ if response.has_background_work:
 - **An unnamed companion is unaddressable.** Set `thread_id` if anything needs to read its variables.
 - **Companion sub-graphs cannot rejoin the main thread.** Communicate via variables instead.
 - **A companion ends with the conversation by default.** Set `stop_with_main_thread=False` for work
-  that must finish after the goodbye, on a server that includes `interactly-ai@310a9a8ec`.
+  that must finish after the goodbye, on a server that includes `interactly-ai@310a9a8ec`. Keep iterating the
+  stream until it ends, or the companion is cancelled with the run.
 - **A companion that outlives the conversation and never terminates keeps the run alive.** Bound it
   with [`SelfLoopConfig`](self_loops.md).
+- **`stop()` and leaving the stream cancel companions too.** A companion lives as long as the run, and the run
+  ends when you stop it or leave the stream.

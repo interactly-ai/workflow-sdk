@@ -291,8 +291,9 @@ print(f"Model: {llm_config.config.get('model')}")
 
 The `config` field is a dict (or typed `LLMOrGroupConfig` if `interactly[configs]` is installed).
 
-Whether you see the stored `api_key` depends on your role. **Admins and super-admins are shown the real
-key**; every other role gets it redacted.
+Credentials depend on your role. **Admins and super-admins are shown the stored credentials**: the `api_key`, Bedrock's
+AWS key pair, and the values of a gateway's credential headers (`default_headers`). Every other role gets `api_key`
+and the AWS keys as `None`, and each credential header as `""`.
 
 ## Get the team default
 
@@ -333,19 +334,25 @@ llm_config = await client.llm_configs.update(
 )
 ```
 
-### Keeping the stored API key
+### Keeping stored credentials
 
-`config` replaces the stored config **as a whole**. That matters for the key: with an admin or super-admin
-token, the server reads a config with no `api_key` as "remove the stored key", because an admin is shown
-the key and could only have cleared it on purpose. A config built fresh in code, like the one above, has
-no key.
+`config` replaces the stored config **as a whole**. That matters for credentials: with an admin or super-admin
+token, the server reads a credential the config leaves blank as "remove it", because an admin is shown the
+credentials and could only have blanked one on purpose. A config built fresh in code, like the one above, has none.
 
-So `update` guards it by default. When `config` leaves `api_key` unset, `update` reads the stored config
-first and carries its key across, group members' keys included (matched by `logical_id`). That costs one
-extra request. It never carries a key onto a config of a different provider: switching a saved config from
-OpenAI to Anthropic does not hand the OpenAI key to Anthropic.
+So `update` guards them by default (`preserve_credentials=True`). When `config` leaves a credential blank, `update`
+reads the stored config first and carries the stored value across. That covers:
 
-To remove a stored key on purpose, opt out and send the config as given:
+- `api_key`, and Bedrock's `aws_access_key_id` and `aws_secret_access_key`;
+- each credential header of `default_headers` (such as `Authorization` or `x-api-key`) that the new config sends
+  empty. Headers are matched by name, exactly and then ignoring case. A header you filled in keeps your value. If the
+  new config has no header map, the stored credential headers are carried into a new one; other headers are not.
+
+Group members are paired with their stored counterparts by `logical_id`, and backchannel configs are covered too. A
+credential is carried only onto a config of the same provider type: switching a saved config from OpenAI to Anthropic
+does not hand the OpenAI key to Anthropic. The guard costs one extra GET.
+
+To remove stored credentials on purpose, opt out and send the config as given:
 
 ```python
 await client.llm_configs.update(
@@ -355,8 +362,8 @@ await client.llm_configs.update(
 )
 ```
 
-For a non-admin token nothing changes either way: the server never shows them the key, and preserves it
-for them itself.
+For a non-admin token nothing changes either way: the server never shows them the credentials, and keeps them for
+them itself.
 
 To change the default:
 
@@ -375,6 +382,48 @@ Remove a config (nodes referencing it by ID will fail until reconfigured):
 ```python
 await client.llm_configs.delete(llm_config_id="<config_id>")
 ```
+
+## Export and import
+
+`export()` returns a portable bundle dict. Every secret in it is replaced with `"<REDACTED>"`, whatever your role,
+and each one is listed in `bundle["redactions"]` as `{"path", "config_name", "reason"}`. Omit `llm_config_ids` to
+export every config of the team.
+
+```python
+async with AsyncWorkflowClient() as client:
+    bundle = await client.llm_configs.export(llm_config_ids=["<config_id>"])
+    print(bundle["redactions"])
+
+    # Supply each redacted secret again, keyed by its path
+    # (supplied: your own dict of values, keyed by redaction path)
+    result = await client.llm_configs.import_bundle(
+        bundle,
+        secret_overrides={r["path"]: supplied[r["path"]] for r in bundle["redactions"]},
+    )
+    for item in result.imported:
+        print(item.llm_config.id, item.renamed_from, item.ids_reminted)
+    print(result.warnings)
+```
+
+- Import is all or nothing. Every redacted secret must come back in `secret_overrides`. A missing one raises
+  `UnprocessableEntityError`, with the paths in `err.body`.
+- An id the team already uses is replaced (`ids_reminted=True`), and workflows that attach the config by its old id
+  do not reach the copy. A name the team already uses gets an `(imported)` suffix; `renamed_from` holds the bundle's name.
+- Imported configs never become the team default.
+- `ConflictError` is raised when the import collides with the team's configs.
+- `export()` raises `NotFoundError` if one of `llm_config_ids` names no config of the team.
+
+## Where a saved config is used
+
+```python
+async with AsyncWorkflowClient() as client:
+    report = await client.llm_configs.usage("<config_id>")
+    for entry in report.used_by:
+        print(entry.workflow_id, entry.version_numbers)
+```
+
+`usage()` covers every version that references the config, active or not. A delete does not consult it: deleting the
+config succeeds and leaves those workflows with a reference that no longer resolves.
 
 ## Test a saved config
 
@@ -397,7 +446,8 @@ else:
     print(f"Error: {result.error}")
 ```
 
-The `messages` parameter is optional and defaults to an empty conversation.
+The `messages` parameter is optional and defaults to an empty conversation. Pass `config=` to test a saved config with
+an inline override; a redacted secret in the override reuses the stored one.
 
 ### Test with inline override
 
@@ -482,6 +532,8 @@ The `LLMConfigTestResult` includes:
 | `success` | Boolean indicating if the test passed |
 | `response` | The model's text response (if successful) |
 | `error` | Error message (if failed) |
+| `error_category` | On failure: `auth`, `permission`, `quota`, `rate_limit`, `model`, `timeout`, `unavailable` or `other`. `error` holds the provider's own message |
+| `used_user_api_key` | Whether the call used the team's own saved provider key rather than the deployment's. `None` for a group, whose members decide separately |
 | `provider` | Provider name (e.g., "openai") |
 | `model` | Model identifier (e.g., "gpt-5.4-mini") |
 | `prompt_tokens` | Input tokens consumed |
@@ -551,15 +603,6 @@ For a group that combines a main model with a fast backchannel responder, use `L
 | `page` | 1 | Page number (list) |
 | `size` | 20 | Items per page (list) |
 
-## Gotchas
-
-1. **Credential visibility depends on role** — admins and super-admins are shown the stored credentials; every other role gets `api_key` and Bedrock's AWS keys as `None` and credential headers as `""`.
-2. **An admin update without a credential deletes it, unless the SDK keeps it** — leave `preserve_credentials` at its default unless removing credentials is the point.
-3. **Reference a saved config by id** — set `attachable_llm_config_id`; `named_llm_config_id` / `named_llm_config_name` are filled in by the server, and there is no lookup by name.
-4. **Test inline requires the secret** — `test_inline()` needs a full config with `api_key` if not using a vendor credential stored on the server.
-5. **Override conflicts** — if you set `is_default=True` without `override_default=True` and a default already exists, the operation will fail.
-6. **Vertex-served providers are global-only** — a `vertex_location` other than `global` is rejected for Grok, Gemma, GLM and DeepSeek.
-
 ## Synchronous alternative
 
 The synchronous `WorkflowClient` mirrors the async API exactly — drop the `await` and use
@@ -586,5 +629,15 @@ for config in page:
 - [API reference](../api_async.md) — full method signatures
 - [Configs guide](../configs.md) — typed LLM config classes
 - [Node config](../configs.md#llm-nodes) — how nodes reference saved configs
+
+## Gotchas
+
+1. **Credential visibility depends on role** — admins and super-admins are shown the stored credentials; every other role gets `api_key` and Bedrock's AWS keys as `None` and credential headers as `""`.
+2. **An admin update without a credential deletes it, unless the SDK keeps it** — leave `preserve_credentials` at its default unless removing credentials is the point.
+3. **Reference a saved config by id** — set `attachable_llm_config_id`; `named_llm_config_id` / `named_llm_config_name` are filled in by the server, and there is no lookup by name.
+4. **Test inline requires the secret** — `test_inline()` needs a full config with `api_key` if not using a vendor credential stored on the server.
+5. **Override conflicts** — if you set `is_default=True` without `override_default=True` and a default already exists, the operation will fail.
+6. **Vertex-served providers are global-only** — a `vertex_location` other than `global` is rejected for Grok, Gemma, GLM and DeepSeek.
+7. **Export redacts for everyone** — `export()` replaces every secret with `"<REDACTED>"`, even for an admin. Supply them again with `secret_overrides` on import.
 </content>
 </invoke>
