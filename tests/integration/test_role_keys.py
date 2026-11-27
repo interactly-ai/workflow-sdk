@@ -8,12 +8,14 @@ key is unset.
 from __future__ import annotations
 
 import os
+import uuid
 from typing import Any, List
 
 import pytest
 from pydantic import BaseModel
 
-from interactly import NotFoundError, PermissionDeniedError, StreamPermissionError
+from interactly import AsyncWorkflowClient, NotFoundError, PermissionDeniedError, StreamPermissionError
+from interactly.configs import CustomLLMConfig
 
 pytestmark = [
     pytest.mark.integration,
@@ -23,6 +25,8 @@ pytestmark = [
 #: A well-formed id no node has. A delete that reaches the lookup answers 404; one the role gate refuses never
 #: gets there. Nothing is deleted either way.
 _NO_SUCH_NODE = "000000000000000000000000"
+#: A made-up credential header for a gateway at a host that can never resolve, so no provider is called.
+_AUTH = "Bearer sdk-e2e-not-a-secret"
 
 
 async def test_a_viewer_key_is_refused_a_write_before_the_lookup(viewer_client):
@@ -92,6 +96,37 @@ async def test_a_developer_key_reaches_a_simulation_groups_pause(developer_clien
     async with developer_client as client:
         with pytest.raises(NotFoundError):
             await client.simulations.pause_run(_NO_SUCH_NODE, reason="role check")
+
+
+async def test_a_developer_update_built_in_code_keeps_the_stored_credentials(developer_client):
+    # A developer reads every credential blank. The server restores api_key itself, but deletes a credential header
+    # an update leaves out, so the SDK names the stored one, blank, and the server keeps it. The main key, an
+    # admin's, is shown the credentials and reads them back.
+    async with AsyncWorkflowClient() as admin, developer_client as client:
+        saved = await admin.llm_configs.create(
+            name=f"SDK_E2E developer update {uuid.uuid4().hex[:8]}",
+            config=_gateway(api_key="sk-sdk-e2e", default_headers={"Authorization": _AUTH, "X-Tenant": "t1"}),
+        )
+        try:
+            await client.llm_configs.update(saved.id, config=_gateway())
+            stored = (await admin.llm_configs.get(saved.id)).config
+        finally:
+            await admin.llm_configs.delete(saved.id)
+
+    stored = stored.model_dump(mode="json") if isinstance(stored, BaseModel) else stored
+    # As for an admin: the credentials stay, and a plain header the new config left out goes.
+    assert (stored["api_key"], stored["default_headers"]) == ("sk-sdk-e2e", {"Authorization": _AUTH})
+
+
+def _gateway(**fields: Any) -> CustomLLMConfig:
+    return CustomLLMConfig(
+        base_url="https://llm.unreachable.invalid/v1",
+        model="none",
+        max_retries=0,
+        request_timeout_ms=2000,
+        streaming=False,
+        **fields,
+    )
 
 
 def _credentials_shown(config: Any) -> List[str]:
