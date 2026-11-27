@@ -30,21 +30,21 @@ def _build_active_params(
     *,
     page: int,
     size: int,
+    search: Optional[str],
     favorites: Optional[bool],
-    created_by_me: Optional[bool],
-    category: Optional[str],
     categories: Optional[List[str]],
+    created_by: Optional[List[str]],
     logical_id: Optional[str],
 ) -> Dict[str, Any]:
     params: Dict[str, Any] = {"page": page, "size": size}
+    if search is not None:
+        params["search"] = search
     if favorites is not None:
         params["favorites"] = favorites
-    if created_by_me is not None:
-        params["created_by_me"] = created_by_me
-    if category is not None:
-        params["category"] = category
     if categories is not None:
         params["categories"] = categories
+    if created_by is not None:
+        params["created_by"] = created_by
     if logical_id is not None:
         params["logical_id"] = logical_id
     return params
@@ -187,10 +187,10 @@ class WorkflowVersionsResource(SyncAPIResource):
         *,
         page: int = 1,
         size: int = 20,
+        search: Optional[str] = None,
         favorites: Optional[bool] = None,
-        created_by_me: Optional[bool] = None,
-        category: Optional[str] = None,
         categories: Optional[List[str]] = None,
+        created_by: Optional[List[str]] = None,
         logical_id: Optional[str] = None,
     ) -> SyncPage[WorkflowVersion]:
         """
@@ -200,13 +200,14 @@ class WorkflowVersionsResource(SyncAPIResource):
         per workflow, honouring the same filters as the workflow list.
 
         Args:
-            page:          Page number (1-indexed, default 1).
-            size:          Items per page (default 20).
-            favorites:     Restrict to the user's favorited workflows.
-            created_by_me: Restrict to workflows created by the requesting user.
-            category:      Filter by a single category name.
-            categories:    Filter by multiple category names.
-            logical_id:    Filter by workflow logical ID.
+            page:       Page number (1-indexed, default 1).
+            size:       Items per page (default 20).
+            search:     Text matched, ignoring case, against the workflows' names, descriptions and categories.
+            favorites:  Restrict to the user's favorited workflows.
+            categories: Only workflows in one of these categories.
+            created_by: Only workflows created by one of these users (user ids). For your own, pass your user id;
+                        with an API key that is the id of the member who created the key.
+            logical_id: Filter by workflow logical ID.
 
         Returns:
             A :class:`SyncPage` of :class:`WorkflowVersion` objects.
@@ -214,10 +215,10 @@ class WorkflowVersionsResource(SyncAPIResource):
         params = _build_active_params(
             page=page,
             size=size,
+            search=search,
             favorites=favorites,
-            created_by_me=created_by_me,
-            category=category,
             categories=categories,
+            created_by=created_by,
             logical_id=logical_id,
         )
         raw = self._client.get(_ACTIVE_PATH, cast_to=dict, params=params)
@@ -227,10 +228,10 @@ class WorkflowVersionsResource(SyncAPIResource):
             lambda p: self.list_active(
                 page=p,
                 size=size,
+                search=search,
                 favorites=favorites,
-                created_by_me=created_by_me,
-                category=category,
                 categories=categories,
+                created_by=created_by,
                 logical_id=logical_id,
             ),
         )
@@ -345,20 +346,20 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
         *,
         page: int = 1,
         size: int = 20,
+        search: Optional[str] = None,
         favorites: Optional[bool] = None,
-        created_by_me: Optional[bool] = None,
-        category: Optional[str] = None,
         categories: Optional[List[str]] = None,
+        created_by: Optional[List[str]] = None,
         logical_id: Optional[str] = None,
     ) -> AsyncPage[WorkflowVersion]:
         """List every workflow's active version across the team (paginated)."""
         params = _build_active_params(
             page=page,
             size=size,
+            search=search,
             favorites=favorites,
-            created_by_me=created_by_me,
-            category=category,
             categories=categories,
+            created_by=created_by,
             logical_id=logical_id,
         )
         raw = await self._client.get(_ACTIVE_PATH, cast_to=dict, params=params)
@@ -368,10 +369,10 @@ class AsyncWorkflowVersionsResource(AsyncAPIResource):
             lambda p: self.list_active(
                 page=p,
                 size=size,
+                search=search,
                 favorites=favorites,
-                created_by_me=created_by_me,
-                category=category,
                 categories=categories,
+                created_by=created_by,
                 logical_id=logical_id,
             ),
         )

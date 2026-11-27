@@ -27,7 +27,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `create` | `(*, name: 'str', description: 'Optional[str]' = None, config: 'Optional[WorkflowConfigOrDict]' = None) -> 'Workflow'` | Create a new workflow. |
 | `create_from_config` | `(config: "'WorkflowConfigFullyHydrated'", *, name: 'Optional[str]' = None, description: 'Optional[str]' = None) -> 'Workflow'` | Upload a fully-hydrated typed workflow (config + nodes + edges) in one POST. |
 | `delete` | `(workflow_id: 'str') -> 'None'` | Permanently delete a workflow and all its versions. |
-| `dynamic_variables` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Return the dynamic variable definitions for a workflow. |
+| `dynamic_variables` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Return the dynamic variable definitions for a workflow. |
 | `export` | `(workflow_id: 'str', *, version_numbers: 'List[int]', active_version_number: 'int', include_secrets: 'bool' = False) -> 'Dict[str, Any]'` | Export a workflow as a portable bundle dict, for :meth:`import_bundle` here or on another server. |
 | `favorite` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Mark a workflow as a favorite for the requesting user (idempotent). |
 | `generate_counter_workflow` | `(workflow_id: 'str', *, num_cases: 'int' = 10, instructions: 'Optional[str]' = None, version_number: 'Optional[int]' = None, workflow_name: 'Optional[str]' = None, new_workflow: 'bool' = False, provider: 'Optional[str]' = None) -> 'CounterGenerationState'` | Start generating a counter workflow: simulated callers written from this workflow's config. |
@@ -55,7 +55,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `delete` | `(workflow_id: 'str', version_number: 'int') -> 'None'` | Permanently delete a workflow version. |
 | `diff` | `(workflow_id: 'str', version1: 'int', version2: 'int') -> 'VersionDiff'` | Compare two workflow versions and return a structured diff. |
 | `list` | `(workflow_id: 'str') -> 'List[WorkflowVersion]'` | Return all versions for the given workflow. |
-| `list_active` | `(*, page: 'int' = 1, size: 'int' = 20, favorites: 'Optional[bool]' = None, created_by_me: 'Optional[bool]' = None, category: 'Optional[str]' = None, categories: 'Optional[List[str]]' = None, logical_id: 'Optional[str]' = None) -> 'SyncPage[WorkflowVersion]'` | List every workflow's active version across the team (paginated). |
+| `list_active` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, favorites: 'Optional[bool]' = None, categories: 'Optional[List[str]]' = None, created_by: 'Optional[List[str]]' = None, logical_id: 'Optional[str]' = None) -> 'SyncPage[WorkflowVersion]'` | List every workflow's active version across the team (paginated). |
 | `update` | `(workflow_id: 'str', version_number: 'int', *, version_name: 'str') -> 'WorkflowVersion'` | Rename a workflow version. |
 | `update_config` | `(workflow_id: 'str', version_number: 'int', *, config: 'WorkflowConfigOrDict') -> 'WorkflowVersion'` | Update a version's workflow-level settings: name, description, category, the global LLM config, |
 
@@ -67,12 +67,12 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | Method | Signature | Description |
 |---|---|---|
 | `create` | `(*, node_config: 'NodeConfigOrDict') -> 'Node'` | Create a new standalone node. |
-| `delete` | `(node_id: 'str') -> 'None'` | Delete a node. |
-| `get` | `(node_id: 'str') -> 'Node'` | Retrieve a single node by ID. |
-| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, node_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Node]'` | List nodes. |
+| `delete` | `(node_id: 'str', *, version_number: 'Optional[int]' = None) -> 'None'` | Delete a node. |
+| `get` | `(node_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Node'` | Retrieve a single node by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, node_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None, logical_id: 'Optional[str]' = None, version_number: 'Optional[int]' = None) -> 'SyncPage[Node]'` | List nodes. |
 | `schema` | `(node_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific node type. |
 | `types` | `() -> 'List[Dict[str, Any]]'` | Retrieve all available node types with their categories. |
-| `update` | `(node_id: 'str', *, node_config: 'NotGivenOr[Optional[NodeConfigOrDict]]' = NOT_GIVEN) -> 'Node'` | Update a node's config. |
+| `update` | `(node_id: 'str', *, node_config: 'NotGivenOr[Optional[NodeConfigOrDict]]' = NOT_GIVEN, version_number: 'Optional[int]' = None) -> 'Node'` | Update a node's config. |
 
 ## Edges
 
@@ -82,12 +82,12 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | Method | Signature | Description |
 |---|---|---|
 | `create` | `(*, edge_config: 'EdgeConfigOrDict') -> 'Edge'` | Create a new standalone edge. |
-| `delete` | `(edge_id: 'str') -> 'None'` | Delete an edge. |
-| `get` | `(edge_id: 'str') -> 'Edge'` | Retrieve a single edge by ID. |
-| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, edge_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Edge]'` | List edges. |
+| `delete` | `(edge_id: 'str', *, version_number: 'Optional[int]' = None) -> 'None'` | Delete an edge. |
+| `get` | `(edge_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Edge'` | Retrieve a single edge by ID. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, edge_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None, logical_id: 'Optional[str]' = None, version_number: 'Optional[int]' = None) -> 'SyncPage[Edge]'` | List edges. |
 | `schema` | `(edge_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific edge type. |
 | `types` | `() -> 'List[str]'` | Retrieve all available edge type identifiers. |
-| `update` | `(edge_id: 'str', *, edge_config: 'NotGivenOr[Optional[EdgeConfigOrDict]]' = NOT_GIVEN) -> 'Edge'` | Update an edge's config. |
+| `update` | `(edge_id: 'str', *, edge_config: 'NotGivenOr[Optional[EdgeConfigOrDict]]' = NOT_GIVEN, version_number: 'Optional[int]' = None) -> 'Edge'` | Update an edge's config. |
 
 ## Tools
 
@@ -109,7 +109,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `get_codebase_function` | `(function_id: 'str') -> 'CodebaseFunction'` | One codebase function's definition, including the argument schema derived from its signature. |
 | `import_bundle` | `(bundle: 'Dict[str, Any]', *, name_override: 'Optional[str]' = None, secret_overrides: 'Optional[Dict[str, Any]]' = None, clear_unresolved_refs: 'bool' = True, confirm_executable: 'bool' = False) -> 'Tool'` | Import a tool bundle produced by :meth:`export`. |
 | `inbuilt` | `() -> 'List[Dict[str, Any]]'` | Retrieve all inbuilt tools from the registry. |
-| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, tool_type: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None) -> 'SyncPage[Tool]'` | List tools. |
+| `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, tool_type: 'Optional[str]' = None, logical_id: 'Optional[str]' = None, name: 'Optional[str]' = None, category: 'Optional[str]' = None) -> 'SyncPage[Tool]'` | List the team's saved tools, then the built-in ones. Every filter given must match. |
 | `schema` | `(tool_type: 'str') -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a specific tool type. |
 | `types` | `() -> 'List[str]'` | Retrieve all available tool type identifiers. |
 | `update` | `(tool_id: 'str', *, tool_config: 'NotGivenOr[Optional[ToolConfigOrDict]]' = NOT_GIVEN) -> 'Tool'` | Update a tool's config: only the fields you set are sent. |
@@ -190,7 +190,7 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `get` | `(webhook_id: 'str') -> 'WebhookSubscription'` | Retrieve a single webhook subscription by ID. |
 | `list` | `(*, page: 'int' = 1, size: 'int' = 20, search: 'Optional[str]' = None, enabled: 'Optional[bool]' = None, action: 'Optional[WebhookAction]' = None) -> 'SyncPage[WebhookSubscription]'` | List webhook subscriptions for the team. |
 | `list_delivery_attempts` | `(event_id: 'str', *, page: 'int' = 1, size: 'int' = 20) -> 'SyncPage[WebhookDeliveryAttempt]'` | List delivery attempts for a single webhook event. |
-| `list_events` | `(*, page: 'int' = 1, size: 'int' = 20, subscription_id: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None, action: 'Optional[WebhookAction]' = None, status: 'Optional[WebhookEventStatus]' = None) -> 'SyncPage[WebhookEvent]'` | List webhook delivery events for the team. |
+| `list_events` | `(*, page: 'int' = 1, size: 'int' = 20, subscription_id: 'Optional[str]' = None, workflow_id: 'Optional[str]' = None, action: 'Optional[WebhookAction]' = None, status: 'Optional[WebhookEventStatus]' = None, search: 'Optional[str]' = None) -> 'SyncPage[WebhookEvent]'` | List webhook delivery events for the team. |
 | `retry_event` | `(event_id: 'str') -> 'Dict[str, str]'` | Retry delivery of a failed or pending webhook event. |
 | `update` | `(webhook_id: 'str', *, name: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, url: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, actions: 'NotGivenOr[Optional[List[WebhookAction]]]' = NOT_GIVEN, enabled: 'NotGivenOr[Optional[bool]]' = NOT_GIVEN, bearer_token: 'NotGivenOr[Optional[str]]' = NOT_GIVEN, clear_bearer_token: 'NotGivenOr[bool]' = NOT_GIVEN, timeout_seconds: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, max_retries: 'NotGivenOr[Optional[int]]' = NOT_GIVEN, retry_backoff_seconds: 'NotGivenOr[Optional[int]]' = NOT_GIVEN) -> 'WebhookSubscription'` | Partially update a webhook subscription. |
 
@@ -243,10 +243,10 @@ See the [capability guides](README.md#capability-guides) for runnable examples.
 | `expand_preview` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'SuperNodeExpandPreview'` | Preview a workflow with all super nodes inlined as flat nodes/edges. |
 | `get` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'SuperNodeDetail'` | Retrieve the full super node definition for a workflow version. |
 | `list` | `() -> 'List[SuperNodeSummary]'` | List all super nodes published for the team. |
-| `publish` | `(workflow_id: 'str', *, interface: 'SuperNodeInterfaceOrDict') -> 'Dict[str, Any]'` | Publish a workflow as a super node. |
+| `publish` | `(workflow_id: 'str', *, interface: 'SuperNodeInterfaceOrDict', version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Publish a version of a workflow as a super node. |
 | `schema` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Retrieve the JSON Schema for a super node's input fields. |
-| `snapshot_status` | `(workflow_id: 'str') -> 'Dict[str, Any]'` | Report whether the workflow's super-node snapshot is current. |
-| `unpublish` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Unpublish a workflow version as a super node. |
+| `snapshot_status` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None) -> 'Dict[str, Any]'` | Report, for each super node a workflow version embeds, whether its snapshot still matches the latest |
+| `unpublish` | `(workflow_id: 'str', *, version_number: 'Optional[int]' = None, dry_run: 'bool' = False) -> 'Dict[str, Any]'` | Unpublish a workflow version as a super node. |
 
 ## Node libraries
 

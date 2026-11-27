@@ -413,14 +413,14 @@ async with AsyncWorkflowClient() as client:
     # Get all active versions
     page = await client.workflows.versions.list_active(page=1, size=20)
 
-    # Filter to your workflows only
-    page = await client.workflows.versions.list_active(created_by_me=True)
+    # Filter to workflows created by given users (user ids; with an API key, yours is its creator's id)
+    page = await client.workflows.versions.list_active(created_by=["<user_id>"])
+
+    # Search names, descriptions and categories
+    page = await client.workflows.versions.list_active(search="intake")
 
     # Filter to favorites
     page = await client.workflows.versions.list_active(favorites=True)
-
-    # Filter by category
-    page = await client.workflows.versions.list_active(category="Customer Service")
 
     # Filter by multiple categories
     page = await client.workflows.versions.list_active(categories=["Sales", "Support"])

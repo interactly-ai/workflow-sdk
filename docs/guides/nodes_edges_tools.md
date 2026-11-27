@@ -441,8 +441,8 @@ page = await client.tools.list(page=1, size=20)
 # Filter by type
 page = await client.tools.list(tool_type="inline_python")
 
-# Filter by workflow
-page = await client.tools.list(workflow_id="wf_123")
+# Filter by name or category (each a case-insensitive "contains")
+page = await client.tools.list(name="book", category="Patients")
 
 # Search by name
 page = await client.tools.list(search="custom")

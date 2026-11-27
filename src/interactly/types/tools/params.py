@@ -26,4 +26,6 @@ class ToolListParams(TypedDict, total=False):
     size: int
     search: str
     tool_type: Optional[str]
-    workflow_id: Optional[str]
+    logical_id: Optional[str]
+    name: Optional[str]
+    category: Optional[str]

@@ -96,15 +96,34 @@ KNOWN_UNCOVERED_QUERY_FIELDS: Dict[Tuple[str, str, str], str] = {
     ("GET", "/v1/workflow-runs", "copilot_runs_only"): "super-admin only: lists the copilot's own conversations, "
     "which the server refuses to every other role",
     **{
-        (method, path, name): "declared by the shared pagination model, but this listing reads only page and size: "
-        "sending it would look like a filter and filter nothing"
-        for method, path in (
-            ("GET", "/v1/simulations/{}/runs"),
-            ("GET", "/v1/simulation-runs/{}/executions"),
-            ("GET", "/v1/simulation-runs/{}/executions/detailed"),
+        ("GET", path, name): "declared by the shared pagination model, but this listing never reads it: sending it "
+        "would look like a filter and filter nothing"
+        for path, names in (
+            ("/v1/simulations/{}/runs", ("search", "start", "end")),
+            ("/v1/simulation-runs/{}/executions", ("search", "start", "end")),
+            ("/v1/simulation-runs/{}/executions/detailed", ("search", "start", "end")),
+            ("/v1/workflow-webhooks/events/{}/attempts", ("search", "start", "end")),
+            ("/v1/edges", ("start", "end")),
+            ("/v1/nodes", ("start", "end")),
+            ("/v1/llm-configs", ("start", "end")),
+            ("/v1/node-libraries", ("start", "end")),
+            ("/v1/templates", ("start", "end")),
+            ("/v1/tools", ("start", "end")),
+            ("/v1/workflow-webhooks", ("start", "end")),
+            ("/v1/workflow-webhooks/events", ("start", "end")),
+            ("/v1/workflows", ("start", "end")),
+            ("/v1/workflows/versions/active", ("start", "end")),
         )
-        for name in ("search", "start", "end")
+        for name in names
     },
+    **{
+        ("GET", "/v1/templates", name): "declared by WorkflowTemplatesFilter, but the listing passes only "
+        "access_level and search to its query: sending it would look like a filter and filter nothing"
+        for name in ("logical_id", "workflow_id")
+    },
+    ("PATCH", "/v1/workflows/{}", "version_number"): "workflows.update sends only name and description, which the "
+    "server writes to every version either way; with a version number it answers with the version instead of the "
+    "workflow",
 }
 
 #: Query keys the SDK sends that upstream's route signatures do not declare, as (method, path, name) -> reason.

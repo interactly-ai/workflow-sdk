@@ -1,0 +1,28 @@
+{
+  "nodes_get_wrong_version": {
+    "status": 404,
+    "body": {
+      "message": "Node 665f1c0a2b3c4d5e6f730000 not found in specified version number 1."
+    }
+  },
+  "edges_get_wrong_version": {
+    "status": 404,
+    "body": {
+      "message": "Edge not found in specified version."
+    }
+  },
+  "snapshot_status_v1": {
+    "status": 200,
+    "body": {
+      "workflow_id": "665f1c0a2b3c4d5e6f730001",
+      "version_number": 1,
+      "super_nodes": []
+    }
+  },
+  "unpublish_dry_run_unpublished": {
+    "status": 404,
+    "body": {
+      "message": "Sorry! We haven't found this route or not implemented yet!"
+    }
+  }
+}

@@ -151,18 +151,17 @@ class TestRouteCoverage:
     gained was found by hand, a sync late.
     """
 
-    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **65**.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **16**.
     #:
     #: * 6 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export and import.
-    #: * 56 query fields no SDK method can send: the date window (``start``/``end``, 22) and ``search`` (3) that
-    #:   most paginated lists read; ``version_number`` on node, edge and super-node routes (13); ``logical_id``
-    #:   on five lists; ``workflow_type`` (3); the workflow, template and tool list filters;
-    #:   ``find_active_version``; ``backend``; ``dry_run``.
-    #: * 3 query keys the SDK sends that the server does not read, so the filter silently does nothing:
-    #:   ``workflow_id`` on the tool list; ``category`` and ``created_by_me`` on the active-versions list.
+    #: * 10 query fields no SDK method can send: ``workflow_type`` (3); the workflow list's ``categories``,
+    #:   ``created_by``, ``favorites`` and ``logical_id``; ``workflows.get``'s ``version_number`` and
+    #:   ``find_active_version``; ``backend`` on the realtime-compatibility check.
+    #:
+    #: Fields a route declares but never reads are on ``KNOWN_UNCOVERED_QUERY_FIELDS``, with the reason.
     #:
     #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
-    KNOWN_ROUTE_DEBT = 65
+    KNOWN_ROUTE_DEBT = 16
 
     @staticmethod
     def _report():

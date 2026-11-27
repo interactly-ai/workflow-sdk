@@ -389,9 +389,22 @@ class WorkflowsResource(SyncAPIResource):
         """Return the JSON schema for GlobalNodeConfig (used for Super Node routing)."""
         return self._client.get(f"{_PATH}/schemas/global-node-config", cast_to=dict)
 
-    def dynamic_variables(self, workflow_id: str) -> Dict[str, Any]:
-        """Return the dynamic variable definitions for a workflow."""
-        return self._client.get(f"{_PATH}/dynamic-variables/{workflow_id}", cast_to=dict)
+    def dynamic_variables(self, workflow_id: str, *, version_number: Optional[int] = None) -> Dict[str, Any]:
+        """Return the dynamic variable definitions for a workflow.
+
+        Args:
+            workflow_id:    ObjectId of the workflow.
+            version_number: The version to read them from. Without it, the server reads the workflow's own record
+                            rather than a version.
+
+        Raises:
+            NotFoundError: no such workflow, or no such version of it.
+        """
+        return self._client.get(
+            f"{_PATH}/dynamic-variables/{workflow_id}",
+            params=_version_and_model_params(version_number),
+            cast_to=dict,
+        )
 
     def lints(self, workflow_id: str, *, version_number: Optional[int] = None) -> WorkflowLintReport:
         """Every advisory lint for a stored workflow, run against the whole graph.
@@ -734,8 +747,13 @@ class AsyncWorkflowsResource(AsyncAPIResource):
     async def global_node_config_schema(self) -> Dict[str, Any]:
         return await self._client.get(f"{_PATH}/schemas/global-node-config", cast_to=dict)
 
-    async def dynamic_variables(self, workflow_id: str) -> Dict[str, Any]:
-        return await self._client.get(f"{_PATH}/dynamic-variables/{workflow_id}", cast_to=dict)
+    async def dynamic_variables(self, workflow_id: str, *, version_number: Optional[int] = None) -> Dict[str, Any]:
+        """Return the dynamic variable definitions for a workflow; see :meth:`WorkflowsResource.dynamic_variables`."""
+        return await self._client.get(
+            f"{_PATH}/dynamic-variables/{workflow_id}",
+            params=_version_and_model_params(version_number),
+            cast_to=dict,
+        )
 
     async def lints(self, workflow_id: str, *, version_number: Optional[int] = None) -> WorkflowLintReport:
         """Every advisory lint for a stored workflow, run against the whole graph. See the sync counterpart."""
