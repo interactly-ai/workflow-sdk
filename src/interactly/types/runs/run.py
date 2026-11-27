@@ -167,8 +167,8 @@ class Run(BaseAPIModel):
     feedback_users: Dict[str, FeedbackUser] = Field(default_factory=dict)
 
     # A durable run's pause state. Scheduled, re-run and background runs are durable; streamed, REST-executed and
-    # simulation runs are durable too where the server switches that on. Each is None when the answer did not carry it:
-    # a list row carries only ``pause_requested`` and ``pause_summary``, and a server older than the pause fields
+    # simulation runs are durable too unless the server switches that off. Each is None when the answer did not carry
+    # it: a list row carries only ``pause_requested`` and ``pause_summary``, and a server older than the pause fields
     # carries none.
 
     #: True when the run is durable, so it can be paused, resumed, cancelled or signalled.

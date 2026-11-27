@@ -9,6 +9,51 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+---
+
+## [0.4.0] — 2026-11-27
+
+Brings the SDK in line with the workflow service as of `interactly-ai@ac21297a1` (2026-11-27): the config mirror,
+the HTTP routes and their query fields, the run socket's frames and close codes, and the server's enums. Against that
+source, `make parity-check`, `make route-check` and `make wire-check` each read 0. `make schema-check` reads 0 findings
+against EKS dev, with simulations compared. On dev, the integration suite passes, durable runs and the developer and
+viewer roles included: 99 of its 100 tests, the other being a Grok-on-Vertex reply the dev project has no access to.
+All 48 notebooks pass there too. Install both packages at 0.4.0: `pip install "interactly[configs]>=0.4.0"`.
+
+### Upgrading from 0.3.0
+
+The changes that can alter what existing code does:
+
+- **`llm_configs.update(..., preserve_api_key=)` is now `preserve_credentials=`**, with no alias. It keeps every
+  stored credential a config built in code leaves blank: `api_key`, Bedrock's AWS key pair, and a custom gateway's
+  credential headers. Pass `preserve_credentials=False` to remove them on purpose.
+- **Leaving a stream before its run ends cancels the run**, on a current server, unless a durable run is waiting on a
+  pause of its own. Keep iterating until the run ends, or end it with `stream.stop()`.
+- **`stream.stop()` and `command="stop"` store the run `cancelled`** (`termination_source` `client_stop`), not
+  `completed`.
+- **`event.is_ready_for_input()` fires once per turn that hands over to the user, in every workflow.** Before, it fired
+  only while fork companions ran. A loop that waited on it no longer hangs; one that broke on another event may now see
+  this one first.
+- **`list_all()`, `iter_pages()` and `next_page()` page past the first page** on every list. Code that read one page
+  through them now reads them all.
+- **`runs.execute(version_number=N)` runs version N.** It ran the active version before, whatever was asked.
+- **`workflows.versions.update_config()` changes the settings it is given.** It changed nothing before, so a call that
+  was a no-op now takes effect. A config holding nodes or edges raises `ValueError`.
+- **`workflows.versions.create()` requires `version_name`.**
+- **Removed filters the server never read:** `tools.list(workflow_id=)`, and `category` and `created_by_me` on
+  `workflows.versions.list_active()`. Use `categories=[...]` and `created_by=[...]`.
+- **Removed:** `RunStatus.PENDING`, `WorkflowConfig.voice_persona` (with `generated_voice_persona`,
+  `resolved_voice_persona()` and `VOICE_PERSONA_MAX_LENGTH`) and `WorkflowStatus.is_active_run_status()`.
+- **A config of a type this package does not know** reads as `UnknownLLMConfig` or `UnknownToolConfig`, where it
+  failed the node before; a saved LLM config of an unknown provider reads as `UnknownLLMConfig`, not a `dict`.
+- **Stream errors are typed by close code.** Each is a `StreamError` subclass, so `except StreamError` still catches
+  them. A viewer's socket raises `StreamPermissionError`, where it raised `websockets`' `ConnectionClosedError`.
+- **An error's message reads differently** for a 422 that carries the server's `message`: it reads as that message,
+  not as FastAPI's error list. Code matching on `str(err)` may need updating; the full body is still `err.body`.
+- **Fields that read `None` before now hold values:** `Simulation.status` and `WorkflowVersion.config`.
+- **The `configs` extra requires `interactly-configs>=0.4.0`.** `interactly.configs` re-exports names that only
+  exist from 0.4.0, so with an older configs package `import interactly.configs` fails.
+
 ### Drift harnesses
 #### Added
 - **`make route-check`** (`tests/tools/route_coverage.py`): the routes and query parameters the SDK's resources send,

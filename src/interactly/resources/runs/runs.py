@@ -24,7 +24,7 @@ Endpoints implemented:
 
 Run control applies to durable runs only, and pausing, resuming, cancelling and signalling need Developer access or
 above. Scheduled runs, re-runs and background runs are durable. Streamed, REST-executed and simulation runs are durable
-too where the server switches that on (``Run.durable`` says which a given run is).
+too, unless the server switches that off or predates it (``Run.durable`` says which a given run is).
 
 A 409 that carries ``Retry-After`` (the run kept changing while the request was recorded, so nothing was) is retried
 within ``max_retries``. A 503 (the server's durable store is unavailable) is raised at once as
