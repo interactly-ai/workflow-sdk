@@ -634,6 +634,51 @@ class TestPreserveCredentials:
         sent = calls[0]["body"]["config"]
         assert (sent.get("api_key"), sent["default_headers"]) == (None, {"Authorization": ""})
 
+    @pytest.mark.parametrize(
+        "stored_auth",
+        [
+            "Bearer stored",  # what an admin reads
+            "",  # what a member below admin reads; sent blank, the server keeps the stored value
+        ],
+    )
+    @respx.mock
+    def test_a_credential_header_the_new_map_leaves_out_is_carried(self, client, stored_auth):
+        read = {"type": "custom_llm", "default_headers": {"Authorization": stored_auth, "X-Tenant": "t1"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(read)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(read)))
+
+        client.llm_configs.update("c1", config={"type": "custom_llm", "default_headers": {"X-Tenant": "t2"}})
+
+        # The plain header is the caller's to set or drop; the credential it never mentioned is kept.
+        assert calls[0]["body"]["config"]["default_headers"] == {"X-Tenant": "t2", "Authorization": stored_auth}
+
+    @respx.mock
+    def test_a_credential_header_the_new_map_names_in_another_case_is_not_carried_twice(self, client):
+        read = {"type": "custom_llm", "default_headers": {"Authorization": "Bearer stored"}}
+        respx.get(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(return_value=httpx.Response(200, json=_stored(read)))
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored(read)))
+
+        client.llm_configs.update(
+            "c1", config={"type": "custom_llm", "default_headers": {"authorization": "Bearer new"}}
+        )
+
+        assert calls[0]["body"]["config"]["default_headers"] == {"authorization": "Bearer new"}
+
+    @respx.mock
+    def test_opting_out_sends_a_header_map_as_given(self, client):
+        calls: List[Dict[str, Any]] = []
+        respx.patch(f"{TEST_BASE_URL}/v1/llm-configs/c1").mock(side_effect=_recorder(calls, _stored({})))
+
+        client.llm_configs.update(
+            "c1",
+            config={"type": "custom_llm", "default_headers": {"X-Tenant": "t2"}},
+            preserve_credentials=False,
+        )
+
+        assert calls[0]["body"]["config"]["default_headers"] == {"X-Tenant": "t2"}
+
     @respx.mock
     def test_a_non_admin_update_with_no_header_map_names_the_credential_headers_blank(self, client):
         # A member below admin reads them blank. Sent blank, the server keeps the stored values; left out, it would

@@ -82,6 +82,26 @@ def test_an_admin_update_built_in_code_keeps_every_stored_credential(session):
     assert (cleared.get("api_key"), cleared.get("default_headers")) == (None, None)
 
 
+def test_a_header_map_that_leaves_a_credential_header_out_keeps_it_unless_opted_out(session):
+    # A map built in code with only the header it means to change: the credential it never mentions is carried.
+    client, created = session
+    gateway = client.llm_configs.create(
+        name=f"SDK_E2E gateway {uuid.uuid4().hex[:8]}",
+        config=_gateway(api_key="sk-sdk-e2e", default_headers={"Authorization": _AUTH, "X-Tenant": "t1"}),
+    )
+    created.append(gateway.llm_config_id)
+
+    client.llm_configs.update(gateway.llm_config_id, config=_gateway(default_headers={"X-Tenant": "t2"}))
+    kept = _stored(client, gateway.llm_config_id)
+    client.llm_configs.update(
+        gateway.llm_config_id, config=_gateway(default_headers={"X-Tenant": "t3"}), preserve_credentials=False
+    )
+    dropped = _stored(client, gateway.llm_config_id)
+
+    assert kept["default_headers"] == {"X-Tenant": "t2", "Authorization": _AUTH}
+    assert dropped["default_headers"] == {"X-Tenant": "t3"}
+
+
 def test_an_export_comes_back_through_secret_overrides_and_not_without_them(session):
     client, created = session
     gateway = client.llm_configs.create(

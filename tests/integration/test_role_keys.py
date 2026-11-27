@@ -98,7 +98,16 @@ async def test_a_developer_key_reaches_a_simulation_groups_pause(developer_clien
             await client.simulations.pause_run(_NO_SUCH_NODE, reason="role check")
 
 
-async def test_a_developer_update_built_in_code_keeps_the_stored_credentials(developer_client):
+@pytest.mark.parametrize(
+    "headers, expected",
+    [
+        # No header map at all: the plain header the new config left out goes, as for an admin.
+        (None, {"Authorization": _AUTH}),
+        # A map with only the header the update means to change.
+        ({"X-Tenant": "t2"}, {"X-Tenant": "t2", "Authorization": _AUTH}),
+    ],
+)
+async def test_a_developer_update_built_in_code_keeps_the_stored_credentials(developer_client, headers, expected):
     # A developer reads every credential blank. The server restores api_key itself, but deletes a credential header
     # an update leaves out, so the SDK names the stored one, blank, and the server keeps it. The main key, an
     # admin's, is shown the credentials and reads them back.
@@ -108,14 +117,13 @@ async def test_a_developer_update_built_in_code_keeps_the_stored_credentials(dev
             config=_gateway(api_key="sk-sdk-e2e", default_headers={"Authorization": _AUTH, "X-Tenant": "t1"}),
         )
         try:
-            await client.llm_configs.update(saved.id, config=_gateway())
+            await client.llm_configs.update(saved.id, config=_gateway(default_headers=headers))
             stored = (await admin.llm_configs.get(saved.id)).config
         finally:
             await admin.llm_configs.delete(saved.id)
 
     stored = stored.model_dump(mode="json") if isinstance(stored, BaseModel) else stored
-    # As for an admin: the credentials stay, and a plain header the new config left out goes.
-    assert (stored["api_key"], stored["default_headers"]) == ("sk-sdk-e2e", {"Authorization": _AUTH})
+    assert (stored["api_key"], stored["default_headers"]) == ("sk-sdk-e2e", expected)
 
 
 def _gateway(**fields: Any) -> CustomLLMConfig:

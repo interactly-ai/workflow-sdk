@@ -345,8 +345,10 @@ reads the stored config first and carries the stored value across. That covers:
 
 - `api_key`, and Bedrock's `aws_access_key_id` and `aws_secret_access_key`;
 - each credential header of `default_headers` (such as `Authorization` or `x-api-key`) that the new config sends
-  empty. Headers are matched by name, exactly and then ignoring case. A header you filled in keeps your value. If the
-  new config has no header map, the stored credential headers are carried into a new one; other headers are not.
+  empty or leaves out. Headers are matched by name, exactly and then ignoring case. A header you filled in keeps your
+  value. If the new config has no header map, the stored credential headers are carried into a new one. So a map with
+  only the headers you mean to change keeps the credentials it doesn't mention. Plain headers are yours: one the new
+  map leaves out is dropped.
 
 Group members are paired with their stored counterparts by `logical_id`, and backchannel configs are covered too. A
 credential is carried only onto a config of the same provider type: switching a saved config from OpenAI to Anthropic
@@ -362,11 +364,13 @@ await client.llm_configs.update(
 )
 ```
 
+To drop one credential header and keep the others, opt out the same way and send the credentials you keep.
+
 For a token below admin, the server never shows the credentials, and keeps most of them itself: it restores `api_key`
 and the AWS keys whatever the update sends, and keeps a stored credential header the update sends blank. A credential
-header the update leaves out, though, is deleted, so with no header map in `config`, `update` sends each stored
-credential header by name, blank, and the server keeps it. With `preserve_credentials=False` and no header map, a
-non-admin's update deletes the stored credential headers.
+header the update leaves out, though, is deleted, so `update` sends each stored credential header that `config`
+doesn't name by name, blank, and the server keeps it. With `preserve_credentials=False`, a non-admin's update deletes
+the stored credential headers its header map leaves out, or all of them when it has no map.
 
 To change the default:
 
