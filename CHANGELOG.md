@@ -9,6 +9,23 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+---
+
+## [0.4.1] — 2026-11-27
+
+Two changes to `interactly` since 0.4.0, both checked against EKS dev. `interactly-configs` is unchanged and stays at
+0.4.0, so the `configs` extra still requires `interactly-configs>=0.4.0`: `pip install "interactly[configs]>=0.4.1"`.
+
+### Upgrading from 0.4.0
+
+The changes that can alter what existing code does:
+
+- **`RunEvent.is_terminal()` is False for a `workflow_error` the server tolerated** (`fatal: false`): the run goes on
+  and takes the next message. A stream marks that error `is_ready_for_input()`. A loop that reads only until
+  `is_terminal()` now waits after such a failure; answer `is_ready_for_input()` with `send()` or `stop()`.
+- **With an admin token, `llm_configs.update()` keeps a stored credential header that a `default_headers` map leaves
+  out**, where it deleted it before. To drop one, pass `preserve_credentials=False` and send the credentials you keep.
+
 ### LLM configs: a credential header a header map leaves out is kept
 #### Changed
 - **`llm_configs.update(..., preserve_credentials=True)` carries a stored credential header that the new
