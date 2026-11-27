@@ -206,7 +206,8 @@ async with AsyncWorkflowClient() as client:
 ```
 
 Companion events keep arriving between turns, so keep iterating the same stream. Only `end_workflow` means every
-thread has finished; a `workflow_error` ends the turn (see [Streaming](../streaming.md#gotchas)).
+thread has finished; a `workflow_error` the server tolerated ends only the turn (see
+[Streaming](../streaming.md#gotchas)).
 
 Three events that are easy to conflate:
 

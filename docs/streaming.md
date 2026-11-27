@@ -37,17 +37,18 @@ Three questions come up, and the events answer them differently. Pick the method
 | Question | Answer |
 |---|---|
 | Is the run waiting for the user's next message? | `event.is_ready_for_input()`. True once per turn that hands over to the user, in every workflow. |
-| Has the run ended? | Iteration stops. `event.is_terminal()` is True on `end_workflow` and `workflow_error`; a `workflow_error` can leave the run going (see Gotchas). |
+| Has the run ended? | `event.is_terminal()`, or iteration stops. True on `end_workflow` and on a `workflow_error` the run cannot carry on from; not on a failure the server tolerated (see Gotchas). |
 | What is the turn's bookkeeping? | `end_workflow_iteration`. A marker only. Once companions run, it does not hand over to the user. |
 
 ```python
 event.is_ready_for_input()   # the hand-over to the user: send the next message here
-event.is_terminal()          # end_workflow or workflow_error
+event.is_terminal()          # end_workflow, or a workflow_error that ends the run
 ```
 
 `is_ready_for_input()` answers "your turn" in every workflow. The server sends `workflow_ready_for_input` only
 while [companion threads](guides/companion_threads.md) run in the background. Without them, the stream marks the
-turn's `end_workflow_iteration` as the hand-over instead.
+turn's `end_workflow_iteration` as the hand-over instead, and marks a turn's `workflow_error` when the server
+tolerated the failure, since the run then takes the next message.
 
 Once companion threads are in play, companions keep emitting events while the main thread waits, so a loop that
 breaks on `end_workflow_iteration` will cut off mid-turn or race. Send on `is_ready_for_input()`, and stop on
@@ -90,7 +91,7 @@ Lifecycle and navigation:
 | `start_workflow` / `end_workflow` | The run began / every thread has ended. |
 | `end_workflow_iteration` | One turn completed. Carries `iteration_metrics`. |
 | `workflow_ready_for_input` | The main thread waits for the user while companions run. Sent only then. |
-| `workflow_error` | A node failed. Ends the turn; the run ends only if the socket then closes (see Gotchas). |
+| `workflow_error` | A node failed. `fatal` is False when the server tolerated it: the turn ends and the run takes the next message. True, or absent, when the run ends (see Gotchas). |
 | `conditional_edge` / `direct_edge` | A transition was taken. |
 | `reverse_conditional_edge` | A global node returned control to its caller. |
 | `guardrail_escalation_edge` | The guardrail-strikes threshold escalated the run. |
@@ -361,10 +362,13 @@ with client.runs.stream(workflow_id="wf-123") as events:
 ## Gotchas
 
 - **A `workflow_error` does not always end the run.** On the run socket, a node failure the server tolerates ends
-  the turn with `workflow_error` and leaves the socket open, so the user can send the next turn. Only a failure
-  followed by the socket closing with 1011 ends the run. Treat `workflow_error` as the end of a turn, and the run
-  as ended when iteration stops. `is_terminal()` is True for it, so a conversation loop should not stop on
-  `is_terminal()` alone.
+  the turn with a `workflow_error` marked `fatal: false` and leaves the socket open; the run takes the next
+  message. The stream marks that error `is_ready_for_input()`, and `is_terminal()` is False for it. The server sends
+  it before it checks the workflow's error limits (`num_errors_tolerated`, `num_consecutive_errors_tolerated`,
+  `stop_workflow_on_error`). When they end the run after all, one more `workflow_error` follows, with no `fatal` flag
+  and the whole reason, and the socket closes with 1011, which iteration raises as `StreamServerError`. So a turn
+  sent on a tolerated error can still meet the end of the run. An error from an older server, which sends no flag,
+  counts as terminal.
 - **Leaving the `with` block cancels the run**, companion threads included, even mid-turn. Iterate until the run
   ends, or call `stop()` first.
 - **`send()` mid-turn waits.** The turn is taken when the current one ends, not at once.

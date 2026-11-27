@@ -70,6 +70,11 @@ class RunEvent(BaseAPIModel):
     # Error message for failure events.
     error: Optional[str] = None
 
+    #: For ``workflow_error``: False when the server tolerated the node's failure, so the run takes the next message;
+    #: True when the run cannot carry on. None when the frame carries no flag, as an older server's and the one sent
+    #: just before a socket closes with 1011 do. See :meth:`is_terminal`.
+    fatal: Optional[bool] = None
+
     # Additional arbitrary payload from the server.
     data: Optional[Dict[str, Any]] = None
 
@@ -104,17 +109,21 @@ class RunEvent(BaseAPIModel):
 
     def is_terminal(self) -> bool:
         """
-        Return True if this event signals the end of the run.
+        Return True if this event ends the run: ``end_workflow``, or a ``workflow_error`` the run does not carry on from.
 
-        Terminal types: ``end_workflow`` (successful completion) and
-        ``workflow_error`` (error termination). Navigation events such as
-        ``conditional_edge`` and ``reverse_conditional_edge`` are explicitly
-        *not* terminal.
+        A ``workflow_error`` with ``fatal`` False is a node failure the server tolerated. It ends the turn, not the
+        run: the run takes the user's next message, and a stream marks the error :meth:`is_ready_for_input`. If the
+        workflow's error limits end the run after all, the server sends one more ``workflow_error``, with no ``fatal``
+        flag, and closes the socket with 1011, which a stream raises as ``StreamServerError``. An error with no flag,
+        as every one an older server sends, counts as the end, as one with ``fatal`` True does. Navigation events such
+        as ``conditional_edge`` and ``reverse_conditional_edge`` are not terminal.
 
-        Note that ``end_workflow`` now means **all** threads have ended, companions included. To
-        detect "the workflow wants my next message", use :meth:`is_ready_for_input`.
+        ``end_workflow`` means **all** threads have ended, companions included. To detect "the workflow wants my next
+        message", use :meth:`is_ready_for_input`.
         """
-        return self.type in {"end_workflow", "workflow_error"}
+        if self.type == "workflow_error":
+            return self.fatal is not False
+        return self.type == "end_workflow"
 
     def is_ready_for_input(self) -> bool:
         """Return True at the moment the run waits for the user's next message: the time to ``send()`` it.
@@ -122,8 +131,9 @@ class RunEvent(BaseAPIModel):
         It fires once per turn that hands over to the user. The server says so with ``workflow_ready_for_input`` only
         while fork companions run on in the background. Without them it sends nothing of the kind, so a stream marks
         the turn's last event instead (its ``end_workflow_iteration``) when the turn left a main thread waiting for a
-        message, and marks a take-back's acknowledgement when the run it took back waits for its user. An event read
-        outside a stream answers by its type alone.
+        message, marks a take-back's acknowledgement when the run it took back waits for its user, and marks a
+        ``workflow_error`` the server tolerated (``fatal`` False), since the run then takes the next message. An event
+        read outside a stream answers by its type alone.
 
         Distinct from :meth:`is_terminal` and from ``end_workflow_iteration``. Once companion
         threads are in play the three diverge: an iteration marker is per-turn accounting,
