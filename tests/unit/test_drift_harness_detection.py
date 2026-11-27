@@ -24,7 +24,9 @@ if str(_TOOLS) not in sys.path:
     sys.path.insert(0, str(_TOOLS))
 
 import config_parity as cp  # noqa: E402
+import route_coverage as rc  # noqa: E402
 import schema_sync as ss  # noqa: E402
+import wire_values as wv  # noqa: E402
 
 # --------------------------------------------------------------------------------------------- #
 # config_parity                                                                                   #
@@ -371,6 +373,40 @@ class TestUnmirroredDependencies:
         assert len(cp.find_unmirrored_dependencies(root, sources, include_known=True)) == 1
 
 
+class TestDocstringsAreCompared:
+    _UPSTREAM = """
+        from pydantic import BaseModel
+        class Cfg(BaseModel):
+            \"\"\"Runs the task and waits for it,
+            then routes on how it ended.\"\"\"
+            x: int = 0
+    """
+
+    def test_a_reworded_docstring_is_reported_but_not_counted(self, tmp_path):
+        # Arrange: same fields, different prose.
+        mirror = self._UPSTREAM.replace("waits for it", "does not wait")
+        # Act
+        report = _parity(tmp_path, {"m.py": self._UPSTREAM}, {"m.py": mirror})
+        # Assert
+        assert [name for name, _, _ in report.docstring_mismatches] == ["Cfg"]
+        assert report.total == 0
+
+    def test_a_docstring_wrapped_differently_is_the_same_docstring(self, tmp_path):
+        mirror = self._UPSTREAM.replace("waits for it,\n            then", "waits for it, then")
+        report = _parity(tmp_path, {"m.py": self._UPSTREAM}, {"m.py": mirror})
+        assert report.docstring_mismatches == []
+
+    def test_a_docstring_only_one_side_has_is_reported(self, tmp_path):
+        mirror = """
+            from pydantic import BaseModel
+            class Cfg(BaseModel):
+                x: int = 0
+        """
+        report = _parity(tmp_path, {"m.py": self._UPSTREAM}, {"m.py": mirror})
+        expected = ("Cfg", "Runs the task and waits for it, then routes on how it ended.", None)
+        assert report.docstring_mismatches == [expected]
+
+
 # --------------------------------------------------------------------------------------------- #
 # schema_sync                                                                                     #
 # --------------------------------------------------------------------------------------------- #
@@ -483,3 +519,319 @@ class TestToolTypesAreDiscoveredFromTheServer:
             "/v1/tools/schema/external_api": "ExternalAPIToolConfig",
             "/v1/tools/schema/a_tool_type_from_the_future": "",
         }
+
+
+
+class TestEveryListedSchemaEndpointIsCompared:
+    _NO_DISCOVERED_TYPES = {
+        "/v1/nodes/types": {"node_types": []},
+        "/v1/tools/types": {"tool_types": []},
+        "/v1/edges/types": {"edge_types": []},
+    }
+
+    def test_a_model_the_package_does_not_export_is_still_found(self, monkeypatch):
+        # Arrange: `SimulationConfig` lives in `interactly_configs.simulation` and is not a top-level export.
+        monkeypatch.setattr(ss, "get_json", lambda client, path: self._NO_DISCOVERED_TYPES.get(path))
+        # Act
+        work = {endpoint: (name, model) for endpoint, name, model in ss.resolve_local_models(client=None)}
+        # Assert
+        assert work["/v1/simulations/schema"][1] is not None
+        assert work["/v1/simulations/schema"][1].__name__ == "SimulationConfig"
+
+    def test_every_fixed_endpoint_resolves_to_a_class(self, monkeypatch):
+        monkeypatch.setattr(ss, "get_json", lambda client, path: self._NO_DISCOVERED_TYPES.get(path))
+        unresolved = [endpoint for endpoint, _, model in ss.resolve_local_models(client=None) if model is None]
+        assert unresolved == []
+
+    def test_an_edge_type_the_mirror_lacks_is_unmapped_rather_than_dropped(self, monkeypatch):
+        edge_types = ["direct", "an_edge_type_from_the_future"]
+        responses = {**self._NO_DISCOVERED_TYPES, "/v1/edges/types": {"edge_types": edge_types}}
+        monkeypatch.setattr(ss, "get_json", lambda client, path: responses.get(path))
+        work = {endpoint: model for endpoint, _, model in ss.resolve_local_models(client=None)}
+        assert work["/v1/edges/schema/direct"] is not None
+        assert work["/v1/edges/schema/an_edge_type_from_the_future"] is None
+
+
+# --------------------------------------------------------------------------------------------- #
+# route_coverage                                                                                  #
+# --------------------------------------------------------------------------------------------- #
+
+_ROUTER = """
+    from typing import Optional
+    from fastapi import APIRouter, Depends, Query
+    from common.models.request_models import PaginationRequest, Requester
+    from workflow_service.utils.request_models import CreateThing, ThingFilter, Colour
+
+    router = APIRouter(prefix="/v1")
+    hidden_router = APIRouter(prefix="/v1", include_in_schema=False)
+    internal_router = APIRouter(prefix="/internal/v1")
+
+    @router.get("/things")
+    async def list_things(
+        filters: ThingFilter = Query(),
+        requester: Requester = Depends(),
+        pagination: PaginationRequest = Depends(),
+    ):
+        ...
+
+    @router.get("/things/{thing_id}")
+    async def get_thing(
+        thing_id: str,
+        version_number: Optional[int] = Query(None),
+        verbose: bool = False,
+        colour: Optional[Colour] = None,
+    ):
+        ...
+
+    @router.post("/things")
+    async def create_thing(body: CreateThing, requester: Requester = Depends()):
+        ...
+
+    @router.post("/things/{thing_id}/archive")
+    async def archive_thing(thing_id: str):
+        ...
+
+    @hidden_router.get("/secret-things")
+    async def secret_things():
+        ...
+
+    @internal_router.get("/things/{thing_id}")
+    async def internal_thing(thing_id: str):
+        ...
+
+    @router.websocket("/things/ws")
+    async def things_socket(websocket):
+        ...
+"""
+
+_REQUEST_MODELS = """
+    from enum import Enum
+    from typing import Optional
+    from pydantic import BaseModel, Field
+
+    class Colour(str, Enum):
+        RED = "red"
+
+    class ThingFilter(BaseModel):
+        logical_id: Optional[str] = None
+        shade: Optional[str] = Field(None, alias="color")
+
+    class CreateThing(BaseModel):
+        name: str
+"""
+
+_COMMON_REQUEST_MODELS = """
+    from typing import Optional
+    from fastapi import Header, Query
+
+    class Requester:
+        def __init__(self, team_id: Optional[str] = Header(default=None, alias="teamid")):
+            self.team_id = team_id
+
+    class PaginationRequest:
+        def __init__(
+            self,
+            size: int = Query(default=10),
+            page: int = Query(default=1),
+            debug: str = Query(None, include_in_schema=False),
+        ):
+            self.size = size
+"""
+
+_RESOURCE = """
+    from typing import Any, Dict, Optional
+
+    _PATH = "/v1/things"
+    _WS_PATH = "/v1/things/ws"
+
+    def _filters(page: int, logical_id: Optional[str] = None, color: Optional[str] = None) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"page": page}
+        if logical_id is not None:
+            params["logical_id"] = logical_id
+        if color is not None:
+            params["color"] = color
+        return params
+
+    class Things:
+        def _path(self, thing_id: Optional[str] = None) -> str:
+            base = _PATH
+            return f"{base}/{thing_id}" if thing_id is not None else base
+
+        def list(self, logical_id=None):
+            return self._client.get(self._path(), params=_filters(1, logical_id))
+
+        def get(self, thing_id):
+            return self._client.get(self._path(thing_id), params={"verbose": True, "nope": 1})
+
+        def create(self):
+            return self._client.post(_PATH, body={})
+
+        def delete(self, thing_id):
+            return self._client.delete(f"{_PATH}/{thing_id}")
+
+        def mystery(self, params):
+            return self._client.get(_PATH, params=params)
+"""
+
+
+@pytest.fixture
+def route_report(tmp_path: Path) -> rc.RouteReport:
+    root = _write(
+        tmp_path / "interactly-ai",
+        {
+            "workflow_service/app/routers/things.py": _ROUTER,
+            "workflow_service/utils/request_models.py": _REQUEST_MODELS,
+            "common/models/request_models.py": _COMMON_REQUEST_MODELS,
+        },
+    )
+    resources = _write(tmp_path / "resources", {"things/things.py": _RESOURCE})
+    return rc.build_report(root, resources)
+
+
+class TestUpstreamRoutesAreReadAsFastAPIReadsThem:
+    def test_query_models_dependency_classes_and_plain_parameters_are_query_fields(self, route_report):
+        routes = {r.key: r for r in route_report.upstream_routes}
+        # A `Query()` model (with an alias), a `Depends()` class's `Query()` parameters (not the hidden one),
+        # never the `Requester` headers.
+        assert routes[("GET", "/v1/things")].query == {"logical_id", "color", "size", "page"}
+        # A `Query()` parameter, a plain bool and an enum; the path parameter is not one.
+        assert routes[("GET", "/v1/things/{}")].query == {"version_number", "verbose", "colour"}
+        # A model with no marker is the body.
+        assert routes[("POST", "/v1/things")].query == frozenset()
+
+    def test_hidden_internal_and_socket_routes_are_told_apart(self, route_report):
+        public = {r.key: r.public for r in route_report.upstream_routes}
+        assert public[("GET", "/v1/secret-things")] is False
+        assert public[("GET", "/internal/v1/things/{}")] is False
+        assert public[("WS", "/v1/things/ws")] is True
+
+
+class TestSdkCoverageIsReported:
+    def test_a_public_route_the_sdk_never_calls_is_reported_and_hidden_ones_are_not(self, route_report):
+        assert [r.key for r in route_report.missing_routes] == [("POST", "/v1/things/{}/archive")]
+
+    def test_a_query_field_the_sdk_cannot_send_is_reported(self, route_report):
+        assert ("GET", "/v1/things/{}", "version_number") in route_report.missing_query_fields
+
+    def test_a_helper_key_counts_only_when_the_caller_passes_its_argument(self, route_report):
+        # `list` passes `logical_id` but never `color`, which the helper writes only when given.
+        missing = {name for method, path, name in route_report.missing_query_fields if path == "/v1/things"}
+        assert missing == {"color", "size"}
+
+    def test_a_path_helper_renders_the_branch_the_caller_takes(self, route_report):
+        by_location = {c.location: c.path for c in route_report.sdk_calls}
+        assert by_location["things/things.py:list"] == "/v1/things"
+        assert by_location["things/things.py:get"] == "/v1/things/{}"
+
+    def test_a_request_to_a_route_upstream_does_not_declare_is_reported(self, route_report):
+        assert [(m, p) for m, p, _ in route_report.sdk_routes_not_upstream] == [("DELETE", "/v1/things/{}")]
+
+    def test_a_query_key_upstream_does_not_read_is_reported(self, route_report):
+        assert route_report.sdk_query_not_upstream == [("GET", "/v1/things/{}", "nope")]
+
+    def test_params_the_harness_cannot_read_are_reported_not_assumed_empty(self, route_report):
+        assert route_report.unrenderable_calls == [("things/things.py:mystery", "params `params`")]
+
+    def test_an_allow_listed_route_is_suppressed_and_recorded(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(rc.KNOWN_UNCOVERED_ROUTES, ("POST", "/v1/things/{}/archive"), "fixture")
+        root = _write(
+            tmp_path / "interactly-ai",
+            {
+                "workflow_service/app/routers/things.py": _ROUTER,
+                "workflow_service/utils/request_models.py": _REQUEST_MODELS,
+                "common/models/request_models.py": _COMMON_REQUEST_MODELS,
+            },
+        )
+        report = rc.build_report(root, _write(tmp_path / "resources", {"things/things.py": _RESOURCE}))
+        assert report.missing_routes == []
+        assert "KNOWN_UNCOVERED_ROUTES:POST /v1/things/{}/archive" in report.allowances_used
+
+
+# --------------------------------------------------------------------------------------------- #
+# wire_values                                                                                     #
+# --------------------------------------------------------------------------------------------- #
+
+_UPSTREAM_SOCKET = """
+    from fastapi import WebSocketException, status
+
+    TAKE_BACK_REFUSED_CLOSE_CODE = 4010
+    RUN_GONE = 4009
+
+    async def handler(websocket):
+        await websocket.close(code=4000, reason="bad input")
+        await websocket.close(code=RUN_GONE, reason="gone")
+        raise WebSocketException(code=4001, reason="mismatch")
+
+    REFUSALS = (status.WS_1008_POLICY_VIOLATION,)
+"""
+
+
+def _wire_report(tmp_path: Path, monkeypatch, sdk_enum: str, sdk_map: str) -> wv.WireReport:
+    root = _write(
+        tmp_path / "interactly-ai",
+        {
+            "upstream/socket.py": _UPSTREAM_SOCKET,
+            "upstream/models.py": """
+                from enum import Enum
+                class RunState(str, Enum):
+                    RUNNING = "running"
+                    WAITING = "waiting"
+            """,
+        },
+    )
+    sdk = _write(tmp_path / "interactly", {"types/run.py": sdk_enum, "_streaming.py": sdk_map})
+    monkeypatch.setattr(wv, "ENUM_TWINS", {"types/run.py:RunStatus": ("upstream/models.py", "RunState")})
+    monkeypatch.setattr(wv, "RUN_SOCKET_SOURCES", ("upstream/socket.py",))
+    monkeypatch.setattr(wv, "NAMESAKE_SOURCES", ("upstream",))
+    return wv.build_report(root, sdk)
+
+
+_SDK_ENUM = """
+    from enum import Enum
+    class RunStatus(str, Enum):
+        RUNNING = "running"
+        PENDING = "pending"
+"""
+
+_SDK_MAP = """
+    _CLOSE_CODE_ERRORS: dict[int, type] = {4000: ValueError, 4999: KeyError}
+"""
+
+
+class TestEnumTwinsAreCompared:
+    def test_values_either_side_lacks_are_reported(self, tmp_path, monkeypatch):
+        report = _wire_report(tmp_path, monkeypatch, _SDK_ENUM, _SDK_MAP)
+        assert report.twin_values_missing == [("RunStatus", "waiting")]
+        assert report.twin_values_extra == [("RunStatus", "pending")]
+
+    def test_matching_twins_report_nothing(self, tmp_path, monkeypatch):
+        sdk_enum = _SDK_ENUM.replace('PENDING = "pending"', 'WAITING = "waiting"')
+        report = _wire_report(tmp_path, monkeypatch, sdk_enum, _SDK_MAP)
+        assert report.twin_values_missing == []
+        assert report.twin_values_extra == []
+        assert report.twins_compared == 1
+
+    def test_an_sdk_enum_named_like_an_upstream_one_must_be_mapped(self, tmp_path, monkeypatch):
+        sdk_enum = _SDK_ENUM + """
+    class RunState(str, Enum):
+        RUNNING = "running"
+"""
+        report = _wire_report(tmp_path, monkeypatch, sdk_enum, _SDK_MAP)
+        assert report.unmapped_namesakes == ["RunState"]
+
+
+class TestCloseCodesAreCompared:
+    def test_codes_are_read_from_literals_constants_and_starlette_names(self, tmp_path):
+        root = _write(tmp_path / "interactly-ai", {"upstream/socket.py": _UPSTREAM_SOCKET})
+        assert wv.upstream_close_codes(root, ("upstream/socket.py",)) == {1008, 4000, 4001, 4009, 4010}
+
+    def test_untyped_and_stale_codes_are_reported(self, tmp_path, monkeypatch):
+        report = _wire_report(tmp_path, monkeypatch, _SDK_ENUM, _SDK_MAP)
+        assert report.close_codes_untyped == [1008, 4001, 4009, 4010]
+        assert report.close_codes_stale == [4999]
+
+    def test_an_allow_listed_code_is_suppressed_and_recorded(self, tmp_path, monkeypatch):
+        monkeypatch.setitem(wv.KNOWN_UNTYPED_CLOSE_CODES, 1008, "fixture")
+        report = _wire_report(tmp_path, monkeypatch, _SDK_ENUM, _SDK_MAP)
+        assert 1008 not in report.close_codes_untyped
+        assert "KNOWN_UNTYPED_CLOSE_CODES:1008" in report.allowances_used

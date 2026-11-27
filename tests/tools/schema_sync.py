@@ -97,6 +97,7 @@ KNOWN_SERIALIZER_DROPPED_DEFAULTS: Dict[str, str] = {
     "source_workflow_run_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
     "evaluator_workflow_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
     "evaluation_workflow_run_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
+    "run_id": "upstream stringifies PydanticObjectId with a field_serializer; mirror field is str",
     "access_list": "upstream stringifies List[PydanticObjectId] with a field_serializer; mirror field is List[str]",
 }
 
@@ -221,9 +222,12 @@ def resolve_local_models(client: httpx.Client) -> List[Tuple[str, str, Any]]:
     work: List[Tuple[str, str, Any]] = []
 
     def add(endpoint: str, model_name: str) -> None:
-        model = getattr(ic, model_name, None)
-        if model is not None:
-            work.append((endpoint, model_name, model))
+        # Looked up across the whole mirror package, not only the package's top-level exports, and recorded
+        # as unmapped (model None) when no class of that name exists. Dropping the endpoint instead is how
+        # `/v1/simulations/schema` went uncompared from the day this harness was written: `SimulationConfig`
+        # was never a top-level export, so the endpoint vanished from the run without a word.
+        model = getattr(ic, model_name, None) or (mirror_classes().get(model_name) if model_name else None)
+        work.append((endpoint, model_name, model))
 
     node_types = (get_json(client, "/v1/nodes/types") or {}).get("node_types", [])
     for entry in node_types:

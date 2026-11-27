@@ -52,19 +52,26 @@ class TestConfigParity:
             pytest.skip(f"no upstream config sources under {root}")
         return cp.build_report(root)
 
-    #: Differences that are known and attributed. **Zero**: every gap was closed on 2026-10-02, measured
-    #: against upstream ``main`` at 07a14e7da. Keep it at zero by mirroring an upstream change in the
-    #: same pull request that notices it.
+    #: Differences that are known and attributed. **One**, measured 2026-11-26 against upstream ``main`` at
+    #: a87b31348: ``SimulationStatus.PAUSED`` (a simulation group a person paused), added upstream on
+    #: 2026-11-23. Lower this to zero in the change that mirrors it.
     #:
     #: Held as a **ratchet rather than an ignore**: the guard fails if the total moves in either
-    #: direction. While it was non-zero, that meant: up is new drift, down is a closed gap whose number
-    #: nobody lowered. At zero, only "up" can happen.
+    #: direction. Up is new drift; down is a closed gap whose number nobody lowered.
     #:
     #: If drift has to be carried for a while, raise this with an attributed breakdown beside it rather
     #: than allow-listing the gaps: the allow-lists are for divergences that are *deliberate*, and an
     #: unfollowed upstream change is not. And do not leave the guard red instead: it once sat red at 40
     #: for weeks, and a red guard cannot tell you that a 41st difference just appeared.
-    KNOWN_UPSTREAM_DEBT = 0
+    KNOWN_UPSTREAM_DEBT = 1
+
+    #: Class docstrings that differ between upstream and the mirror, counted apart from the total above
+    #: because prose and contract read badly in one number. Measured 2026-11-26: **84** — 38 classes
+    #: documented upstream and not in the mirror (mostly event classes), 6 documented only in the mirror,
+    #: 40 documented differently on each side (among them six ECS node docstrings upstream rewrote on
+    #: 2026-11-23). A ratchet for the same reason as the one above: before it existed, upstream rewrote
+    #: docstrings and nothing said so.
+    KNOWN_DOCSTRING_DRIFT = 84
 
     def test_no_new_drift_against_upstream(self):
         report = self._report()
@@ -87,6 +94,15 @@ class TestConfigParity:
                 f"recorded debt of {self.KNOWN_UPSTREAM_DEBT}.\n{summary}\n\n"
                 f"Run `make parity-check` for the full report."
             )
+
+    def test_docstring_drift_has_not_moved(self):
+        report = self._report()
+        drift = len(report.docstring_mismatches)
+        assert drift == self.KNOWN_DOCSTRING_DRIFT, (
+            f"{drift} class docstring(s) now differ from upstream; the recorded count is "
+            f"{self.KNOWN_DOCSTRING_DRIFT}. If the mirror caught up, lower KNOWN_DOCSTRING_DRIFT. If upstream "
+            "changed a docstring, copy it into the mirror. `make parity-check` lists every one."
+        )
 
     def test_the_harness_actually_compared_something(self):
         """A harness that silently finds nothing to compare reports zero differences too.
@@ -123,6 +139,147 @@ class TestConfigParity:
             "fewer upstream nonmember expressions captured than hoisted entries — value comparison is "
             "checking nothing"
         )
+
+
+# --------------------------------------------------------------------------------------------- #
+# Route coverage: the SDK's requests vs. upstream's routes                                        #
+# --------------------------------------------------------------------------------------------- #
+
+
+class TestRouteCoverage:
+    """Every public route reachable, with every query field it reads, and no request to a route that is gone.
+
+    The config models had two harnesses; the client's own requests had none, so every route and filter the server
+    gained was found by hand, a sync late.
+    """
+
+    #: Findings known and attributed, measured 2026-11-26 against upstream ``main`` at a87b31348: **91**.
+    #:
+    #: * 11 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export, import and
+    #:   usage; simulation-group pause and resume; workflow and tool usage.
+    #: * 77 query fields no SDK method can send: the date window (``start``/``end``, 30) and ``search`` (6) that
+    #:   every paginated list reads; ``version_number`` on node, edge and super-node routes (14); ``logical_id``
+    #:   on seven lists; ``workflow_type`` (3); the workflow, simulation, template and tool list filters;
+    #:   ``needs_attention``; ``find_active_version``; ``backend``; execute's ``version``; ``dry_run``.
+    #: * 3 query keys the SDK sends that the server does not read, so the filter silently does nothing:
+    #:   ``workflow_id`` on the tool list; ``category`` and ``created_by_me`` on the active-versions list.
+    #:
+    #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
+    KNOWN_ROUTE_DEBT = 91
+
+    @staticmethod
+    def _report():
+        import config_parity as cp
+        import route_coverage as rc
+
+        root = cp.find_interactly_ai_root()
+        if root is None:
+            pytest.skip("interactly-ai checkout not found (set INTERACTLY_AI_ROOT to point at it)")
+        return rc, rc.build_report(root)
+
+    def test_no_new_gaps_against_upstream(self):
+        _, report = self._report()
+        if report.total != self.KNOWN_ROUTE_DEBT:
+            summary = "\n".join(f"  {label}: {len(items)}" for label, items in report.counted_categories() if items)
+            pytest.fail(
+                f"Route coverage reads {report.total} finding(s); the recorded debt is {self.KNOWN_ROUTE_DEBT}.\n"
+                f"{summary}\n\nRun `make route-check` for the full report. If a gap closed, lower KNOWN_ROUTE_DEBT "
+                "and its breakdown; if one opened, follow the server's change."
+            )
+
+    def test_the_harness_actually_compared_something(self):
+        rc, report = self._report()
+        public = [r for r in report.upstream_routes if r.public]
+        assert len(public) > 150, f"only {len(public)} public upstream routes parsed — route extraction is broken"
+        assert len(report.sdk_calls) > 200, f"only {len(report.sdk_calls)} SDK requests read — extraction is broken"
+        assert any(r.method == "WS" and r.public for r in report.upstream_routes), "no run socket upstream"
+        assert any(c.method == "WS" for c in report.sdk_calls), "the SDK's run socket was not found"
+        runs = next(r for r in public if r.key == ("GET", "/v1/workflow-runs"))
+        # A query model (`filters: WorkflowRunFilter = Query()`) and a dependency class (`PaginationRequest`).
+        assert {"needs_attention", "source_turn_index", "page", "size", "start"} <= runs.query, (
+            f"GET /v1/workflow-runs reads {sorted(runs.query)} — query-model or dependency expansion is broken"
+        )
+
+    def test_allow_listed_routes_are_still_public_and_still_uncalled(self):
+        rc, report = self._report()
+        public = {r.key for r in report.upstream_routes if r.public}
+        called = {c.key for c in report.sdk_calls}
+        for key, reason in rc.KNOWN_UNCOVERED_ROUTES.items():
+            assert reason.strip(), f"KNOWN_UNCOVERED_ROUTES[{key}] has no stated reason"
+            assert key in public, f"KNOWN_UNCOVERED_ROUTES[{key}] is no longer a public upstream route — drop it"
+            assert key not in called, f"KNOWN_UNCOVERED_ROUTES[{key}] is now called by the SDK — drop it"
+
+    def test_every_query_allowance_suppressed_something(self):
+        rc, report = self._report()
+        for mapping_name in ("KNOWN_UNCOVERED_QUERY_FIELDS", "KNOWN_SDK_ONLY_QUERY_FIELDS"):
+            for key, reason in getattr(rc, mapping_name).items():
+                assert reason.strip(), f"{mapping_name}[{key}] has no stated reason"
+                method, path, name = key
+                assert f"{mapping_name}:{method} {path} {name}" in report.allowances_used, (
+                    f"{mapping_name}[{key}] suppressed nothing — the route or the SDK changed; drop the entry"
+                )
+        for location, reason in rc.KNOWN_UNRENDERABLE_CALLS.items():
+            assert reason.strip(), f"KNOWN_UNRENDERABLE_CALLS[{location}] has no stated reason"
+            assert f"KNOWN_UNRENDERABLE_CALLS:{location}" in report.allowances_used, (
+                f"KNOWN_UNRENDERABLE_CALLS[{location}] suppressed nothing — the call is readable now; drop the entry"
+            )
+
+
+# --------------------------------------------------------------------------------------------- #
+# Wire values: the SDK's hand-written enum twins and close codes                                  #
+# --------------------------------------------------------------------------------------------- #
+
+
+class TestWireValues:
+    """Values `src/interactly/` restates by hand from the server, which no other harness compares."""
+
+    #: Findings known and attributed, measured 2026-11-26 against upstream ``main`` at a87b31348: **15**.
+    #:
+    #: * ``ScheduleStatus`` lacks ``in_progress`` (upstream since 2026-04-11). ``Schedule.status`` is typed with
+    #:   the enum, so a schedule caught while it runs fails to parse.
+    #: * ``SimulationStatus`` lacks ``paused`` (upstream since 2026-11-23).
+    #: * ``RunStatus.pending`` exists only in the SDK; no server sends it.
+    #: * 12 close codes the run socket sends with no typed exception: 1008, 1011, 4000–4003, 4005, 4009, 4010,
+    #:   4030, 4040, 4400. Only 4006 and 4007 have one.
+    KNOWN_WIRE_DEBT = 15
+
+    @staticmethod
+    def _report():
+        import config_parity as cp
+        import wire_values as wv
+
+        root = cp.find_interactly_ai_root()
+        if root is None:
+            pytest.skip("interactly-ai checkout not found (set INTERACTLY_AI_ROOT to point at it)")
+        return wv, wv.build_report(root)
+
+    def test_no_new_gaps_against_upstream(self):
+        _, report = self._report()
+        if report.total != self.KNOWN_WIRE_DEBT:
+            summary = "\n".join(f"  {label}: {items}" for label, items in report.counted_categories() if items)
+            pytest.fail(
+                f"Wire values read {report.total} finding(s); the recorded debt is {self.KNOWN_WIRE_DEBT}.\n"
+                f"{summary}\n\nRun `make wire-check` for the full report."
+            )
+
+    def test_the_harness_actually_compared_something(self):
+        wv, report = self._report()
+        assert report.twins_compared == len(wv.ENUM_TWINS), (
+            f"only {report.twins_compared} of {len(wv.ENUM_TWINS)} enum twins were read: {report.broken_twins}"
+        )
+        assert len(report.upstream_close_codes) > 10, (
+            f"only {sorted(report.upstream_close_codes)} close codes found upstream — extraction is broken"
+        )
+        assert wv.sdk_typed_close_codes(wv.find_sdk_package()), "the SDK's close-code map was not found"
+
+    def test_allow_lists_still_earn_their_place(self):
+        wv, report = self._report()
+        for mapping_name in ("KNOWN_UNRELATED_NAMESAKES", "KNOWN_TWIN_VALUE_DIVERGENCES", "KNOWN_UNTYPED_CLOSE_CODES"):
+            for key, reason in getattr(wv, mapping_name).items():
+                assert reason.strip(), f"{mapping_name}[{key}] has no stated reason"
+                assert f"{mapping_name}:{key}" in report.allowances_used, (
+                    f"{mapping_name}[{key}] suppressed nothing — drop the entry"
+                )
 
 
 # --------------------------------------------------------------------------------------------- #

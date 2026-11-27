@@ -1,4 +1,4 @@
-.PHONY: install test test-integration test-configs lint format typecheck clean sync-check parity-check schema-check refs-check api-docs api-docs-check
+.PHONY: install test test-integration test-configs lint format typecheck clean sync-check parity-check schema-check route-check wire-check refs-check api-docs api-docs-check
 
 VENV = .venv
 PYTHON = $(VENV)/bin/python
@@ -63,10 +63,16 @@ typecheck:
 #   SOURCE tree. Needs the monorepo; skips cleanly without it.
 # schema-check compares them against a RUNNING server's JSON schemas.
 #   Needs INTERACTLY_BASE_URL + INTERACTLY_API_KEY; skips cleanly without.
-# They catch different drift — run both. Reports land in docs/_sync/.
+# route-check compares the routes and query parameters the SDK's resources
+#   send against the workflow service's routers (source). Needs the monorepo.
+# wire-check compares the SDK's hand-written enum twins and WebSocket close
+#   codes against the values upstream defines (source). Needs the monorepo.
+# They catch different drift — run all four. Reports land in docs/_sync/.
 
 PARITY_REPORT ?= docs/_sync/config-parity.md
 SCHEMA_REPORT ?= docs/_sync/schema-drift.md
+ROUTE_REPORT ?= docs/_sync/route-coverage.md
+WIRE_REPORT ?= docs/_sync/wire-values.md
 
 parity-check:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
@@ -76,12 +82,20 @@ schema-check:
 	PYTHONPATH="$(PWD)/src:$(PWD)/configs/src:$$PYTHONPATH" \
 		$(PYTHON) tests/tools/schema_sync.py -o $(SCHEMA_REPORT)
 
-# Both run even when the first reports drift: these are reports, and stopping at the first
-# non-zero exit would hide the other half. `-` tells make to ignore the exit status. The individual
-# targets keep their real exit codes, so they still work as gates in CI (plan Phase 6.2).
+route-check:
+	$(PYTHON) tests/tools/route_coverage.py -o $(ROUTE_REPORT)
+
+wire-check:
+	$(PYTHON) tests/tools/wire_values.py -o $(WIRE_REPORT)
+
+# All run even when an earlier one reports drift: these are reports, and stopping at the first
+# non-zero exit would hide the rest. `-` tells make to ignore the exit status. The individual
+# targets keep their real exit codes, so each still works as a gate in CI.
 sync-check:
 	-@$(MAKE) parity-check
 	-@$(MAKE) schema-check
+	-@$(MAKE) route-check
+	-@$(MAKE) wire-check
 
 # refs-check resolves every interactly/interactly_configs symbol used in
 #   wf_examples/, notebooks/ and docs/ against the INSTALLED packages. Renaming

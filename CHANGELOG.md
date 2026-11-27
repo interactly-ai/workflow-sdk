@@ -9,6 +9,32 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### Drift harnesses
+#### Added
+- **`make route-check`** (`tests/tools/route_coverage.py`): the routes and query parameters the SDK's resources send,
+  against the workflow service's routers. It reports routes no method calls, query fields no method can send, calls
+  to routes upstream does not declare, and query keys upstream does not read. Against `interactly-ai@a87b31348` it
+  reads 91: 11 routes, 77 query fields, and three filters the server ignores (`tools.list(workflow_id=...)`, and
+  `category` and `created_by_me` on `workflows.versions.list_active`). Among the query fields is REST execute's
+  `version`: the server reads the version to run only from `?version=`, so `runs.execute(version_number=...)` runs
+  the active version today. A live guard checks that every route the SDK calls is in the server's OpenAPI document.
+- **`make wire-check`** (`tests/tools/wire_values.py`): the SDK's own copies of server enums (`RunStatus`,
+  `ScheduleStatus`, `SimulationStatus`, `WebhookAction`, ...) and the run socket's close codes, against upstream. It
+  reads 15: `ScheduleStatus` lacks `in_progress`, so a schedule fetched while it runs fails to parse;
+  `SimulationStatus` lacks `paused`; `RunStatus.pending` is one no server sends; and 12 of the 14 refusal codes the
+  run socket closes with have no typed exception.
+- Both are ratcheted in `tests/unit/test_drift_guards.py`, like parity.
+- **Class docstrings are compared** by `make parity-check`: reported apart from the total, with their own ratchet
+  (84 differ today).
+- `INTERACTLY_DEVELOPER_API_KEY` and `INTERACTLY_VIEWER_API_KEY` (`.env.example`): keys acting as a developer and
+  as a viewer, for role-gated integration tests, which skip while they are unset.
+
+#### Fixed
+- **`make schema-check` compared `/v1/simulations/schema` for the first time.** It dropped any endpoint whose model
+  is not a top-level export of `interactly_configs`, without a word, and `SimulationConfig` never was one. It now
+  finds the class anywhere in the package, and reports an endpoint with no class as unmapped. Against dev it reads
+  one finding: `SimulationStatus` lacks `paused`.
+
 ### Background runs and the approval example
 #### Added
 - **`client.workflows.start_background_run(workflow_id, version_number=None, dynamic_variables=None, run_by=None)`**
