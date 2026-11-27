@@ -22,12 +22,36 @@ async with AsyncWorkflowClient() as client:
                 break
 ```
 
+### Later turns and stopping
+
+A stream holds the whole conversation. Send each later turn with `stream.send()` once an event is
+`is_ready_for_input()`, and end the run with `stream.stop()`. On the socket a turn is a `resume` frame; see
+[Streaming](../streaming.md).
+
+```python
+from interactly import AsyncWorkflowClient
+
+turns = iter(["Hello", "What can you do?"])
+
+async with AsyncWorkflowClient() as client:
+    async with client.runs.stream(workflow_id="wf_123") as stream:
+        async for event in stream:
+            if event.is_ready_for_input():
+                message = next(turns, None)
+                if message is None:
+                    await stream.stop()   # stored cancelled, termination_source "client_stop"
+                else:
+                    await stream.send(message)
+```
+
+Leaving the `with` block before the run ends cancels it, except a durable run waiting on a pause, which the server keeps.
+
 ### Stream parameters
 
 ```python
 stream = client.runs.stream(
     workflow_id="wf_123",
-    command=WorkflowCommand.START,  # default; use "stop" to cancel
+    command=WorkflowCommand.START,  # default; the first frame of the run (end it with stream.stop())
     run_by="api",                    # caller identifier
     version_number=2,                # optional; defaults to active version
     cast_to=RunEvent                 # Pydantic model for typed events (default)
@@ -87,13 +111,16 @@ async with AsyncWorkflowClient() as client:
         response = await client.runs.execute(
             workflow_id="wf_123",
             run_id=run_id,  # Echo the run_id to resume
-            command="start",
+            command="data",
             dynamic_variables={"user_input": "Some reply"}
         )
         print(f"Turn response: {response.status}")
         if response.is_completed:
             break
 ```
+
+Turns after the first are `data` turns. `dynamic_variables` fill the `{{...}}` placeholders; a user's message reaches an
+LLM node only through `execute_with_input()` (see Typed Execution below).
 
 ### Passing variables
 
@@ -102,7 +129,7 @@ response = await client.runs.execute(
     workflow_id="wf_123",
     command="start",
     run_by="user_123",
-    version_number=2,  # optional; use active by default
+    version_number=2,  # optional; runs version 2 (sent as ?version=); read on the first turn only
     dynamic_variables={
         "customer_name": "Alice",
         "order_id": "ORD-456"
@@ -115,6 +142,24 @@ response = await client.runs.execute(
     }
 )
 ```
+
+### Durable REST runs: `pause_summary` and 409s
+
+Where the server runs REST-executed runs as durable, a turn can leave the run paused or waiting for a person, a timer,
+a signal or a job. The response then has `is_waiting_for_input` set to `False` and `pause_summary` set to what the run
+waits on, as `Run.pause_summary` shows it. The run carries on by itself once that arrives. `pause_summary` is `None`
+otherwise.
+
+```python
+response = await client.runs.execute(workflow_id="wf_123", run_id=run_id, command="data")
+if response.pause_summary:
+    print(response.pause_summary)   # counts by wake kind, the earliest timer, manual_pauses
+```
+
+A turn sent while a person's pause stands is refused with HTTP 409, raised as `ConflictError`. The SDK does not retry
+it: a turn POST carries the user's message, and a second delivery must not be risked. Lift the pause with
+`client.runs.resume(run_id)` (see [Run control](run_control.md)), then send the turn again. Only run-control and signal
+calls retry a 409 that carries `Retry-After`.
 
 ---
 
@@ -307,9 +352,10 @@ command = WorkflowCommand.START      # enum
 command = "start"                     # string
 
 # Other commands:
-# WorkflowCommand.STOP
-# WorkflowCommand.PAUSE
-# ... (check the enum for all available)
+# WorkflowCommand.DATA: a later turn of a session, over REST or a handle
+# WorkflowCommand.STOP: ends the run, stored cancelled (termination_source "client_stop"); command="stop" over REST too
+# WorkflowCommand.PAUSE exists in the enum, but no server reads it. Pause a run with client.runs.pause() instead.
+# ... (check the enum for the rest)
 ```
 
 ---
@@ -343,9 +389,9 @@ async with AsyncWorkflowClient() as client:
             break
         
         response = await client.runs.execute(
-            workflow_id=response.workflow_id,
+            workflow_id="wf_123",
             run_id=response.run_id,
-            command="start"
+            command="data"
         )
 ```
 
@@ -379,18 +425,17 @@ send for them.
 | `workflow_id` | str | required | Target workflow |
 | `command` | str / WorkflowCommand | "start" | Workflow command |
 | `run_by` | str | "api" | Caller identifier |
-| `version_number` | int | None | Use this version (default: active) |
+| `version_number` | int | None | Version to run (default: active). Read on the first turn only |
 | `dynamic_variables` | dict | {} | Template placeholders |
 | `runtime_variables` | dict | {} | Runtime overrides |
 | `miscellaneous` | dict | {} | Arbitrary metadata |
 | `run_id` | str | None | Resume session (omit on first turn) |
-| `resume_turn_index` | int | — | Checkpoint: resume from this turn |
-| `start_node_logical_id` | str | None | Checkpoint: start from this node |
 
 ---
 
 ## Gotchas
 
+- **`WorkflowCommand.PAUSE` pauses nothing.** No server reads it. Pause, resume and cancel a durable run with `client.runs.pause()`, `resume()` and `cancel()` (see [Run control](run_control.md)).
 - **Streaming requires WebSocket**: Install with `pip install 'interactly[stream]'` to use `.stream()`.
 - **Handles are single-flight**: Do not interleave `.arun()` calls on the same handle from different tasks. Create a new handle per concurrent session.
 - **Variable merging**: When using handles, per-turn `dynamic_variables` override the handle's defaults at the leaf level (deep merge).
@@ -402,6 +447,7 @@ send for them.
 ## See also
 
 - [Workflows and Versions](workflows_and_versions.md) — manage workflows and versions
+- [Run control](run_control.md) — pause, resume, cancel and signal durable runs
 - [Monitoring Runs](monitoring_runs.md) — query past runs and results
 - [Streaming](../streaming.md) — detailed WebSocket protocol docs
 - [Runtime Events](../runtime.md) — event types and parsing

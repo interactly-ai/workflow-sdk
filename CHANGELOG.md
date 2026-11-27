@@ -14,18 +14,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - **`make route-check`** (`tests/tools/route_coverage.py`): the routes and query parameters the SDK's resources send,
   against the workflow service's routers. It reports routes no method calls, query fields no method can send, calls
   to routes upstream does not declare, and query keys upstream does not read. Against `interactly-ai@a87b31348` it
-  reads 91: 11 routes, 77 query fields, and three filters the server ignores (`tools.list(workflow_id=...)`, and
-  `category` and `created_by_me` on `workflows.versions.list_active`). Among the query fields is REST execute's
-  `version`: the server reads the version to run only from `?version=`, so `runs.execute(version_number=...)` runs
-  the active version today. A live guard checks that every route the SDK calls is in the server's OpenAPI document.
+  read 91 when it was added (11 routes, 77 query fields, and three filters the server ignores) and reads 0 now; the
+  routes and fields left out on purpose are listed, with their reasons, under "Not covered, by choice" below. A live
+  guard checks that every route the SDK calls is in the server's OpenAPI document.
 - **`make wire-check`** (`tests/tools/wire_values.py`): the SDK's own copies of server enums (`RunStatus`,
   `ScheduleStatus`, `SimulationStatus`, `WebhookAction`, ...) and the run socket's close codes, against upstream. It
-  reads 15: `ScheduleStatus` lacks `in_progress`, so a schedule fetched while it runs fails to parse;
-  `SimulationStatus` lacks `paused`; `RunStatus.pending` is one no server sends; and 12 of the 14 refusal codes the
-  run socket closes with have no typed exception.
-- Both are ratcheted in `tests/unit/test_drift_guards.py`, like parity.
+  read 15 when it was added and reads 0 now.
+- Both are ratcheted in `tests/unit/test_drift_guards.py`, like parity: a new gap fails the unit tests until it is
+  closed or allow-listed with a reason.
 - **Class docstrings are compared** by `make parity-check`: reported apart from the total, with their own ratchet
-  (84 differ today).
+  (78 differ today).
 - `INTERACTLY_DEVELOPER_API_KEY` and `INTERACTLY_VIEWER_API_KEY` (`.env.example`): keys acting as a developer and
   as a viewer, for role-gated integration tests, which skip while they are unset.
 
@@ -350,7 +348,38 @@ holding a Pause Workflow, Wait, Wait for signal, Terminate, ECS, analysis or Dec
 - `WorkflowStatus.is_active_run_status()`, removed upstream: which statuses are reaped and which hold a
   concurrency slot differ for `WAITING`, so the server keeps those rules itself.
 
+### Not covered, by choice
+The workflow service serves these, and the SDK leaves them out on purpose. `make route-check` holds each in an
+allow-list with its reason, so it fails when one goes away or a new route appears without a decision.
+- **Secure notifications** (`/v1/secure-notifications`, six routes): raised and approved by the platform's own flows,
+  behind a per-team flag; not a client API.
+- **The upgrade checklist** (`/v1/upgrade-checklist`, four routes): a deployment operator's tool, for super admins.
+- **`runs.list(copilot_runs_only=)`**: lists the copilot's own conversations, which the server refuses to every role
+  below super admin.
+- **`search`, `start` and `end` on lists that never read them.** The shared pagination model declares them on every
+  list route, but most lists ignore them; the SDK offers each only where the server filters by it, so a filter in a
+  call always filters. The same holds for `logical_id` and `workflow_id` on the templates list.
+- **`version_number` on `workflows.update()`**: the method sends only the name and description, which the server
+  writes to every version either way.
+- Routes the server hides from its schema (`include_in_schema=False`) and its `/internal/` service-to-service routes.
+
 ### Docs
+- **The guides describe this release.**
+  - [Streaming](docs/streaming.md): a whole conversation on one stream (`send()`, `stop()`), what leaving the stream
+    does to a run, taking a run back, the `run_paused` / `run_resumed` frames, and every close code with its
+    exception. A gotcha: `is_terminal()` is true for every `workflow_error`, but a node failure the server tolerates
+    ends only the turn, and the run goes on; the run has ended when iteration stops.
+  - [Companion threads](docs/guides/companion_threads.md): the conversation loop on one stream; companions end with
+    the run when the stream is left.
+  - [Error handling](docs/error_handling.md): the close-code exceptions, `RequestTooLargeError`, and how an error's
+    message is built from its body.
+  - [Running workflows](docs/guides/running_workflows.md): later turns on a stream, `data` turns over REST, durable
+    REST runs (`pause_summary`, and the 409 the SDK does not retry), and `WorkflowCommand.PAUSE`, which pauses
+    nothing.
+  - [Run control](docs/guides/run_control.md): which runs are durable, by server flag; `needs_attention`; pausing a
+    simulation group.
+  - [Pagination](docs/pagination.md) and [Monitoring runs](docs/guides/monitoring_runs.md): every list pages past its
+    first page, the newer filters, and the new `Run` fields.
 - **Three examples in the running-workflows guide never delivered the user's message.**
   - "Typed Execution" used thread key `"thread_0"` and a plain dict for the node input. That constructs
     without error but is dropped, so the run started with no message. The key is `"0"`, and the entry a

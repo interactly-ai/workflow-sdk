@@ -25,6 +25,13 @@ async with AsyncWorkflowClient() as client:
     # ]
 ```
 
+Pass `workflow_type` for the node types of one kind of workflow. The analysis nodes (`conversation_fetch`,
+`analysis_llm`, `store_analysis`) are listed only for `evaluation`:
+
+```python
+analysis_types = await client.nodes.types(workflow_type="evaluation")
+```
+
 ### The no-op node
 
 `no_op` runs and succeeds without doing anything else. Three uses:
@@ -101,7 +108,11 @@ page = await client.nodes.list(page=1, size=20)
 page = await client.nodes.list(node_type="say_llm")
 
 # Filter by workflow
-page = await client.nodes.list(workflow_id="wf_123")
+page = await client.nodes.list(workflow_id="wf_123")   # the active version's nodes
+
+# One version's nodes, or the copy of one node in one version (each version holds its own copy, under one logical id)
+page = await client.nodes.list(workflow_id="wf_123", version_number=2)
+page = await client.nodes.list(workflow_id="wf_123", logical_id="llm_1")
 
 # Search by name
 page = await client.nodes.list(search="ask")
@@ -143,6 +154,16 @@ updated_node = await client.nodes.update(
 
 ```python
 await client.nodes.delete("node_id_here")
+```
+
+### Version guard
+
+`get`, `update` and `delete` take `version_number`. The server answers `NotFoundError` unless the node belongs to that
+version of its workflow, so an id kept from another version cannot reach this one. Edges take the same guard.
+
+```python
+node = await client.nodes.get("node_id_here", version_number=2)
+await client.nodes.delete("node_id_here", version_number=2)
 ```
 
 ---
@@ -267,7 +288,11 @@ page = await client.edges.list(page=1, size=20)
 page = await client.edges.list(edge_type="conditional")
 
 # Filter by workflow
-page = await client.edges.list(workflow_id="wf_123")
+page = await client.edges.list(workflow_id="wf_123")   # the active version's edges
+
+# One version's edges, or the copy of one edge in one version
+page = await client.edges.list(workflow_id="wf_123", version_number=2)
+page = await client.edges.list(workflow_id="wf_123", logical_id="edge_1")
 
 # Search by name
 page = await client.edges.list(search="escalate")
@@ -444,6 +469,9 @@ page = await client.tools.list(tool_type="inline_python")
 # Filter by name or category (each a case-insensitive "contains")
 page = await client.tools.list(name="book", category="Patients")
 
+# Only the saved tool with this logical id (built-in tools are listed whatever it is)
+page = await client.tools.list(logical_id="tool_logical_1")
+
 # Search by name
 page = await client.tools.list(search="custom")
 
@@ -589,6 +617,18 @@ Note that `tool_id` means a **saved tool document** here, the opposite of `Inbui
 where `tool_id` names the function itself. An unknown id raises `NotFoundError`; its `body["reason"]`
 separates "no such function" from "its module could not be imported here".
 
+### Find the workflows that use a tool
+
+```python
+async with AsyncWorkflowClient() as client:
+    report = await client.tools.usage(tool.id)
+    for entry in report.used_by:
+        print(entry.workflow_id, entry.name, entry.version_numbers)
+```
+
+`usage()` covers every version that references the tool, active or not. A delete does not consult it: deleting the tool
+succeeds and leaves those workflows with a reference that no longer resolves.
+
 ### Delete a tool
 
 ```python
@@ -650,31 +690,8 @@ Tools are attached to LLM nodes via the node's `tools_config`; there is no separ
 | `page` | int | 1-indexed, default 1 |
 | `size` | int | Items per page, default 20 |
 | `search` | str | Fuzzy name filter |
-| `workflow_id` | str | Filter to nodes/edges/tools in a workflow |
-
----
-
-## Gotchas
-
-- **Logical IDs are unique per workflow**: Two nodes in the same workflow cannot share a `logical_id`.
-- **Edges reference logical IDs, not ObjectIds**: Use `source_node_logical_id` and `destination_node_logical_id`, not ObjectIds.
-- **Inbuilt tools don't need creation**: They are pre-registered globally and referenced by `tool_id` (e.g., `"math_add"`).
-- **Standalone node/edge/tool IDs vs. workflow nodes**: A standalone node created via `nodes.create()` gets a `id`. When that node is added to a workflow, it is part of the graph's JSON config and referenced by its `logical_id`.
-- **Tool attachment**: Tools are attached to LLM nodes via the node's `tools_config`; the SDK does not enforce this at the node/tool API level.
-- **`no_op` is not `disabled`**: a disabled node emits nothing; a no-op node runs and emits events.
-- **The condition language is smaller than it looks**: `==`, `!=`, `<`, `<=`, `>`, `>=`,
-  `AND`/`OR`/`NOT`, and `isPresent` / `isAbsent` / `isEmpty` / `isNonEmpty`. No `contains()`, and an
-  unsupported call fails the **run**, not the save.
-- **Dotted access into a dict-valued runtime variable is not interpolated**: a prompt containing
-  `[[result.value]]` where `result` holds a dict comes through as that literal text. Have tools
-  return the field you need directly.
-- **Import refuses `inline_python` by default**: pass `confirm_executable=True` deliberately.
-- **Test execution of `inline_python` is off by default**: `execute_inline` returns `success=False` with
-  an explanatory error rather than raising.
-- **Read `warnings` after a write**: the server reports things like undefined variables there instead of
-  failing the save.
-- **`result_as_media` excludes result mappings**: the result is a `media://` handle with no fields to map.
-- **Typed configs need the extra**: The typed classes require `pip install interactly[configs]`. Without it, use the dict form shown in each section.
+| `workflow_id` | str | Filter nodes or edges to a workflow (its active version unless `version_number` is given) |
+| `version_number` | int | Nodes and edges: list one version, or guard `get`, `update` and `delete` |
 
 ---
 
@@ -714,3 +731,30 @@ for node in page:
 - [Monitoring Runs](monitoring_runs.md) — inspect node outputs and events
 - [API Reference](../api_async.md) — full endpoint docs
 - [Configs](../configs.md) — typed node/edge/tool models
+
+---
+
+## Gotchas
+
+- **Logical IDs are unique per workflow**: Two nodes in the same workflow cannot share a `logical_id`.
+- **Edges reference logical IDs, not ObjectIds**: Use `source_node_logical_id` and `destination_node_logical_id`, not ObjectIds.
+- **Inbuilt tools don't need creation**: They are pre-registered globally and referenced by `tool_id` (e.g., `"math_add"`).
+- **Standalone node/edge/tool IDs vs. workflow nodes**: A standalone node created via `nodes.create()` gets a `id`. When that node is added to a workflow, it is part of the graph's JSON config and referenced by its `logical_id`.
+- **Tool attachment**: Tools are attached to LLM nodes via the node's `tools_config`; the SDK does not enforce this at the node/tool API level.
+- **`no_op` is not `disabled`**: a disabled node emits nothing; a no-op node runs and emits events.
+- **The condition language is smaller than it looks**: `==`, `!=`, `<`, `<=`, `>`, `>=`,
+  `AND`/`OR`/`NOT`, and `isPresent` / `isAbsent` / `isEmpty` / `isNonEmpty`. No `contains()`, and an
+  unsupported call fails the **run**, not the save.
+- **Dotted access into a dict-valued runtime variable is not interpolated**: a prompt containing
+  `[[result.value]]` where `result` holds a dict comes through as that literal text. Have tools
+  return the field you need directly.
+- **Import refuses `inline_python` by default**: pass `confirm_executable=True` deliberately.
+- **Test execution of `inline_python` is off by default**: `execute_inline` returns `success=False` with
+  an explanatory error rather than raising.
+- **Read `warnings` after a write**: the server reports things like undefined variables there instead of
+  failing the save.
+- **`result_as_media` excludes result mappings**: the result is a `media://` handle with no fields to map.
+- **Version guards**: `get`, `update` and `delete` with `version_number` answer `NotFoundError` for an item that belongs to another version.
+- **`tools.list()` takes no `workflow_id`**: the server never read one, so the SDK does not offer it. Filter with `logical_id`, `name`, `category` or `tool_type`.
+- **Analysis nodes are evaluation-only**: `nodes.types()` lists `conversation_fetch`, `analysis_llm` and `store_analysis` only for `workflow_type="evaluation"`.
+- **Typed configs need the extra**: The typed classes require `pip install interactly[configs]`. Without it, use the dict form shown in each section.

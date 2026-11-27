@@ -82,6 +82,11 @@ from interactly.configs import (
 
     # MCP
     MCPServerConfig,
+
+    # Fallbacks for a type a newer server sends (see "Unknown LLM and tool types")
+    UnknownLLMConfig,
+    UnknownToolConfig,
+    UnknownNodeConfig,
 )
 ```
 
@@ -102,7 +107,7 @@ async with AsyncWorkflowClient() as client:
         main_response_config=PromptConfig(prompt="You are a friendly support agent."),
         llms_config=OpenAILLMConfig(model="gpt-4o-mini"),
     )
-    node = await client.nodes.create(workflow_id="<workflow-id>", node_config=node_cfg)
+    node = await client.nodes.create(node_config=node_cfg)
 ```
 
 **Dict form (also supported).** The same methods accept a plain `dict` when the `[configs]` extra
@@ -110,9 +115,11 @@ isn't installed — no code change needed, you just lose autocomplete and assign
 
 ```python
 node = await client.nodes.create(
-    workflow_id="<workflow-id>",
-    node_config={"node_type": "say_llm", "name": "Greet User",
-                 "config": {"main_response_config": {"prompt": "You are a friendly support agent."}}},
+    node_config={
+        "type": "say_llm",
+        "name": "Greet User",
+        "main_response_config": {"prompt": "You are a friendly support agent."},
+    },
 )
 ```
 
@@ -181,9 +188,11 @@ llm_cfg = TypeAdapter(LLMConfig).validate_python({"type": "xai_llm", "model": "g
 assert isinstance(llm_cfg, XAILLMConfig)
 ```
 
-A `type` this version of the package does not know fails validation on its own. Inside a hydrated
-workflow, a node it cannot parse is kept as `UnknownNodeConfig` with its fields intact rather than
-failing the whole workflow, so upgrade `interactly[configs]` when the server adds providers or tools.
+A provider or tool `type` this version of the package does not know is kept rather than failing the node
+that holds it: an LLM provider becomes an `UnknownLLMConfig`, and a tool type an `UnknownToolConfig` (see
+[Unknown LLM and tool types](#unknown-llm-and-tool-types)). Inside a hydrated workflow, a node type it does
+not know is kept as `UnknownNodeConfig` with its fields intact. Upgrade `interactly[configs]` to get the
+typed class back.
 
 ## Round-tripping a hydrated config
 
@@ -215,11 +224,67 @@ for node in hydrated.node_configs:
 
 That is what makes a fetch → modify → upload round trip safe against a server ahead of your SDK.
 
+## Unknown LLM and tool types
+
+A server can be ahead of the installed package. When a workflow or a saved LLM config names an LLM provider or a
+tool type this package does not know, the config is kept as an unknown type rather than failing the node that holds
+it. The node keeps its own class: a `say_llm` node stays a `SayLLMNodeConfig`, with an `UnknownLLMConfig` inside it.
+
+- `UnknownLLMConfig` stands in for an LLM config wherever one is held: a node's `llms_config`, a workflow's default
+  `llms_config`, or a member of an `LLMGroupConfig`. `llm_configs.get()` returns one as `config` for an unknown provider.
+- `UnknownToolConfig` stands in for a tool config: a tool node's `tool_config`, or an entry of an LLM node's
+  `tools_config.tools`.
+
+```python
+from interactly.configs import UnknownLLMConfig
+
+node = hydrated.node_configs[0]
+if isinstance(node.llms_config, UnknownLLMConfig):
+    print(node.llms_config.type, node.llms_config.model)   # fields the server sent are readable
+```
+
+**What round-trips.** An unknown config keeps every field the server sent, including fields this package has no
+field for. Writing it back sends exactly those fields: no defaults are added and no `logical_id` is minted, so a
+fetch, edit and upload keeps the config intact. The fields the base class declares are typed; one the server
+omitted reads as the base default, and that default is not written back. For a tool, the shared fields include
+`result_variable_mappings`.
+
+**What still raises.** A config with no `type`, and a known type with an invalid field, still raise. Those are
+mistakes in the config, not a newer type.
+
+**What you cannot do with them.**
+
+- Get the provider- or tool-specific checks. Only the shared fields are typed; the server judges the rest when you
+  upload.
+- Use `isinstance` against a known class. `isinstance(config, OpenAILLMConfig)` is false for an unknown config, so
+  branch on `type` or on `UnknownLLMConfig` / `UnknownToolConfig`.
+- Find the type in a published JSON Schema. The schemas do not describe the fallbacks.
+- Edit a field with typed assignment. Send the changed config as a dict with the same `type`, or upgrade
+  `interactly[configs]` to get the typed class.
+
 ## Backward compatibility
 
 The `[configs]` extra is **fully optional**.  All SDK methods continue to accept plain
 `dict` arguments, and response fields remain as `dict` when the package is not installed.
 Existing code requires no changes.
+
+## Synchronous alternative
+
+The typed classes work the same with the synchronous `WorkflowClient`: pass them to the same methods without `await`,
+and open the client with `with` instead of `async with`:
+
+```python
+from interactly import WorkflowClient
+from interactly.configs import PromptConfig, SayLLMNodeConfig
+
+with WorkflowClient() as client:
+    node = client.nodes.create(
+        node_config=SayLLMNodeConfig(
+            name="Greet User",
+            main_response_config=PromptConfig(prompt="You are a friendly support agent."),
+        ),
+    )
+```
 
 ## See also
 
@@ -229,3 +294,9 @@ Existing code requires no changes.
 - [Notebook: 17_interactly_configs.ipynb](../notebooks/17_interactly_configs.ipynb)
 - [Build your first workflow (typed)](04_first_workflow.md) and [wf_examples/wf_example_progression_1.py](../wf_examples/wf_example_progression_1.py)
 - `interactly-configs` package on PyPI
+
+## Gotchas
+
+- **Unknown types skip the typed checks.** An `UnknownLLMConfig` or `UnknownToolConfig` runs only the checks every config of its kind shares (for a tool, its variable bindings and result mappings), none specific to its type. The server judges the rest on upload.
+- **`isinstance` is false for an unknown type.** Check `type`, or the `UnknownLLMConfig` / `UnknownToolConfig` class.
+- **Upgrading restores the typed class.** The data is unchanged; the same config is validated by the new class.

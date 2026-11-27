@@ -95,7 +95,16 @@ for sim in await page.list_all():
 **Parameters:**
 - `page`: Page number (1-indexed, default 1).
 - `size`: Items per page (default 20).
-- `search`: Fuzzy text filter (optional).
+- `search`: Text matched, ignoring case, against the description and the names of both workflows.
+- `logical_id`: The simulation's logical id.
+- `selected_workflow_id`: Only simulations of this workflow under test.
+- `counter_workflow_id`: Only simulations whose simulated user is played by this workflow.
+- `selected_version_number`: Only simulations naming this version of the workflow under test.
+- `counter_version_number`: Only simulations naming this version of the counter workflow.
+- `status`: The status the configuration records for its latest group (`Simulation.status`). A stopped or paused group is not recorded there; filter groups with `list_runs()` and their `status` instead.
+- `start`, `end`: Only simulations created between these times. Give both or neither; the range may span 31 days at most.
+
+Every filter given must match. Results are newest first. Passing only one of `start` and `end` raises `ValueError`; a range over 31 days, or an `end` before `start`, raises `BadRequestError`.
 
 **Returns:**
 An `AsyncPage` of `Simulation` objects (a `SyncPage` with the synchronous client).
@@ -121,10 +130,7 @@ Partially update a simulation configuration. Only `description` and `status` are
 ```python
 updated = await client.simulations.update(
     "simulation_id_123",
-    updates={
-        "description": "Updated test description",
-        "status": "inactive",
-    }
+    updates={"description": "Updated test description"},
 )
 
 print(f"Updated: {updated.description}")
@@ -285,19 +291,53 @@ A `SimulationGroup` object.
 
 ## Stop a simulation run
 
-Cancel a simulation run group. The orchestrator stops spawning new individual runs. Already-running runs complete naturally.
+Stop a run group for good. The group moves to `cancelled`: no simulation of it starts, and each one running ends `cancelled` before its next turn. Stopping a group that has already ended returns it unchanged. To hold a group and resume it later, use `pause_run()`.
 
 ```python
 stopped = await client.simulations.stop_run("group_id_123")
 
-print(f"Status: {stopped.status}")  # Should be "cancelled"
+print(f"Status: {stopped.status}")  # "cancelled", or the status the group had already ended with
 ```
 
 **Parameters:**
 - `run_id`: ObjectId of the simulation group to stop.
 
 **Returns:**
-The updated `SimulationGroup` with status `cancelled`.
+A `SimulationGroup`: `cancelled`, or the status it ended with if it had already ended.
+
+## Pause and resume a run
+
+`pause_run()` holds a run group until `resume_run()`. A pending or running group moves to `paused`; pausing a paused group changes nothing. While the group is paused, no simulation of it starts or takes a turn, and the workflow runs of each simulation in flight are paused too.
+
+```python
+result = await client.simulations.pause_run("group_id_123", reason="Test window closed")
+print(result.simulation_group.status)  # "paused"
+
+for run in result.runs:
+    print(run.role, run.outcome, run.status)
+
+result = await client.simulations.resume_run("group_id_123")
+print(result.simulation_group.status)  # "running"
+```
+
+**Parameters:**
+- `run_id`: ObjectId of the simulation group.
+- `reason` (`pause_run` only): Why the group is paused, up to 1,000 characters. It is recorded on each workflow run paused.
+
+**Returns:**
+A `SimulationRunControlResult` with:
+- `simulation_group`: the group after the call.
+- `runs`: one `SimulationRunControlOutcome` per workflow run in flight, with `individual_run_id`, `workflow_run_id`, `role` (`selected` for the workflow under test, `counter` for the workflow playing its user), `outcome` and `status`. It is empty when no simulation was running, such as a group paused before its first one started.
+
+`outcome` is one of: `applied`; `already_requested` or `not_paused` (nothing to change); `not_durable` (the server's simulation runs are not durable, so the group alone holds that run); `run_ended`, `not_found` or `conflict`.
+
+`resume_run()` moves the group back to `running`: its simulations carry on and the rest start. It lifts the pause on each workflow run in flight, however it was paused. On a group that is not paused, it only lifts those runs' pauses.
+
+**Raises:**
+- `ConflictError`: the group has ended.
+- `NotFoundError`: no such group in the team.
+- `PermissionDeniedError`: the caller's role is below Developer.
+- `UnprocessableEntityError` (`pause_run` only): a reason over 1,000 characters.
 
 ## List individual executions
 
@@ -381,6 +421,7 @@ When you run a simulation:
 - `completed`: All samples finished.
 - `failed`: Execution error.
 - `cancelled`: Manually stopped via `stop_run()`.
+- `paused`: Held by `pause_run()` until `resume_run()`. Only a run group takes this status.
 
 ## Synchronous alternative
 
@@ -413,7 +454,9 @@ summary = client.simulations.evaluation_summary("simulation_id_123")
 - Only `description` and `status` can be updated on a simulation. Other fields (workflow IDs, run parameters) are immutable after creation.
 - Deleting a simulation also deletes its run history. Use caution.
 - `list_detailed_executions()` returns a plain list (not paginated), sorted by run index.
-- Stopping a run group only prevents new executions from starting; already-running executions complete naturally.
+- Stopping a run group ends each running simulation as `cancelled` before its next turn. A group that has already ended is returned unchanged.
+- `pause_run()` and `resume_run()` need the Developer role. Either one raises `ConflictError` on a group that has ended.
+- `Simulation.status` records only the configuration's latest group. A stopped group leaves it `running` and a paused group is not recorded there, so `list(status="cancelled")` does not find a stopped simulation. Read the group with `get_run()` instead.
 - `generate_counter_workflow()` returns before any case exists and spends LLM calls on the server; poll `counter_workflow()` rather than waiting on the call.
 - One generation per workflow at a time: a second start while one is running raises `ConflictError`.
 </content>

@@ -24,7 +24,25 @@ async with AsyncWorkflowClient() as client:
 ```python
 # Runs for a specific workflow
 page = await client.runs.list(workflow_id="wf_123", size=50)
+
+# Runs of one version of it
+page = await client.runs.list(workflow_id="wf_123", version_number=3)
+
+# Runs of a workflow by its logical id
+page = await client.runs.list(logical_id="wf_logical_123")
 ```
+
+### Runs waiting on a person
+
+```python
+page = await client.runs.list(needs_attention=True)
+async for run in page:
+    print(run.id, run.status, run.pause_requested, run.pause_summary)
+```
+
+`needs_attention=True` lists the durable runs a person has to act on: a run a person paused (with no cancel
+asked), or one with a step waiting for a person's approval. Ended runs never match, and a cancelled run drops out.
+Resume or approve them through [run control](run_control.md).
 
 ### Finding re-runs of a run
 
@@ -121,6 +139,17 @@ A `Run` contains:
   - `run_output` contains `events` (list of runtime events)
 - **Evaluation**: `evaluation_result` (optional, set after evaluation)
 - **Comments**: `comments` (list of `RunComment`)
+- **Where it came from and how it ended**: `workflow_name` and `workflow_deleted` (on a list row),
+  `is_background_run`, `schedule_id` (for a scheduled run), and `termination_source` when something other than the
+  workflow ended it: `client_stop` (a stream's `stop()`, which stores the run `cancelled`), `websocket_disconnect` (the
+  stream closed before the run ended), and others the server may add
+- **Pause state of a durable run**: `durable`, `pause_requested`, `pause_summary`, `paused_by`, `pause_reason`,
+  `paused_since`, `paused_seconds_total`. The single-run GET fills them all; a list row fills only `pause_requested`
+  and `pause_summary`. See [Run control](run_control.md)
+- **`can_continue_in_editor`**: on the single-run GET, true when a streamed run that the server carried on can be
+  taken back in a new stream (`client.runs.stream(..., workflow_run_id=...)`; see [Streaming](../streaming.md))
+
+Keys the server sends that `Run` has no field for are kept in `run.model_extra`, not dropped.
 
 ### Accessing run events
 
@@ -334,7 +363,10 @@ print(f"Total: {total_tokens} tokens")
 | Parameter | Type | Notes |
 |-----------|------|-------|
 | `workflow_id` | str | Filter to a specific workflow |
-| `status` | str | "started", "completed", "failed", etc. |
+| `logical_id` | str | Filter to the workflow with this logical id |
+| `version_number` | int | Filter to one version of the workflow |
+| `needs_attention` | bool | Only runs waiting on a person (paused by a person, or a step waiting for approval) |
+| `status` | str | "started", "completed", "failed", "waiting", etc. |
 | `start` | datetime | Start of date range (inclusive); at most 31 days before `end` |
 | `end` | datetime | End of date range (inclusive) |
 | `page` | int | 1-indexed, default 1 |

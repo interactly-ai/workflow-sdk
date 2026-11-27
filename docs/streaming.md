@@ -32,23 +32,26 @@ exception, or normal exhaustion.
 
 ## Knowing when to stop
 
-Three events are easy to confuse, and picking the wrong one is the most common streaming bug:
+Three questions come up, and the events answer them differently. Pick the method, not the event type:
 
-| Event type | Means | Use it to |
-|---|---|---|
-| `end_workflow_iteration` | One turn's accounting is done. Other threads may still be running. | Nothing — it is a bookkeeping marker. |
-| `workflow_ready_for_input` | Every non-companion thread has settled. | **Send the next user message.** |
-| `end_workflow` | Every thread has ended, companions included. | Finish. |
+| Question | Answer |
+|---|---|
+| Is the run waiting for the user's next message? | `event.is_ready_for_input()`. True once per turn that hands over to the user, in every workflow. |
+| Has the run ended? | Iteration stops. `event.is_terminal()` is True on `end_workflow` and `workflow_error`; a `workflow_error` can leave the run going (see Gotchas). |
+| What is the turn's bookkeeping? | `end_workflow_iteration`. A marker only. Once companions run, it does not hand over to the user. |
 
 ```python
-event.is_ready_for_input()   # True for workflow_ready_for_input
-event.is_terminal()          # True for end_workflow and workflow_error
+event.is_ready_for_input()   # the hand-over to the user: send the next message here
+event.is_terminal()          # end_workflow or workflow_error
 ```
 
-Once [companion threads](guides/companion_threads.md) are in play these genuinely diverge: companions
-keep emitting events while the main thread waits, so a loop that breaks on `end_workflow_iteration`
-will cut off mid-turn or race. Break on `is_ready_for_input()` for "the caller's turn", and
-`is_terminal()` for "the run is over".
+`is_ready_for_input()` answers "your turn" in every workflow. The server sends `workflow_ready_for_input` only
+while [companion threads](guides/companion_threads.md) run in the background. Without them, the stream marks the
+turn's `end_workflow_iteration` as the hand-over instead.
+
+Once companion threads are in play, companions keep emitting events while the main thread waits, so a loop that
+breaks on `end_workflow_iteration` will cut off mid-turn or race. Send on `is_ready_for_input()`, and stop on
+`is_terminal()` or when iteration ends.
 
 `workflow_ready_for_input` carries `active_companion_thread_ids` — what is still running in the
 background at that moment. Note these are **internal** ids: a companion configured as
@@ -86,8 +89,8 @@ Lifecycle and navigation:
 |---|---|
 | `start_workflow` / `end_workflow` | The run began / every thread has ended. |
 | `end_workflow_iteration` | One turn completed. Carries `iteration_metrics`. |
-| `workflow_ready_for_input` | Ready for the next user message. |
-| `workflow_error` | The run terminated with an error. |
+| `workflow_ready_for_input` | The main thread waits for the user while companions run. Sent only then. |
+| `workflow_error` | A node failed. Ends the turn; the run ends only if the socket then closes (see Gotchas). |
 | `conditional_edge` / `direct_edge` | A transition was taken. |
 | `reverse_conditional_edge` | A global node returned control to its caller. |
 | `guardrail_escalation_edge` | The guardrail-strikes threshold escalated the run. |
@@ -109,6 +112,13 @@ Bounded [self-loops](guides/self_loops.md):
 | `self_loop_exhausted` | Stopped on `max_retries` or `expiry_time`. |
 | `node_expired` | An in-flight execution was terminated by `expiry_time`. |
 
+Pauses, on durable runs (`event.is_run_paused()`, `event.is_run_resumed()`):
+
+| Type | Emitted when |
+|---|---|
+| `run_paused` | A person paused the run, or a message was refused while it is paused. Carries `paused_by` and `pause_reason`. |
+| `run_resumed` | A person's pause of the run was lifted. Carries `resumed_by`. |
+
 ---
 
 ## Stream parameters
@@ -123,6 +133,7 @@ async with client.runs.stream(
     runtime_variables={"attempt": 1},      # fills [[...]] placeholders
     run_input=None,                  # optional typed WorkflowRunInput (preferred)
     rerun_token=None,                # redeem a re-run projection
+    workflow_run_id=None,            # take back a run a stream handed off (see below)
     cast_to=RunEvent,                # default
 ) as events:
     ...
@@ -148,31 +159,134 @@ Only meaningful on a `start` frame. See [Re-runs](guides/reruns.md).
 
 ---
 
+## Sending turns
+
+One `async with` block holds a whole conversation. When an event is `is_ready_for_input()`, send the next
+message and keep iterating the same stream:
+
+```python
+from interactly import AsyncWorkflowClient
+
+async with AsyncWorkflowClient() as client:
+    async with client.runs.stream(
+        workflow_id="wf-123",
+        dynamic_variables={"name": "Alice"},
+    ) as stream:
+        replies = iter(["I'd like to book an appointment.", "Tuesday morning, please."])
+        async for event in stream:
+            if event.is_ready_for_input():
+                reply = next(replies, None)
+                if reply is None:
+                    await stream.stop()
+                else:
+                    await stream.send(reply)
+```
+
+- `send(message=None, *, dynamic_variables=None, runtime_variables=None, run_input=None)` sends the turn as a
+  `resume` frame, the same frame the workflow editor sends. Leave `message` out for a turn that carries none.
+- The variables the stream was opened with go with every turn, merged with that turn's own. Edge conditions read
+  variables only from the current turn's input, so each turn must carry them.
+- Pass a typed `WorkflowRunInput` as `run_input` for a turn that needs more than one message, such as messages for
+  other threads. A `message` and a `run_input` together raise `ValueError`.
+- The server reads the socket only between turns. A turn sent while one is running waits and is taken when that
+  turn ends. `send()` is therefore safe before `stream.run_id` is known: `run_id` is `None` until the server names
+  the run.
+- While a person has paused the run, the server refuses a turn with a `run_paused` event and drops the message.
+  Send it again after `run_resumed`.
+- `send()` raises `StreamError` when the stream is not open (outside its `with` block) or the run has ended. When
+  the socket was already closed, `code` holds the close code (1000 for a normal close); after iteration has
+  reported the end, there is no code. A refusal met while sending is not raised by `send()`: iteration raises its
+  typed exception.
+
+The synchronous `Stream` has `send()`, `stop()` and `run_id` with the same behaviour.
+
+## Stopping a run
+
+`stop()` ends the run. The server stores it `cancelled` with `termination_source` `client_stop`, not `completed`.
+It sends "Workflow run stopped successfully" and closes normally, so keep iterating to read that last frame;
+iteration then ends. Like `send()`, `stop()` takes effect between turns.
+
+Leaving the `with` block closes the socket. The server cancels a run that has not finished (`termination_source`
+`websocket_disconnect`), companion threads included, even mid-turn. The exception is a durable run parked on a
+pause of its own (a wait, an approval, a signal, an external job): the server hands it off and the run keeps
+`waiting`. Take it back, as below.
+
+## Taking a run back
+
+`client.runs.stream(workflow_id=..., workflow_run_id=...)` reopens a run that a stream handed off while it waited
+on a pause. It needs durable socket runs on the server; where they are off, every take-back is refused.
+
+```python
+async with AsyncWorkflowClient() as client:
+    async with client.runs.stream(
+        workflow_id="wf-123",
+        workflow_run_id=run_id,
+    ) as stream:
+        replies = iter(["Yes, go ahead."])
+        async for event in stream:
+            if event.is_ready_for_input():
+                reply = next(replies, None)
+                await (stream.send(reply) if reply else stream.stop())
+```
+
+- A take-back names the run and nothing else. `version_number`, `run_input`, `rerun_token`, or a command other than
+  `WorkflowCommand.START` raises `ValueError` before connecting. `dynamic_variables` and `runtime_variables` are
+  allowed, and go with each later turn.
+- The first event acknowledges the take-back ("Workflow run taken back"), and carries `workflow_run_status` and
+  `restored_messages`.
+- A refusal raises from iteration:
+
+| Close code | Exception | Refused when |
+|---|---|---|
+| 4010 | `TakeBackRefusedError` | Durable socket runs are off. Or the run belongs to another workflow, was not started from a live socket, has ended, is being cancelled, is open in another editor, has no stored state, or the server is carrying it on right now (retry shortly). A closed editor tab lets go within a minute or two. |
+| 4030 | `TakeBackForbiddenError` | The caller's role is below developer. |
+| 4040 | `StreamNotFoundError` | No such workflow or run on this team. |
+| 1008 | `StreamPermissionError` | The caller is a viewer. |
+
 ## Close codes and errors
 
-Most closures are the end of the stream. Two are the server **rejecting your start frame**, and the
-SDK raises a specific exception for each rather than a generic failure:
+The run socket closes with one code per outcome. Code 1000 is the run ending, and iteration stops. Every other
+code raises the exception below, a `StreamError` subclass carrying `code`, `reason` and `server_message`.
+`server_message` is the full text of the `workflow_error` frame the server sent just before closing, when it sent
+one: a close reason holds only 123 bytes.
 
 | Close code | Exception | Meaning |
 |---|---|---|
-| 1000 | — | Normal closure. The iterator simply ends. |
-| **4006** | `InvalidStreamInputError` | The frame carried `initial_state`. A client is never the source of run state — use a `rerun_token` instead. |
-| **4007** | `RerunTokenError` | The token expired, was minted for a different workflow or version, or the workflow changed since. |
-| anything else | `StreamError` | Abnormal termination. |
+| 1000 | — | The run ended. Iteration stops. |
+| 1008 | `StreamPermissionError` | The caller's role may not run workflows: a viewer, or a role the server does not know. Needs developer access or above. |
+| 1011 | `StreamServerError` | The server failed while handling the run. |
+| 4000 | `StreamRejectedError` | The start frame was malformed, the requested version does not exist, or the workflow's configuration or runtime could not load. A misused take-back start frame also lands here. |
+| 4001 | `UnrunnableWorkflowError` | The workflow's nodes belong to a different version than the one requested. Fix the workflow; retrying the same frame will not help. |
+| 4002 | `UnrunnableWorkflowError` | The workflow has no nodes. |
+| 4003 | `ConcurrencyLimitError` | The team or workflow is already running as many runs as it may. Retry later. |
+| 4005 | `UnrunnableWorkflowError` | A super node in the workflow could not be expanded. |
+| 4006 | `InvalidStreamInputError` | The frame carried `initial_state`. A client is never the source of run state; use a `rerun_token` instead. |
+| 4007 | `RerunTokenError` | The token expired, was minted for a different workflow or version, or the workflow changed since. Mint a fresh one. |
+| 4009 | `RunChangedElsewhereError` | A person paused, resumed or cancelled the run, or another session carried it on. `server_message` gives its status. |
+| 4010 | `TakeBackRefusedError` | The run could not be taken back. See above. |
+| 4030 | `TakeBackForbiddenError` | The caller's role is below developer, for a take-back. |
+| 4040 | `StreamNotFoundError` | The workflow or run does not exist for this team. |
+| 4400 | `ResumeInputRejectedError` | The frame carried a resume input. Approve a pause with `client.runs.resume` instead. |
 
-Both subclass `StreamError`, so an existing `except StreamError` keeps working:
+A close code not in this table raises a plain `StreamError`, with `code` and `reason` set. A viewer's socket is
+accepted and closed at once, often before the start frame goes out; iteration still reports that close, so a
+viewer gets `StreamPermissionError` (1008) even then.
+
+The two start-frame rejections are the ones most code handles. Both subclass `StreamError`, so an existing
+`except StreamError` keeps working:
 
 ```python
-from interactly import InvalidStreamInputError, RerunTokenError, StreamError
+from interactly import AsyncWorkflowClient, RerunTokenError, StreamError
 
-try:
-    async with client.runs.stream(workflow_id=wf_id, rerun_token=token) as events:
-        async for event in events:
-            ...
-except RerunTokenError:
-    token = (await client.reruns.create_token(run_id, 3)).rerun_token   # mint a fresh one
-except StreamError as exc:
-    print("stream failed:", exc)
+async with AsyncWorkflowClient() as client:
+    try:
+        async with client.runs.stream(workflow_id=wf_id, rerun_token=token) as events:
+            async for event in events:
+                ...
+    except RerunTokenError:
+        token = (await client.reruns.create_token(run_id, turn_index=3)).rerun_token   # mint a fresh one
+    except StreamError as exc:
+        print("stream failed:", exc.code, exc.server_message or exc.reason)
 ```
 
 ---
@@ -241,4 +355,21 @@ with client.runs.stream(workflow_id="wf-123") as events:
 - [Running workflows](guides/running_workflows.md) — stream vs. execute vs. handle
 - [Companion threads](guides/companion_threads.md) — background threads and pumping
 - [Re-runs](guides/reruns.md) — replaying a finished run
+- [Run control](guides/run_control.md) — pausing, resuming and signalling durable runs
 - [Error handling](error_handling.md) — the exception hierarchy
+
+## Gotchas
+
+- **A `workflow_error` does not always end the run.** On the run socket, a node failure the server tolerates ends
+  the turn with `workflow_error` and leaves the socket open, so the user can send the next turn. Only a failure
+  followed by the socket closing with 1011 ends the run. Treat `workflow_error` as the end of a turn, and the run
+  as ended when iteration stops. `is_terminal()` is True for it, so a conversation loop should not stop on
+  `is_terminal()` alone.
+- **Leaving the `with` block cancels the run**, companion threads included, even mid-turn. Iterate until the run
+  ends, or call `stop()` first.
+- **`send()` mid-turn waits.** The turn is taken when the current one ends, not at once.
+- **`stop()` is stored `cancelled`**, not `completed`. Check `termination_source` (`client_stop`) to tell it apart.
+- **A refusal met while sending is raised by iteration**, not by `send()`.
+- **A take-back needs durable socket runs on the server.** Where they are off, every take-back raises
+  `TakeBackRefusedError`, so check the server before relying on one.
+- **Event fields are top-level attributes**, not `event.data`, which the server never populates.
