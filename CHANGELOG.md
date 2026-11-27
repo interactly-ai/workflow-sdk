@@ -9,6 +9,26 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [Unreleased]
 
+### A node failure the server tolerates ends only its turn
+#### Changed
+- **`RunEvent.is_terminal()` is False for a `workflow_error` the server tolerated.**
+  - **What the server sends:** under a workflow's default error limits, the run socket sends a failed node's
+    `workflow_error` with `fatal: false` and keeps the socket open, and the run takes the next message.
+  - **Before:** `is_terminal()` called every `workflow_error` the end of the run, so a loop that stopped on it left a
+    run that was still going (and leaving the stream then cancelled it).
+  - **Now:** it is True for `end_workflow`, and for a `workflow_error` with `fatal: true` or with no flag. That covers
+    the last error the server sends, with the whole reason, before closing a run with 1011, and every error from a
+    server that sends no flag.
+- **A stream marks a tolerated failure `is_ready_for_input()`, once per turn,** so a conversation loop sends the next
+  message instead of waiting for a hand-over that never comes. The server sends that error before it checks the
+  workflow's error limits (`num_errors_tolerated`, `num_consecutive_errors_tolerated`, `stop_workflow_on_error`).
+  When they end the run after all, the stream raises `StreamServerError` (1011) after the last error, as before.
+- **A loop that reads only until `is_terminal()` now waits after a tolerated failure**, as it already waits after any
+  turn that hands over to the user. Answer `is_ready_for_input()` with `send()` or `stop()`.
+
+#### Added
+- **`RunEvent.fatal`**: the flag the server puts on a `workflow_error`; `None` when a frame carries none.
+
 ---
 
 ## [0.4.0] — 2026-11-27

@@ -360,6 +360,7 @@ except InteractlyError as e:
 - **`message` is a summary.** For the full error list, read `e.body`.
 - **A viewer's stream raises `StreamPermissionError` (1008), not `PermissionDeniedError`.** The latter is a REST
   refusal. A take-back by a role below developer raises `TakeBackForbiddenError` (4030).
-- **A `workflow_error` does not always end the run.** A tolerated node failure ends the turn, and the socket stays
-  open. See [Streaming](streaming.md#gotchas).
+- **A `workflow_error` does not always end the run.** A node failure the server tolerated (`fatal: false`) ends the
+  turn, and the socket stays open; `is_terminal()` is False for it. When the workflow's error limits end the run,
+  iteration raises `StreamServerError` (1011). See [Streaming](streaming.md#gotchas).
 - **A refusal met while sending is raised by iteration**, not by `send()`.

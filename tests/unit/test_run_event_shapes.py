@@ -54,11 +54,24 @@ class TestReadinessVsTermination:
         assert event.is_ready_for_input() is False
         assert event.is_terminal() is False
 
-    @pytest.mark.parametrize("event_type", ["end_workflow", "workflow_error"])
-    def test_only_these_two_are_terminal(self, event_type: str):
-        event = RunEvent.model_validate({"type": event_type})
+    @pytest.mark.parametrize(
+        "frame",
+        [
+            {"type": "end_workflow"},
+            # A failure the run cannot carry on from.
+            {"type": "workflow_error", "fatal": True},
+            # The frame the server sends just before closing with 1011, and every error from an older server.
+            {"type": "workflow_error", "message": "Error Connection error. when running node 'Ask'"},
+        ],
+    )
+    def test_the_end_of_the_run_is_terminal(self, frame: dict):
+        event = RunEvent.model_validate(frame)
         assert event.is_terminal() is True
         assert event.is_ready_for_input() is False
+
+    def test_a_failure_the_server_tolerated_ends_only_the_turn(self):
+        event = RunEvent.model_validate({"type": "workflow_error", "fatal": False})
+        assert (event.is_terminal(), event.fatal) == (False, False)
 
 
 class TestEventExtrasAreTopLevel:

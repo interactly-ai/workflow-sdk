@@ -16,7 +16,7 @@ import websockets
 from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 from websockets.frames import Close
 
-from interactly import AsyncWorkflowClient, StreamError, StreamPermissionError, WorkflowClient
+from interactly import AsyncWorkflowClient, StreamError, StreamPermissionError, StreamServerError, WorkflowClient
 from interactly._streaming import AsyncStream, Stream
 from interactly.types.runs.run_event import RunEvent
 
@@ -333,6 +333,22 @@ def _busy_wait(thread: str = "0") -> Dict[str, Any]:
     return {"type": "busy_wait_for_user_message", "origin_thread_id": thread}
 
 
+def _failed_turn() -> List[Dict[str, Any]]:
+    """A turn whose LLM node failed, its frames as a workflow-service sends them (captured on dev, trimmed)."""
+    return [
+        {"type": "user_messages", "messages": [{"type": "human", "content": "hello"}]},
+        {"type": "start_node_run"},
+        {"type": "say_llm"},
+        {"type": "assistant_response", "content": "I am sorry, there seems to be an issue. Could you please repeat?"},
+        {"type": "workflow_error", "error_message": "Error Connection error.", "fatal": False},
+    ]
+
+
+def _closing_error(reason: str) -> Dict[str, Any]:
+    """The error frame the server sends with the whole reason just before it closes the socket with 1011."""
+    return {"type": "workflow_error", "message": reason}
+
+
 async def _ready_marks(frames: List[Dict[str, Any]], monkeypatch) -> List[str]:
     """The types of the events a stream says hand over to the user, reading ``frames`` to the end."""
     _connecting_to(_ScriptedSocket(frames), monkeypatch)
@@ -375,6 +391,37 @@ class TestReadyForInput:
 
     async def test_a_failed_turn_starts_the_next_afresh(self, monkeypatch):
         frames = [_ACK, _busy_wait(), {"type": "workflow_error"}, {"type": "end_workflow_iteration"}]
+        assert await _ready_marks(frames, monkeypatch) == []
+
+    async def test_a_failure_the_server_tolerated_hands_over_at_its_error(self, monkeypatch):
+        # A turn whose LLM node failed, as a server with default error limits sends it: the error is its last frame,
+        # and the socket stays open for the next message.
+        frames = [_ACK, _busy_wait(), {"type": "end_workflow_iteration"}, *_failed_turn()]
+        assert await _ready_marks(frames, monkeypatch) == ["end_workflow_iteration", "workflow_error"]
+
+    async def test_when_error_limits_end_the_run_the_error_hands_over_once_and_the_close_raises(self, monkeypatch):
+        # The server sends the tolerated error before it checks the workflow's error limits. When they end the run,
+        # a second error and then one with the whole reason follow, and the socket closes with 1011.
+        reason = "Error Error Connection error. when running node 'Ask'"
+        frames = [_ACK, *_failed_turn(), {"type": "workflow_error", "fatal": False}, _closing_error(reason)]
+        _connecting_to(_ScriptedSocket(frames, 1011, reason), monkeypatch)
+        seen: List[RunEvent] = []
+
+        with pytest.raises(StreamServerError) as caught:
+            async with _async_stream() as stream:
+                async for event in stream:
+                    seen.append(event)
+
+        errors = [(e.is_ready_for_input(), e.is_terminal()) for e in seen if e.type == "workflow_error"]
+        assert errors == [(True, False), (False, False), (False, True)]
+        assert caught.value.server_message == reason
+
+    async def test_a_fatal_failure_hands_nothing_over(self, monkeypatch):
+        frames = [_ACK, _busy_wait(), {"type": "workflow_error", "fatal": True}]
+        assert await _ready_marks(frames, monkeypatch) == []
+
+    async def test_a_companions_failure_is_not_the_run_waiting(self, monkeypatch):
+        frames = [_ACK, {"type": "workflow_error", "fatal": False, "origin_thread_id": "0_companion_bg"}]
         assert await _ready_marks(frames, monkeypatch) == []
 
     async def test_a_take_back_hands_over_when_its_run_waits_for_its_user(self, monkeypatch):

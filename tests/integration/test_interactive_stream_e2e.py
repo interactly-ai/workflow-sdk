@@ -13,11 +13,17 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import Callable, List
+from typing import Any, Callable, List
 
 import pytest
 
-from interactly import AsyncStream, AsyncWorkflowClient, StreamNotFoundError, TakeBackRefusedError
+from interactly import (
+    AsyncStream,
+    AsyncWorkflowClient,
+    StreamNotFoundError,
+    StreamServerError,
+    TakeBackRefusedError,
+)
 from interactly.configs import CustomLLMConfig, SayLLMNodeConfig, WorkflowConfig, WorkflowConfigFullyHydrated
 from interactly.types.runs.run_event import RunEvent
 
@@ -41,11 +47,17 @@ def _unreachable_llm() -> CustomLLMConfig:
     )
 
 
-def _conversation_workflow() -> WorkflowConfigFullyHydrated:
-    ask = SayLLMNodeConfig(name="Ask", is_start=True, llms_config=_unreachable_llm(), wait_for_user_message=True)
+def _conversation_workflow(**settings: Any) -> WorkflowConfigFullyHydrated:
+    """One node that waits for the user and answers through a gateway that can never be reached, so each turn after
+    the first fails at once. ``settings`` go into the workflow's ``miscellaneous``, where its error limits live."""
+    ask = SayLLMNodeConfig(
+        name="Ask", is_start=True, llms_config=_unreachable_llm(), wait_for_user_message=True, self_loop=True
+    )
     return WorkflowConfigFullyHydrated(
         workflow_config=WorkflowConfig(
-            name=f"SDK_E2E interactive stream {uuid.uuid4().hex[:8]}", llms_config=_unreachable_llm()
+            name=f"SDK_E2E interactive stream {uuid.uuid4().hex[:8]}",
+            llms_config=_unreachable_llm(),
+            miscellaneous=settings,
         ),
         node_configs=[ask],
         edge_configs=[],
@@ -138,6 +150,61 @@ async def test_taking_back_a_run_that_does_not_exist_raises_not_found():
         pytest.fail("taking back a run that does not exist was not refused")
     except StreamNotFoundError as missing:
         assert missing.code == 4040
+    finally:
+        if workflow_id:
+            await client.workflows.delete(workflow_id)
+        await client.close()
+
+
+async def test_a_failure_the_server_tolerates_ends_only_its_turn():
+    # Under the default error limits the server tolerates the node's failure: the error is the turn's last frame, the
+    # socket stays open, and the next message runs.
+    client = AsyncWorkflowClient()
+    workflow_id = None
+    try:
+        workflow_id = (await client.workflows.create_from_config(_conversation_workflow())).id
+        failed: List[RunEvent] = []
+        again: List[RunEvent] = []
+
+        async with client.runs.stream(workflow_id=workflow_id) as stream:
+            await _read_until(stream, lambda e: e.is_ready_for_input(), [])
+            await stream.send("first")
+            await _read_until(stream, lambda e: e.type == "workflow_error", failed)
+            await stream.send("second")
+            await _read_until(stream, lambda e: e.type == "workflow_error", again)
+            await stream.stop()
+            await _read_until(stream, lambda e: False, [])
+
+        error = failed[-1]
+        assert (error.fatal, error.is_terminal(), error.is_ready_for_input()) == (False, False, True)
+        assert _user_texts(again) == ["second"]
+    finally:
+        if workflow_id:
+            await client.workflows.delete(workflow_id)
+        await client.close()
+
+
+async def test_a_workflow_that_stops_on_error_ends_the_stream_with_a_server_error():
+    # The server sends the tolerated error before it checks the workflow's error settings; stopping on error, it then
+    # sends the whole reason in a last error and closes the socket with 1011.
+    client = AsyncWorkflowClient()
+    workflow_id = None
+    try:
+        workflow_id = (
+            await client.workflows.create_from_config(_conversation_workflow(stop_workflow_on_error="true"))
+        ).id
+        seen: List[RunEvent] = []
+
+        with pytest.raises(StreamServerError) as caught:
+            async with client.runs.stream(workflow_id=workflow_id) as stream:
+                await _read_until(stream, lambda e: e.is_ready_for_input(), [])
+                await stream.send("hello")
+                await _read_until(stream, lambda e: False, seen)
+
+        errors = [e for e in seen if e.type == "workflow_error"]
+        assert errors[0].is_ready_for_input() and not errors[0].is_terminal()
+        assert errors[-1].is_terminal()
+        assert caught.value.code == 1011
     finally:
         if workflow_id:
             await client.workflows.delete(workflow_id)

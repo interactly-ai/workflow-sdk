@@ -584,15 +584,23 @@ class _TurnTracker:
     it; the last of the two wins, as it does on the server. ``end_workflow_iteration`` ends the turn. When fork
     companions run on, the server says the same with ``workflow_ready_for_input``, and that event hands over instead,
     so the user is told once. A take-back's acknowledgement hands over when the run it took back waits for its user.
+
+    A turn that fails ends with its ``workflow_error`` instead of an iteration end. When the server tolerated the
+    failure (``fatal`` false) the socket stays open and the run takes the next message, so the error hands over. The
+    server sends that frame before it checks the workflow's error limits: when they end the run after all, more error
+    frames follow and the socket closes with 1011. Only the first error of a turn hands over.
     """
 
     def __init__(self) -> None:
         self._waiting = False
         self._announced = False
+        self._handed_over_on_error = False
 
     def hands_over_to_user(self, frame: dict[str, Any]) -> bool:
         kind = frame.get("type")
         main_thread = _COMPANION_THREAD_DELIMITER not in str(frame.get("origin_thread_id") or "")
+        if kind != "workflow_error":
+            self._handed_over_on_error = False
         if kind == "busy_wait_for_user_message" and main_thread:
             self._waiting = True
         elif kind in ("pause_event", "pause_thread") and main_thread:
@@ -603,10 +611,13 @@ class _TurnTracker:
             hands_over = self._waiting and not self._announced
             self._waiting = self._announced = False
             return hands_over
-        elif kind in ("end_workflow", "workflow_error"):
-            # A turn that fails ends with its error instead of an iteration end, the socket open when the server
-            # tolerated the failure.
+        elif kind == "end_workflow":
             self._waiting = self._announced = False
+        elif kind == "workflow_error":
+            self._waiting = self._announced = False
+            if frame.get("fatal") is False and main_thread and not self._handed_over_on_error:
+                self._handed_over_on_error = True
+                return True
         elif not kind and frame.get("workflow_run_status") == "waiting_for_user_input":
             return True
         return False
