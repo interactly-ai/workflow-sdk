@@ -314,12 +314,7 @@ Each workflow has multiple versions. The active version is used by default when 
 
 ```python
 async with AsyncWorkflowClient() as client:
-    # Create a new version (cloned from the current active version)
-    v = await client.workflows.versions.create(
-        workflow_id="wf_123"
-    )
-
-    # Create with a human-readable name
+    # Create a new version, cloned from the current active version. Every version needs a name.
     v = await client.workflows.versions.create(
         workflow_id="wf_123",
         version_name="Release 1.0"
@@ -335,6 +330,7 @@ async with AsyncWorkflowClient() as client:
     # Create and immediately activate
     v = await client.workflows.versions.create(
         workflow_id="wf_123",
+        version_name="Release 1.1",
         mark_as_active=True
     )
 ```
@@ -371,15 +367,18 @@ async with AsyncWorkflowClient() as client:
     )
 ```
 
-### Replace a version's config
+### Update a version's settings
+
+`update_config` changes a version's workflow-level settings (name, description, category, the global LLM config,
+`tools_config`, ...). Only the settings given change. Nodes and edges are not settings: change them through
+`client.nodes` and `client.edges`.
 
 ```python
 async with AsyncWorkflowClient() as client:
-    new_config = {...}  # dict or typed NodeConfig/EdgeConfig objects
     v = await client.workflows.versions.update_config(
         workflow_id="wf_123",
         version_number=1,
-        config=new_config
+        config={"description": "Books and reschedules appointments"},  # or a typed WorkflowConfig
     )
 ```
 

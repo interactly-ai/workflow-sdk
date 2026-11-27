@@ -1,0 +1,643 @@
+{
+  "update_config_wrapped": {
+    "status": 200,
+    "body": {
+      "version": {
+        "team_id": "665f1c0a2b3c4d5e6f720000",
+        "created_by": "665f1c0a2b3c4d5e6f720001",
+        "updated_by": "665f1c0a2b3c4d5e6f720001",
+        "created_at": "2026-11-27T05:48:05.902Z",
+        "updated_at": "2026-11-27T05:48:05.902Z",
+        "_id": "665f1c0a2b3c4d5e6f720002",
+        "workflow_id": "665f1c0a2b3c4d5e6f720003",
+        "version_number": 0,
+        "version_name": "Initial Version",
+        "workflow_config": {
+          "logical_id": "workflow_6d8c9e22-a38e-47a2-a8a6-cacf6b49196a",
+          "name": "SDK_E2E export A",
+          "description": "original",
+          "category": "User Created",
+          "workflow_type": "standard",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "default_provider",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "type": "no_llm"
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f720004"
+          ],
+          "edges": [],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        }
+      },
+      "warnings": [],
+      "pruned_global_tool_exclusions": {},
+      "parent_active_version": 0
+    }
+  },
+  "update_config": {
+    "status": 200,
+    "body": {
+      "version": {
+        "team_id": "665f1c0a2b3c4d5e6f720000",
+        "created_by": "665f1c0a2b3c4d5e6f720001",
+        "updated_by": "665f1c0a2b3c4d5e6f720001",
+        "created_at": "2026-11-27T05:48:05.902Z",
+        "updated_at": "2026-11-27T05:48:05.902Z",
+        "_id": "665f1c0a2b3c4d5e6f720002",
+        "workflow_id": "665f1c0a2b3c4d5e6f720003",
+        "version_number": 0,
+        "version_name": "Initial Version",
+        "workflow_config": {
+          "logical_id": "workflow_6d8c9e22-a38e-47a2-a8a6-cacf6b49196a",
+          "name": "SDK_E2E export A",
+          "description": "sent at the top level",
+          "category": "User Created",
+          "workflow_type": "standard",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "default_provider",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "type": "no_llm"
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f720004"
+          ],
+          "edges": [],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        }
+      },
+      "warnings": [],
+      "pruned_global_tool_exclusions": {},
+      "parent_active_version": 0
+    }
+  },
+  "create_version_no_name": {
+    "status": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "missing",
+          "loc": [
+            "body",
+            "version_name"
+          ],
+          "msg": "Field required",
+          "input": {
+            "mark_as_active": false
+          }
+        }
+      ]
+    }
+  },
+  "create_version": {
+    "status": 200,
+    "body": {
+      "version": {
+        "team_id": "665f1c0a2b3c4d5e6f720000",
+        "created_by": "665f1c0a2b3c4d5e6f720001",
+        "updated_by": "665f1c0a2b3c4d5e6f720001",
+        "created_at": "2026-11-27T05:48:07.545Z",
+        "updated_at": "2026-11-27T05:48:07.545Z",
+        "_id": "665f1c0a2b3c4d5e6f720005",
+        "workflow_id": "665f1c0a2b3c4d5e6f720003",
+        "version_number": 1,
+        "version_name": "SDK probe v1",
+        "workflow_config": {
+          "logical_id": "workflow_6d8c9e22-a38e-47a2-a8a6-cacf6b49196a",
+          "name": "SDK_E2E export A",
+          "description": "sent at the top level",
+          "category": "User Created",
+          "workflow_type": "standard",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "default_provider",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "type": "no_llm"
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f720006"
+          ],
+          "edges": [],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        }
+      },
+      "warnings": [],
+      "pruned_global_tool_exclusions": {},
+      "parent_active_version": 0
+    }
+  },
+  "export": {
+    "status": 200,
+    "body": {
+      "export_format": "v2",
+      "source_workflow_id": "665f1c0a2b3c4d5e6f720003",
+      "source_workflow_name": "SDK_E2E export A",
+      "active_version_number": 0,
+      "versions": [
+        {
+          "version_number": 0,
+          "version_name": "Initial Version",
+          "workflow_config": {
+            "workflow_config": {
+              "logical_id": "workflow_6d8c9e22-a38e-47a2-a8a6-cacf6b49196a",
+              "name": "SDK_E2E export A",
+              "description": "sent at the top level",
+              "category": "User Created",
+              "workflow_type": "standard",
+              "attachable_llm_config_id": null,
+              "llms_config": {
+                "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+                "named_llm_config_id": null,
+                "named_llm_config_name": null,
+                "provider": "default_provider",
+                "streaming": false,
+                "max_retries": 3,
+                "max_parse_retries": 3,
+                "max_tokens": null,
+                "temperature": null,
+                "request_timeout_ms": null,
+                "seed": null,
+                "model_kwargs": {},
+                "api_key": null,
+                "do_not_split_sentences": false,
+                "truncated_max_recent_messages": null,
+                "type": "no_llm"
+              },
+              "main_response_config": null,
+              "backchannel_response_config": null,
+              "default_prompt_prefix": null,
+              "default_prompt_suffix": null,
+              "ignore_content_received_during_llm_tool_call_specification": false,
+              "tools_config": null,
+              "mcp_servers": null,
+              "global_condition_evaluation_method": "tool_call",
+              "nodes": [
+                "665f1c0a2b3c4d5e6f720004"
+              ],
+              "edges": [],
+              "evaluation_config": null,
+              "guardrail_strikes_config": null,
+              "miscellaneous": {},
+              "access_config": {
+                "access_level": null,
+                "access_list": null
+              }
+            },
+            "node_configs": [
+              {
+                "logical_id": "node_9b4008d6-d996-48e4-85a2-9b3739a49130",
+                "name": "Ping",
+                "description": null,
+                "workflow_id": "665f1c0a2b3c4d5e6f720003",
+                "version_number": 0,
+                "disabled": false,
+                "miscellaneous": {},
+                "primary_category": "REST API",
+                "secondary_category": "HTTP Request",
+                "is_start": true,
+                "is_guardrail_node": false,
+                "global_node_config": null,
+                "self_loop_config": null,
+                "on_failure": "route",
+                "type": "http_request",
+                "url": "https://api.unreachable.invalid/ping",
+                "method": "GET",
+                "headers": {
+                  "Authorization": "",
+                  "Accept": "application/json"
+                },
+                "query_parameters": null,
+                "body_parameters": null,
+                "body_content_type": "application/json",
+                "timeout": 30,
+                "response_format": "json",
+                "result_runtime_variable_name": "http_request_result",
+                "realtime_overrides": null
+              }
+            ],
+            "edge_configs": [],
+            "dynamic_variables": {},
+            "runtime_variables": {}
+          }
+        }
+      ],
+      "exported_at": "2026-11-27T05:48:07.688946",
+      "warnings": [
+        "1 secret value(s) were cleared from the export; re-enter them after import."
+      ],
+      "redactions": [
+        {
+          "path": "versions.0.workflow_config.node_configs.0.headers.Authorization",
+          "reason": "sensitive header",
+          "node_name": "Ping",
+          "segments": [
+            "versions",
+            "0",
+            "workflow_config",
+            "node_configs",
+            "0",
+            "headers",
+            "Authorization"
+          ]
+        }
+      ],
+      "secrets_included": false
+    }
+  },
+  "export_with_secrets": {
+    "status": 200,
+    "body": {
+      "export_format": "v2",
+      "source_workflow_id": "665f1c0a2b3c4d5e6f720003",
+      "source_workflow_name": "SDK_E2E export A",
+      "active_version_number": 0,
+      "versions": [
+        {
+          "version_number": 0,
+          "version_name": "Initial Version",
+          "workflow_config": {
+            "workflow_config": {
+              "logical_id": "workflow_6d8c9e22-a38e-47a2-a8a6-cacf6b49196a",
+              "name": "SDK_E2E export A",
+              "description": "sent at the top level",
+              "category": "User Created",
+              "workflow_type": "standard",
+              "attachable_llm_config_id": null,
+              "llms_config": {
+                "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+                "named_llm_config_id": null,
+                "named_llm_config_name": null,
+                "provider": "default_provider",
+                "streaming": false,
+                "max_retries": 3,
+                "max_parse_retries": 3,
+                "max_tokens": null,
+                "temperature": null,
+                "request_timeout_ms": null,
+                "seed": null,
+                "model_kwargs": {},
+                "api_key": null,
+                "do_not_split_sentences": false,
+                "truncated_max_recent_messages": null,
+                "type": "no_llm"
+              },
+              "main_response_config": null,
+              "backchannel_response_config": null,
+              "default_prompt_prefix": null,
+              "default_prompt_suffix": null,
+              "ignore_content_received_during_llm_tool_call_specification": false,
+              "tools_config": null,
+              "mcp_servers": null,
+              "global_condition_evaluation_method": "tool_call",
+              "nodes": [
+                "665f1c0a2b3c4d5e6f720004"
+              ],
+              "edges": [],
+              "evaluation_config": null,
+              "guardrail_strikes_config": null,
+              "miscellaneous": {},
+              "access_config": {
+                "access_level": null,
+                "access_list": null
+              }
+            },
+            "node_configs": [
+              {
+                "logical_id": "node_9b4008d6-d996-48e4-85a2-9b3739a49130",
+                "name": "Ping",
+                "description": null,
+                "workflow_id": "665f1c0a2b3c4d5e6f720003",
+                "version_number": 0,
+                "disabled": false,
+                "miscellaneous": {},
+                "primary_category": "REST API",
+                "secondary_category": "HTTP Request",
+                "is_start": true,
+                "is_guardrail_node": false,
+                "global_node_config": null,
+                "self_loop_config": null,
+                "on_failure": "route",
+                "type": "http_request",
+                "url": "https://api.unreachable.invalid/ping",
+                "method": "GET",
+                "headers": {
+                  "Authorization": "Bearer sdk-probe-not-a-secret",
+                  "Accept": "application/json"
+                },
+                "query_parameters": null,
+                "body_parameters": null,
+                "body_content_type": "application/json",
+                "timeout": 30,
+                "response_format": "json",
+                "result_runtime_variable_name": "http_request_result",
+                "realtime_overrides": null
+              }
+            ],
+            "edge_configs": [],
+            "dynamic_variables": {},
+            "runtime_variables": {}
+          }
+        }
+      ],
+      "exported_at": "2026-11-27T05:48:07.826157",
+      "warnings": [
+        "1 secret value(s) are included in plain text; share this file only with people allowed to see them."
+      ],
+      "redactions": [
+        {
+          "path": "versions.0.workflow_config.node_configs.0.headers.Authorization",
+          "reason": "sensitive header",
+          "node_name": "Ping",
+          "segments": [
+            "versions",
+            "0",
+            "workflow_config",
+            "node_configs",
+            "0",
+            "headers",
+            "Authorization"
+          ]
+        }
+      ],
+      "secrets_included": true
+    }
+  },
+  "export_secrets_viewer": {
+    "status": 403,
+    "body": {
+      "message": "Your role, Viewer, can't export a workflow's secrets. It needs Developer access or above. Ask an admin of your team if you need access."
+    }
+  },
+  "import_with_overrides": {
+    "status": 200,
+    "body": {
+      "workflow": {
+        "team_id": "665f1c0a2b3c4d5e6f720000",
+        "created_by": "665f1c0a2b3c4d5e6f720001",
+        "updated_by": "665f1c0a2b3c4d5e6f720001",
+        "created_at": "2026-11-27T05:48:08.442Z",
+        "updated_at": "2026-11-27T05:48:08.442Z",
+        "_id": "665f1c0a2b3c4d5e6f720007",
+        "workflow_config": {
+          "logical_id": "workflow_47dab1f0-9719-4b0a-9e18-73cccf7718b9",
+          "name": "SDK_E2E imported with secret",
+          "description": "sent at the top level",
+          "category": "User Created",
+          "workflow_type": "standard",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "default_provider",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "type": "no_llm"
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f720008"
+          ],
+          "edges": [],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        },
+        "active_version_number": 0,
+        "max_concurrent_runs": null
+      },
+      "execution_url": "/workflows/v1/workflows/665f1c0a2b3c4d5e6f720007/execute",
+      "warnings": [],
+      "pruned_global_tool_exclusions": {}
+    }
+  },
+  "import_without_overrides": {
+    "status": 200,
+    "body": {
+      "workflow": {
+        "team_id": "665f1c0a2b3c4d5e6f720000",
+        "created_by": "665f1c0a2b3c4d5e6f720001",
+        "updated_by": "665f1c0a2b3c4d5e6f720001",
+        "created_at": "2026-11-27T05:48:08.913Z",
+        "updated_at": "2026-11-27T05:48:08.913Z",
+        "_id": "665f1c0a2b3c4d5e6f720009",
+        "workflow_config": {
+          "logical_id": "workflow_8ce6f902-094a-43e4-84e1-79dcd05e7523",
+          "name": "SDK_E2E imported without secret",
+          "description": "sent at the top level",
+          "category": "User Created",
+          "workflow_type": "standard",
+          "attachable_llm_config_id": null,
+          "llms_config": {
+            "logical_id": "llm_25f5f6ae-6cda-499b-acdb-925a42c99bac",
+            "named_llm_config_id": null,
+            "named_llm_config_name": null,
+            "provider": "default_provider",
+            "streaming": false,
+            "max_retries": 3,
+            "max_parse_retries": 3,
+            "max_tokens": null,
+            "temperature": null,
+            "request_timeout_ms": null,
+            "seed": null,
+            "model_kwargs": {},
+            "api_key": null,
+            "do_not_split_sentences": false,
+            "truncated_max_recent_messages": null,
+            "type": "no_llm"
+          },
+          "main_response_config": null,
+          "backchannel_response_config": null,
+          "default_prompt_prefix": null,
+          "default_prompt_suffix": null,
+          "ignore_content_received_during_llm_tool_call_specification": false,
+          "tools_config": null,
+          "mcp_servers": null,
+          "global_condition_evaluation_method": "tool_call",
+          "nodes": [
+            "665f1c0a2b3c4d5e6f72000a"
+          ],
+          "edges": [],
+          "evaluation_config": null,
+          "guardrail_strikes_config": null,
+          "miscellaneous": {},
+          "access_config": {
+            "access_level": null,
+            "access_list": null
+          }
+        },
+        "active_version_number": 0,
+        "max_concurrent_runs": null
+      },
+      "execution_url": "/workflows/v1/workflows/665f1c0a2b3c4d5e6f720009/execute",
+      "warnings": [
+        "1 secret(s) cleared on export were not supplied and are still empty (Ping). Enter them in the editor before running the workflow."
+      ],
+      "pruned_global_tool_exclusions": {}
+    }
+  },
+  "import_unknown_path": {
+    "status": 422,
+    "body": {
+      "message": "Secrets can only be supplied for values the export listed",
+      "field_errors": [
+        "versions.0.workflow_config.nope"
+      ]
+    }
+  },
+  "workflow_usage": {
+    "status": 200,
+    "body": {
+      "used_by": [
+        {
+          "workflow_id": "665f1c0a2b3c4d5e6f72000b",
+          "name": "SDK_E2E evaluated by A",
+          "version_numbers": [
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "workflow_usage_none": {
+    "status": 200,
+    "body": {
+      "used_by": []
+    }
+  },
+  "tool_usage": {
+    "status": 200,
+    "body": {
+      "used_by": []
+    }
+  },
+  "llm_config_usage": {
+    "status": 200,
+    "body": {
+      "used_by": [
+        {
+          "workflow_id": "665f1c0a2b3c4d5e6f72000c",
+          "name": "Booking assistant",
+          "version_numbers": [
+            0
+          ]
+        }
+      ]
+    }
+  },
+  "llm_config_usage_unknown": {
+    "status": 404,
+    "body": {
+      "message": "Sorry! We haven't found this route or not implemented yet!"
+    }
+  },
+  "workflow_usage_unknown": {
+    "status": 200,
+    "body": {
+      "used_by": []
+    }
+  }
+}

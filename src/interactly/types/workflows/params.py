@@ -69,7 +69,7 @@ class WorkflowCloneParams(TypedDict):
 class VersionCreateParams(TypedDict):
     """Parameters for ``client.workflows.versions.create()``."""
 
-    version_name: NotRequired[Optional[str]]
+    version_name: str
     mark_as_active: NotRequired[bool]
     source_version_number: NotRequired[Optional[int]]
 

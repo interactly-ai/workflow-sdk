@@ -109,7 +109,10 @@ KNOWN_UNCOVERED_QUERY_FIELDS: Dict[Tuple[str, str, str], str] = {
 
 #: Query keys the SDK sends that upstream's route signatures do not declare, as (method, path, name) -> reason.
 #: Only for a key the server is known to read some other way (a dependency function, `request.query_params`).
-KNOWN_SDK_ONLY_QUERY_FIELDS: Dict[Tuple[str, str, str], str] = {}
+KNOWN_SDK_ONLY_QUERY_FIELDS: Dict[Tuple[str, str, str], str] = {
+    ("GET", "/v1/workflows/{}/export", "include_secrets"): "declared by the `export_secrets_switch` dependency "
+    "function (workflow_service/src/access/viewer_gate.py), which refuses it to a viewer",
+}
 
 #: SDK calls this harness cannot render, as "file:function" -> reason. Prefer making the call renderable.
 KNOWN_UNRENDERABLE_CALLS: Dict[str, str] = {}

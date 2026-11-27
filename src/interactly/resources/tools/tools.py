@@ -10,6 +10,7 @@ Endpoints:
     GET    /v1/tools/{id}                → get
     PATCH  /v1/tools/{id}                → update
     DELETE /v1/tools/{id}                → delete
+    GET    /v1/tools/{id}/usage          → usage
     POST   /v1/tools/{id}/clone          → clone
     POST   /v1/tools/{id}/execute        → execute
     POST   /v1/tools/execute             → execute_inline
@@ -29,6 +30,7 @@ from interactly.types._config_types import ToolConfigOrDict
 from interactly.types.tools.codebase_function import CodebaseFunction, CodebaseFunctionCatalogue
 from interactly.types.tools.execute_result import ToolExecuteResult
 from interactly.types.tools.tool import Tool
+from interactly.types.usage import UsageReport
 
 __all__ = ["ToolsResource", "AsyncToolsResource"]
 
@@ -238,6 +240,14 @@ class ToolsResource(SyncAPIResource):
         """
         self._client.delete(f"{_PATH}/{tool_id}", cast_to=type(None))
 
+    def usage(self, tool_id: str) -> UsageReport:
+        """The team's workflows that use this tool, in any version.
+
+        A delete doesn't consult this: deleting the tool still succeeds, and leaves these with a reference that no
+        longer resolves. An id that names no tool answers an empty report.
+        """
+        return self._client.get(f"{_PATH}/{tool_id}/usage", cast_to=UsageReport)
+
     def clone(self, tool_id: str, *, name: NotGivenOr[Optional[str]] = NOT_GIVEN) -> Tool:
         """Duplicate a saved tool within your team.
 
@@ -409,6 +419,10 @@ class AsyncToolsResource(AsyncAPIResource):
     async def delete(self, tool_id: str) -> None:
         """Delete a tool."""
         await self._client.delete(f"{_PATH}/{tool_id}", cast_to=type(None))
+
+    async def usage(self, tool_id: str) -> UsageReport:
+        """The team's workflows that use this tool; see :meth:`ToolsResource.usage`."""
+        return await self._client.get(f"{_PATH}/{tool_id}/usage", cast_to=UsageReport)
 
     async def clone(self, tool_id: str, *, name: NotGivenOr[Optional[str]] = NOT_GIVEN) -> Tool:
         """Duplicate a saved tool within your team. See the sync counterpart."""

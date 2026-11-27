@@ -151,10 +151,9 @@ class TestRouteCoverage:
     gained was found by hand, a sync late.
     """
 
-    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **68**.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **65**.
     #:
-    #: * 9 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export, import and
-    #:   usage; workflow and tool usage.
+    #: * 6 public routes no SDK method calls: the four evaluation-workflow routes; LLM-config export and import.
     #: * 56 query fields no SDK method can send: the date window (``start``/``end``, 22) and ``search`` (3) that
     #:   most paginated lists read; ``version_number`` on node, edge and super-node routes (13); ``logical_id``
     #:   on five lists; ``workflow_type`` (3); the workflow, template and tool list filters;
@@ -163,7 +162,7 @@ class TestRouteCoverage:
     #:   ``workflow_id`` on the tool list; ``category`` and ``created_by_me`` on the active-versions list.
     #:
     #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
-    KNOWN_ROUTE_DEBT = 68
+    KNOWN_ROUTE_DEBT = 65
 
     @staticmethod
     def _report():

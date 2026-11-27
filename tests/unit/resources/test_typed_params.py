@@ -200,25 +200,24 @@ class TestWorkflowsTypedParams:
 
 class TestVersionsTypedParams:
     @respx.mock
-    def test_update_config_accepts_plain_dict(self, client: WorkflowClient):
+    def test_update_config_sends_a_plain_dict_as_the_settings(self, client: WorkflowClient):
         route = respx.patch(f"{TEST_BASE_URL}/v1/workflows/wf-1/versions/1/config").mock(
             return_value=httpx.Response(200, json=_VER_RESP)
         )
-        cfg = {"nodes": [], "edges": []}
-        ver = client.workflows.versions.update_config("wf-1", 1, config=cfg)
+        ver = client.workflows.versions.update_config("wf-1", 1, config={"description": "x"})
         assert ver.version_number == 1
         import json
         body = json.loads(route.calls.last.request.content)
-        assert body == {"config": {"nodes": [], "edges": []}}
+        assert body == {"description": "x"}
 
     @respx.mock
-    def test_update_config_serialises_pydantic_model(self, client: WorkflowClient):
+    def test_update_config_sends_only_the_fields_set_on_a_pydantic_model(self, client: WorkflowClient):
         try:
             from pydantic import BaseModel
 
             class _FakeWFConfig(BaseModel):
-                nodes: list
-                edges: list
+                description: str = "default"
+                category: str = "default"
 
         except ImportError:
             pytest.skip("pydantic not available")
@@ -226,7 +225,7 @@ class TestVersionsTypedParams:
         route = respx.patch(f"{TEST_BASE_URL}/v1/workflows/wf-1/versions/2/config").mock(
             return_value=httpx.Response(200, json={**_VER_RESP, "version_number": 2})
         )
-        client.workflows.versions.update_config("wf-1", 2, config=_FakeWFConfig(nodes=[], edges=[]))
+        client.workflows.versions.update_config("wf-1", 2, config=_FakeWFConfig(category="Scheduling"))
         import json
         body = json.loads(route.calls.last.request.content)
-        assert body == {"config": {"nodes": [], "edges": []}}
+        assert body == {"category": "Scheduling"}
