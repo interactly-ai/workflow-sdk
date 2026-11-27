@@ -30,6 +30,7 @@ __all__ = [
     "NotFoundError",
     "ConflictError",
     "UnprocessableEntityError",
+    "RequestTooLargeError",
     "RateLimitError",
     "InternalServerError",
     "NoMorePagesError",
@@ -144,7 +145,15 @@ class ConflictError(APIError):
 
 
 class UnprocessableEntityError(APIError):
-    """HTTP 422 — Request body failed schema validation."""
+    """HTTP 422 — Request body failed schema validation.
+
+    The message names the fields and why, in the server's words when it gives them; the full error list, or the
+    paths a refusal names (``field_errors``), stay on ``.body``.
+    """
+
+
+class RequestTooLargeError(APIError):
+    """HTTP 413 — The request body is over the server's limit, such as 64 KiB for a run's signal or resume data."""
 
 
 class RateLimitError(APIError):
@@ -177,11 +186,38 @@ def _extract_error_message(response: httpx.Response, body: Optional[Any]) -> str
     if not isinstance(body, dict):
         return response.reason_phrase or f"HTTP {status}"
 
-    category = body.get("detail") or body.get("message")
+    detail = body.get("detail")
+    # A string ``detail`` says it all. A list (FastAPI's validation errors) or a dict reads less well than the
+    # server's own ``message`` beside it, when there is one.
+    category = detail if isinstance(detail, str) and detail else _readable(body.get("message")) or _readable(detail)
     reason = body.get("error")
     if category and reason and str(reason) != str(category):
         return f"{category}: {reason}"
     return str(category or reason or response.reason_phrase or f"HTTP {status}")
+
+
+def _readable(value: Any) -> Optional[str]:
+    """A ``message`` or ``detail`` as one line.
+
+    A string is itself. A dict carries its own ``message`` (a refusal that also names ``field_errors``). A list is
+    FastAPI's validation errors, each read as "where: why"; the server's own ``message`` beside them, when there is
+    one, is preferred to this, since it names the fields as a person knows them.
+    """
+    if isinstance(value, str):
+        return value or None
+    if isinstance(value, dict):
+        return _readable(value.get("message"))
+    if isinstance(value, list) and value:
+        parts = []
+        for error in value:
+            if not isinstance(error, dict):
+                parts.append(str(error))
+                continue
+            location = ".".join(str(part) for part in error.get("loc", ()) if part not in ("body", "query", "path"))
+            message = error.get("msg") or ""
+            parts.append(f"{location}: {message}" if location else str(message))
+        return "; ".join(parts)
+    return None
 
 
 def _make_status_error(
@@ -213,6 +249,8 @@ def _make_status_error(
         return NotFoundError(**kwargs)
     if status == 409:
         return ConflictError(**kwargs)
+    if status == 413:
+        return RequestTooLargeError(**kwargs)
     if status == 422:
         return UnprocessableEntityError(**kwargs)
     if status == 429:

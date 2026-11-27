@@ -151,13 +151,12 @@ class TestRouteCoverage:
     gained was found by hand, a sync late.
     """
 
-    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **2**, the two public routes
-    #: no SDK method calls: LLM-config export and import.
-    #:
-    #: Fields a route declares but never reads are on ``KNOWN_UNCOVERED_QUERY_FIELDS``, with the reason.
+    #: Findings known and attributed, measured against upstream ``main`` at a87b31348: **0**. Every public route is
+    #: called and every query field it reads can be sent. Fields a route declares but never reads, and routes the
+    #: SDK leaves out on purpose, are on the allow-lists in ``tests/tools/route_coverage.py``, each with its reason.
     #:
     #: A ratchet, like parity's: up is a new gap, down is a closed one whose number nobody lowered.
-    KNOWN_ROUTE_DEBT = 2
+    KNOWN_ROUTE_DEBT = 0
 
     @staticmethod
     def _report():
@@ -220,6 +219,78 @@ class TestRouteCoverage:
 # --------------------------------------------------------------------------------------------- #
 # Wire values: the SDK's hand-written enum twins and close codes                                  #
 # --------------------------------------------------------------------------------------------- #
+
+
+class TestCredentialRule:
+    """The LLM-config credentials ``llm_configs.update`` carries across, against the server's own declarations.
+
+    The client restates them (``interactly/_utils/_credentials.py``) because it can't read the server's markers. A
+    credential the server adds and the client doesn't know would be deleted by an admin's update built in code.
+    """
+
+    @staticmethod
+    def _upstream(relative: str):
+        import ast
+
+        import config_parity as cp
+
+        root = cp.find_interactly_ai_root()
+        if root is None:
+            pytest.skip("interactly-ai checkout not found (set INTERACTLY_AI_ROOT to point at it)")
+        return ast, ast.parse((root / relative).read_text())
+
+    def test_the_credential_fields_and_header_maps_are_the_ones_the_llm_configs_declare(self):
+        from interactly._utils._credentials import CREDENTIAL_FIELDS, CREDENTIAL_HEADER_MAPS
+
+        ast, tree = self._upstream("agentic_workflow_framework/configs/llm.py")
+        fields, header_maps = set(), set()
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)):
+                continue
+            name, source = node.target.id, ast.unparse(node)
+            if name == "api_key" or "SecretStr" in ast.unparse(node.annotation) or "SecretField(" in source:
+                fields.add(name)
+            elif "UISpecialFieldTypes.PASSWORD" in source:
+                fields.add(name)
+            elif "SensitiveMapField(SensitiveMap.HEADERS" in source.replace("\n", "").replace(" ", ""):
+                header_maps.add(name)
+        assert (fields, header_maps) == (set(CREDENTIAL_FIELDS), set(CREDENTIAL_HEADER_MAPS))
+
+    def test_the_header_rule_has_the_servers_words(self):
+        from interactly._utils import _credentials as client
+
+        ast, tree = self._upstream("agentic_workflow_framework/configs/secrets.py")
+        upstream = {
+            node.targets[0].id: ast.literal_eval(node.value.args[0])
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id.startswith("_SENSITIVE_")
+            and isinstance(node.value, ast.Call)
+        }
+        assert {name: set(values) for name, values in upstream.items()} == {
+            "_SENSITIVE_HEADER_NAMES": set(client.SENSITIVE_HEADER_NAMES),
+            "_SENSITIVE_BODY_KEYS": set(client.SENSITIVE_BODY_KEYS),
+            "_SENSITIVE_LAST_WORDS": set(client.SENSITIVE_LAST_WORDS),
+            "_SENSITIVE_LAST_PAIRS": set(client.SENSITIVE_LAST_PAIRS),
+        }
+
+    @pytest.mark.parametrize(
+        "name, credential",
+        [
+            ("Authorization", True),
+            ("X-Client-Token", True),
+            ("clientSecret", True),
+            ("x-signing-key", True),
+            ("X-Tenant", False),
+            ("token_count", False),
+            ("cache_key", False),
+        ],
+    )
+    def test_the_header_rule_reads_names_as_the_server_does(self, name, credential):
+        from interactly._utils._credentials import is_credential_header
+
+        assert is_credential_header(name) is credential
 
 
 class TestWireValues:

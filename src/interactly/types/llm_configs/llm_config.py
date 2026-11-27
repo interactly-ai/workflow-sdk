@@ -10,19 +10,20 @@ inlining the provider settings.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, List, Optional
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 
 from interactly._models import BaseAPIModel
 
-__all__ = ["LLMConfig", "LLMTestMemberInfo", "LLMConfigTestResult"]
+__all__ = ["LLMConfig", "LLMTestMemberInfo", "LLMConfigTestResult", "ImportedLLMConfig", "LLMConfigImportResult"]
 
 
 class LLMConfig(BaseAPIModel):
     """A saved, named LLM configuration (single provider or group).
 
-    The provider secret (``api_key``) is redacted by the server on read.
+    For a caller below admin, the server clears the credentials on read: ``api_key``, Bedrock's AWS key pair, and
+    the values of credential headers such as a custom gateway's ``Authorization``.
     ``config`` is a plain ``dict`` unless the ``[configs]`` extra is installed,
     in which case it is upgraded to a typed ``LLMOrGroupConfig`` (mirrors the
     coercion used by :class:`Node` / :class:`Tool`).
@@ -91,6 +92,13 @@ class LLMConfigTestResult(BaseAPIModel):
     completion_tokens: Optional[int] = None
     total_tokens: Optional[int] = None
     latency_ms: Optional[int] = None
+    #: Whether the call used the team's own saved provider key rather than the deployment's. ``None`` for a group,
+    #: whose members decide separately, and when the call never reached a provider client.
+    used_user_api_key: Optional[bool] = None
+    #: On failure, what kind it was, read from the provider's error: ``auth``, ``permission``, ``quota``,
+    #: ``rate_limit``, ``model``, ``timeout``, ``unavailable`` or ``other``. ``error`` holds the provider's own
+    #: message.
+    error_category: Optional[str] = None
     # Group-config extras (all null for single-provider configs).
     winning_member: Optional[LLMTestMemberInfo] = None
     backchannel_response: Optional[str] = None
@@ -98,3 +106,23 @@ class LLMConfigTestResult(BaseAPIModel):
     backchannel_prompt_tokens: Optional[int] = None
     backchannel_completion_tokens: Optional[int] = None
     backchannel_total_tokens: Optional[int] = None
+
+
+class ImportedLLMConfig(BaseAPIModel):
+    """One LLM config an import created."""
+
+    llm_config: LLMConfig
+    #: The config's id in the exporting team.
+    source_llm_config_id: Optional[str] = None
+    #: The bundle's name for the config, when the team already used it and the copy was renamed.
+    renamed_from: Optional[str] = None
+    #: True when the team already used the config's id or logical id, so new ones were made: workflows that attach
+    #: the config by its old id don't reach this copy.
+    ids_reminted: bool = False
+
+
+class LLMConfigImportResult(BaseAPIModel):
+    """What an LLM-config import created."""
+
+    imported: List[ImportedLLMConfig] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
